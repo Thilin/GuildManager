@@ -87,6 +87,9 @@ function MemberView:new()
     instance._altsVal = nil
     instance._altManagerFrame = nil
     instance._altFamilyRows = {}
+    instance._altFamilyList = {}
+    instance._altFamilyOffset = 0
+    instance._altFamilyScrollBar = nil
     instance._availableAltRows = {}
     instance._availableAltsFilteredList = {}
     instance._availableAltsOffset = 0
@@ -1583,7 +1586,40 @@ function MemberView:createAltManagerUI()
     emptyNotice:Hide()
     self._familyEmptyNotice = emptyNotice
 
-    -- Linhas da Família de Personagens Vinculados (até 5 visíveis)
+    -- Scrollbar lateral da lista de personagens vinculados (Família de Alts)
+    local familyScrollBar = CreateFrame("Slider", "GM_AltFamilyScrollBar", inset1, "UIPanelScrollBarTemplate")
+    familyScrollBar:SetPoint("TOPRIGHT", inset1, "TOPRIGHT", -4, -46)
+    familyScrollBar:SetPoint("BOTTOMRIGHT", inset1, "BOTTOMRIGHT", -4, 8)
+    familyScrollBar:SetWidth(16)
+    familyScrollBar:SetScript("OnValueChanged", function(_, val)
+        self._altFamilyOffset = math.floor(val)
+        self:renderLinkedFamilyRows()
+    end)
+    familyScrollBar:SetMinMaxValues(0, 1)
+    familyScrollBar:SetValueStep(1)
+    familyScrollBar:Hide()
+
+    local familyUpBtn = _G["GM_AltFamilyScrollBarScrollUpButton"] or (familyScrollBar and familyScrollBar.ScrollUpButton)
+    if familyUpBtn then
+        familyUpBtn:SetScript("OnClick", function()
+            self:scrollAltFamily(1)
+        end)
+    end
+    local familyDownBtn = _G["GM_AltFamilyScrollBarScrollDownButton"] or (familyScrollBar and familyScrollBar.ScrollDownButton)
+    if familyDownBtn then
+        familyDownBtn:SetScript("OnClick", function()
+            self:scrollAltFamily(-1)
+        end)
+    end
+    self._altFamilyScrollBar = familyScrollBar
+
+    -- Suporte à roda do mouse no container da família de alts
+    inset1:EnableMouseWheel(true)
+    inset1:SetScript("OnMouseWheel", function(_, delta)
+        self:scrollAltFamily(delta)
+    end)
+
+    -- Linhas da Família de Personagens Vinculados (5 visíveis com paginação por scroll)
     self._altFamilyRows = {}
     local numFamilyRows = 5
     local familyRowHeight = 22
@@ -1592,7 +1628,16 @@ function MemberView:createAltManagerUI()
         local row = CreateFrame("Frame", nil, inset1)
         row:SetHeight(familyRowHeight)
         row:SetPoint("TOPLEFT", sec1Hint, "BOTTOMLEFT", 0, -4 - (i - 1) * (familyRowHeight + 2))
-        row:SetPoint("RIGHT", inset1, "RIGHT", -8, 0)
+        row:SetPoint("RIGHT", familyScrollBar, "LEFT", -4, 0)
+        row:EnableMouseWheel(true)
+        row:SetScript("OnMouseWheel", function(_, delta)
+            self:scrollAltFamily(delta)
+        end)
+
+        -- Highlight suave ao passar o mouse
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row)
+        hl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.08)
 
         -- Botão Main/Alt Tag [M] / [A]
         local mainBtn = CreateFrame("Button", nil, row, template)
@@ -1893,6 +1938,7 @@ function MemberView:toggleAltManager()
         if self._availableAltsSearchEB then
             self._availableAltsSearchEB:SetText("")
         end
+        self._altFamilyOffset = 0
         self._availableAltsOffset = 0
         self:refreshAltManager()
         self._altManagerFrame:Show()
@@ -1929,10 +1975,34 @@ function MemberView:renderLinkedFamilyRows()
         table.insert(family, self._currentMember)
     end
 
+    self._altFamilyList = family
+
+    local numRows = #(self._altFamilyRows or {})
+    local maxOffset = math.max(0, #family - numRows)
+    local offset = self._altFamilyOffset or 0
+    if offset > maxOffset then
+        offset = maxOffset
+        self._altFamilyOffset = offset
+    end
+
+    if self._altFamilyScrollBar then
+        self._altFamilyScrollBar:SetMinMaxValues(0, maxOffset)
+        local curVal = math.floor(self._altFamilyScrollBar:GetValue() or 0)
+        if curVal ~= offset then
+            self._altFamilyScrollBar:SetValue(offset)
+        end
+        if maxOffset > 0 then
+            self._altFamilyScrollBar:Show()
+        else
+            self._altFamilyScrollBar:Hide()
+        end
+    end
+
     local currentNameLower = (self._currentMember:getName() or ""):lower()
 
     for i, row in ipairs(self._altFamilyRows) do
-        local m = family[i]
+        local index = offset + i
+        local m = family[index]
         if m then
             local mName = m:getName()
             local isThisMemberCurrent = (mName:lower() == currentNameLower)
@@ -2108,6 +2178,29 @@ function MemberView:renderAvailableAltRows()
             row.nameText:SetText("")
             row:Hide()
         end
+    end
+end
+
+--- Realiza a rolagem da lista de personagens vinculados (família de alts).
+---@param delta number
+function MemberView:scrollAltFamily(delta)
+    local items = self._altFamilyList or {}
+    local numRows = #(self._altFamilyRows or {})
+    local maxOffset = math.max(0, #items - numRows)
+    if maxOffset <= 0 then
+        return
+    end
+
+    local newOffset = (self._altFamilyOffset or 0) - delta
+    if newOffset < 0 then newOffset = 0 end
+    if newOffset > maxOffset then newOffset = maxOffset end
+
+    if newOffset ~= self._altFamilyOffset then
+        self._altFamilyOffset = newOffset
+        if self._altFamilyScrollBar then
+            self._altFamilyScrollBar:SetValue(newOffset)
+        end
+        self:renderLinkedFamilyRows()
     end
 end
 
