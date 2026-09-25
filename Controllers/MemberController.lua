@@ -633,6 +633,40 @@ function MemberController:hookInviteAPIs()
     end
 end
 
+--- Resolve o nome completo (primeiro nome e sobrenome) do jogador local (suporte ao WoW Forever).
+---@return string
+function MemberController:resolvePlayerFullName()
+    local myName = UnitName and UnitName("player") or ""
+    if myName == "" then return "" end
+
+    -- 1. Tenta resolver via MemberService se já estiver no banco
+    if self._memberService and self._memberService.resolveRecruiterFullName then
+        local resolved = self._memberService:resolveRecruiterFullName(myName)
+        if resolved and resolved ~= "" and resolved ~= myName then
+            return resolved
+        end
+    end
+
+    -- 2. Tenta buscar diretamente no Roster da guilda
+    if GetNumGuildMembers and GetGuildRosterInfo then
+        local num = GetNumGuildMembers() or 0
+        local myLower = myName:lower()
+        for i = 1, num do
+            local gName = GetGuildRosterInfo(i)
+            if gName then
+                local clean = gName:match("^[^-]+") or gName
+                clean = clean:match("^%s*(.-)%s*$") or clean
+                local first = clean:match("^(%S+)") or clean
+                if first:lower() == myLower or clean:lower() == myLower then
+                    return clean
+                end
+            end
+        end
+    end
+
+    return myName
+end
+
 local function getNow()
     if GetTime then return GetTime() end
     if time then return time() end
@@ -651,8 +685,9 @@ function MemberController:recordPendingInvite(targetName, recruiterName)
 
     local recruiter = self:sanitizeCharacterName(recruiterName)
     if not recruiter or recruiter == "" then
-        recruiter = UnitName and UnitName("player") or ""
-        recruiter = self:sanitizeCharacterName(recruiter)
+        recruiter = self:resolvePlayerFullName()
+    elseif self._memberService and self._memberService.resolveRecruiterFullName then
+        recruiter = self._memberService:resolveRecruiterFullName(recruiter)
     end
 
     local currentTime = getNow()
