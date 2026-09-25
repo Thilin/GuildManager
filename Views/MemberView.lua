@@ -96,7 +96,66 @@ function MemberView:new()
     return instance
 end
 
---- Cria e estiliza os componentes visuais da janela de membro com design moderno e elegante.
+local DIALOG_BACKDROP = {
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true,
+    tileSize = 32,
+    edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 },
+}
+
+local CONTAINER_BACKDROP = {
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 14,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+
+local SUB_CONTAINER_BACKDROP = {
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 12,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+
+--- Paleta de cores oficial baseada na interface Blizzard / WoW Forever:
+--- Tom médio predominante (bronze/dourado escuro): #784916 a #8C5919
+--- Realces mais claros (brilho): #B57C2A
+--- Sombras (metal escuro): #3A2109
+local PALETTE = {
+    -- Janelas principais (GuildManagerMemberFrame, RecruiterPickerFrame, AltManagerFrame)
+    FRAME_BG = { 0.055, 0.035, 0.015, 1.0 },
+    FRAME_BORDER = { 1.0, 0.68, 0.22, 1.0 },
+
+    -- Painéis internos / Insets (Containers com contorno bronze calibrado aos realces #B57C2A)
+    INSET_BG = { 0.035, 0.022, 0.010, 0.70 },
+    INSET_BORDER = { 0.71, 0.49, 0.16, 0.95 },
+
+    -- Linhas divisórias (Separators / Tracejados calibrados no tom médio #8C5919 / #784916)
+    SEPARATOR = { 0.58, 0.37, 0.11, 0.90 },
+
+    -- Caixas de edição e sub-containers (EditBoxes, NoteBoxes, Recruiter, Alts no tom #784916)
+    SUB_BOX_BG = { 0.022, 0.014, 0.006, 0.75 },
+    SUB_BOX_BORDER = { 0.62, 0.41, 0.13, 0.90 },
+
+    -- Estados de foco e hover (Realce metálico dourado #B57C2A)
+    FOCUS_BG = { 0.065, 0.045, 0.020, 0.95 },
+    FOCUS_BORDER = { 0.85, 0.58, 0.20, 1.0 },
+    HIGHLIGHT_TINT = { 0.71, 0.49, 0.16, 0.12 },
+
+    -- Tags Main / Alt
+    MAIN_TAG_BG = { 0.16, 0.10, 0.03, 0.95 },
+    MAIN_TAG_BORDER = { 0.85, 0.58, 0.20, 1.0 },
+    ALT_TAG_BG = { 0.055, 0.035, 0.015, 0.95 },
+    ALT_TAG_BORDER = { 0.62, 0.41, 0.13, 0.90 },
+}
+
+--- Cria e estiliza os componentes visuais da janela de membro no padrão clássico Blizzard.
 function MemberView:createUI()
     if self._frame then
         return
@@ -106,8 +165,8 @@ function MemberView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerMemberFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(360, 465)
-    frame:SetFrameStrata("HIGH")
+    frame:SetSize(370, 528)
+    frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
@@ -128,80 +187,70 @@ function MemberView:createUI()
         end
     end)
 
-    -- Fundo e bordas no padrão oficial WoW Forever (Dark warm leather & burnished bronze/gold trim)
+    -- Camada sólida de base (evita qualquer vazamento do mundo 3D ou janelas de fundo)
+    local solidBg = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+    solidBg:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
+    solidBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
+    solidBg:SetColorTexture(0.04, 0.03, 0.02, 1.0)
+
+    -- Textura de fundo customizada em pergaminho (Textures\background.tga convertida a partir de background.jpg)
+    local bgTex = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+    bgTex:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
+    bgTex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
+    bgTex:SetTexture("Interface\\AddOns\\GuildManager\\Textures\\background.tga")
+    bgTex:SetHorizTile(false)
+    bgTex:SetVertTile(false)
+    bgTex:SetAlpha(0.50) -- Opacidade ajustada para 50%
+    self._bgTex = bgTex
+
+    -- Fundo e bordas no padrão clássico Blizzard / WoW Forever (cantos ornamentados e moldura bronze/dourada)
     if frame.SetBackdrop then
-        frame:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 14,
-            edgeSize = 14,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        frame:SetBackdropColor(0.07, 0.05, 0.04, 0.96)
-        frame:SetBackdropBorderColor(0.65, 0.48, 0.22, 1.0)
+        frame:SetBackdrop(DIALOG_BACKDROP)
+        frame:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.20)
+        frame:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], PALETTE.FRAME_BORDER[4])
     end
 
     -- Botão Fechar ("X" clássico vermelho com moldura dourada)
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
-    closeBtn:SetSize(24, 24)
+    closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(28, 28)
     closeBtn:SetScript("OnClick", function()
         self:setLocked(false)
         self:saveCurrentMember()
         self._frame:Hide()
     end)
 
-    -- Título Centralizado da Janela (Padrão WoW Forever)
-    local frameTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    frameTitle:SetPoint("TOP", frame, "TOP", 0, -8)
-    frameTitle:SetText("|cffffd200Ficha do Membro|r")
-
-    -- Retrato / Brasão Circular no Canto Superior Esquerdo
-    local portraitFrame = CreateFrame("Frame", nil, frame)
-    portraitFrame:SetSize(48, 48)
-    portraitFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", -8, 8)
-    if portraitFrame.SetFrameLevel and frame.GetFrameLevel then
-        portraitFrame:SetFrameLevel(frame:GetFrameLevel() + 2)
-    end
-
-    local portraitBg = portraitFrame:CreateTexture(nil, "BACKGROUND")
-    portraitBg:SetSize(38, 38)
-    portraitBg:SetPoint("CENTER", portraitFrame, "CENTER", 0, 0)
-    if portraitBg.SetColorTexture then
-        portraitBg:SetColorTexture(0.04, 0.03, 0.02, 1.0)
-    end
-
-    local factionIcon = portraitFrame:CreateTexture(nil, "ARTWORK")
-    factionIcon:SetSize(36, 36)
-    factionIcon:SetPoint("CENTER", portraitFrame, "CENTER", 0, 0)
-    if factionIcon.SetTexCoord then
-        factionIcon:SetTexCoord(4/32, 29/32, 2/32, 30/32)
-    end
-    self._factionIcon = factionIcon
-
-    local portraitRing = portraitFrame:CreateTexture(nil, "OVERLAY")
-    portraitRing:SetSize(50, 50)
-    portraitRing:SetPoint("CENTER", portraitFrame, "CENTER", 0, 0)
-    portraitRing:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-
-    -- Identificação do Personagem (ao lado do brasão circular)
+    -- Identificação do Personagem (Centralizado no topo da janela)
     local memberNameText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    memberNameText:SetPoint("TOPLEFT", frame, "TOPLEFT", 46, -24)
-    memberNameText:SetJustifyH("LEFT")
+    memberNameText:SetPoint("TOP", frame, "TOP", 0, -18)
+    memberNameText:SetJustifyH("CENTER")
     self._memberNameText = memberNameText
 
-    -- Tag interativa de Main/Alt ('M' para Main, 'A' para Alt)
+    -- Ícone da Facção (Alinhado ao lado esquerdo do nome do membro)
+    local factionIcon = frame:CreateTexture(nil, "ARTWORK")
+    factionIcon:SetSize(24, 24)
+    factionIcon:SetPoint("RIGHT", memberNameText, "LEFT", -8, 0)
+    self._factionIcon = factionIcon
+
+    -- Raça do Jogador (Exibida diretamente abaixo do nome do membro)
+    local raceText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    raceText:SetPoint("TOP", memberNameText, "BOTTOM", 0, -3)
+    raceText:SetJustifyH("CENTER")
+    self._raceText = raceText
+
+    -- Tag interativa de Main/Alt ('M' para Main, 'A' para Alt - Alinhada ao lado direito do nome)
     local mainTagBtn = CreateFrame("Button", nil, frame, template)
-    mainTagBtn:SetSize(22, 18)
-    mainTagBtn:SetPoint("LEFT", memberNameText, "RIGHT", 6, 0)
+    mainTagBtn:SetSize(24, 18)
+    mainTagBtn:SetPoint("LEFT", memberNameText, "RIGHT", 8, 0)
     if mainTagBtn.SetBackdrop then
         mainTagBtn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 6, edgeSize = 6,
-            insets = { left = 1, right = 1, top = 1, bottom = 1 }
+            tile = true, tileSize = 16, edgeSize = 10,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 }
         })
+        mainTagBtn:SetBackdropColor(PALETTE.MAIN_TAG_BG[1], PALETTE.MAIN_TAG_BG[2], PALETTE.MAIN_TAG_BG[3], PALETTE.MAIN_TAG_BG[4])
+        mainTagBtn:SetBackdropBorderColor(PALETTE.MAIN_TAG_BORDER[1], PALETTE.MAIN_TAG_BORDER[2], PALETTE.MAIN_TAG_BORDER[3], PALETTE.MAIN_TAG_BORDER[4])
     end
 
     local mainTagText = mainTagBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -228,41 +277,30 @@ function MemberView:createUI()
         if GameTooltip then GameTooltip:Hide() end
     end)
 
-    -- Subtítulo com Nível, Raça e Classe
-    local raceText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    raceText:SetPoint("TOPLEFT", memberNameText, "BOTTOMLEFT", 0, -2)
-    raceText:SetJustifyH("LEFT")
-    self._raceText = raceText
-
-    -- Helper de estilização de EditBox no padrão escuro rebaixado do WoW Forever
+    -- Helper de estilização de EditBox no padrão container com borda arredondada clássica
     local function styleEditBox(eb, tooltip)
         eb:SetFontObject("GameFontHighlightSmall")
         eb:SetAutoFocus(false)
-        eb:SetTextInsets(4, 4, 1, 1)
+        eb:SetTextInsets(6, 6, 2, 2)
         if eb.SetBackdrop then
-            eb:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                tile = true, tileSize = 6, edgeSize = 6,
-                insets = { left = 2, right = 2, top = 2, bottom = 2 }
-            })
-            eb:SetBackdropColor(0.025, 0.018, 0.012, 0.90)
-            eb:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+            eb:SetBackdrop(SUB_CONTAINER_BACKDROP)
+            eb:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+            eb:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
         end
         eb:SetScript("OnEditFocusGained", function(selfBox)
             if selfBox.SetBackdropBorderColor then
-                selfBox:SetBackdropBorderColor(0.85, 0.70, 0.25, 1.0)
+                selfBox:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
             end
             if selfBox.SetBackdropColor then
-                selfBox:SetBackdropColor(0.06, 0.04, 0.03, 0.95)
+                selfBox:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
             end
         end)
         eb:SetScript("OnEditFocusLost", function(selfBox)
             if selfBox.SetBackdropBorderColor then
-                selfBox:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+                selfBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
             end
             if selfBox.SetBackdropColor then
-                selfBox:SetBackdropColor(0.025, 0.018, 0.012, 0.90)
+                selfBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
             end
             self:saveCurrentMember()
         end)
@@ -292,18 +330,13 @@ function MemberView:createUI()
     -- PAINEL INSET 1: DETALHES DO PERSONAGEM (Nativas Blizzard)
     -- =========================================================================
     local inset1 = CreateFrame("Frame", nil, frame, template)
-    inset1:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -66)
-    inset1:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
-    inset1:SetHeight(224)
+    inset1:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -64)
+    inset1:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+    inset1:SetHeight(232)
     if inset1.SetBackdrop then
-        inset1:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 8, edgeSize = 8,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        inset1:SetBackdropColor(0.035, 0.025, 0.018, 0.80)
-        inset1:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        inset1:SetBackdrop(CONTAINER_BACKDROP)
+        inset1:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        inset1:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
     end
 
     local secTitle1 = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -314,37 +347,37 @@ function MemberView:createUI()
     sep1:SetPoint("TOPLEFT", inset1, "TOPLEFT", 8, -24)
     sep1:SetPoint("RIGHT", inset1, "RIGHT", -8, 0)
     sep1:SetHeight(1)
-    sep1:SetColorTexture(0.45, 0.35, 0.20, 0.65)
+    sep1:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
     -- Coluna Esquerda do Inset 1:
     -- Nível
-    local levelLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local levelLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     levelLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 2, -6)
-    levelLabel:SetText("|cffc79c6eNível:|r")
+    levelLabel:SetText("|cffffd200Nível:|r")
     local levelVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     levelVal:SetPoint("LEFT", levelLabel, "RIGHT", 6, 0)
     self._levelVal = levelVal
 
     -- Classe
-    local classLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local classLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     classLabel:SetPoint("TOPLEFT", levelLabel, "BOTTOMLEFT", 0, -4)
-    classLabel:SetText("|cffc79c6eClasse:|r")
+    classLabel:SetText("|cffffd200Classe:|r")
     local classVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     classVal:SetPoint("LEFT", classLabel, "RIGHT", 6, 0)
     self._classVal = classVal
 
     -- Cargo
-    local rankLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local rankLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     rankLabel:SetPoint("TOPLEFT", classLabel, "BOTTOMLEFT", 0, -4)
-    rankLabel:SetText("|cffc79c6eCargo:|r")
+    rankLabel:SetText("|cffffd200Cargo:|r")
     local rankVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     rankVal:SetPoint("LEFT", rankLabel, "RIGHT", 6, 0)
     self._rankVal = rankVal
 
     -- Entrada (Data de entrada do personagem - editável ao clicar)
-    local dateJoinLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local dateJoinLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     dateJoinLabel:SetPoint("TOPLEFT", rankLabel, "BOTTOMLEFT", 0, -4)
-    dateJoinLabel:SetText("|cffc79c6eEntrada:|r")
+    dateJoinLabel:SetText("|cffffd200Entrada:|r")
     local dateJoinEB = CreateFrame("EditBox", nil, inset1, template)
     dateJoinEB:SetPoint("LEFT", dateJoinLabel, "RIGHT", 6, 0)
     dateJoinEB:SetSize(86, 18)
@@ -353,185 +386,211 @@ function MemberView:createUI()
 
     -- Coluna Direita do Inset 1:
     -- Reputação
-    local repLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local repLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     repLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 170, -6)
-    repLabel:SetText("|cffc79c6eReputação:|r")
+    repLabel:SetText("|cffffd200Reputação:|r")
     local repVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     repVal:SetPoint("LEFT", repLabel, "RIGHT", 6, 0)
     self._repVal = repVal
 
     -- Status
-    local statusLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local statusLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     statusLabel:SetPoint("TOPLEFT", repLabel, "BOTTOMLEFT", 0, -4)
-    statusLabel:SetText("|cffc79c6eStatus:|r")
+    statusLabel:SetText("|cffffd200Status:|r")
     local statusVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     statusVal:SetPoint("LEFT", statusLabel, "RIGHT", 6, 0)
     self._statusVal = statusVal
 
     -- Zona
-    local zoneLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local zoneLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     zoneLabel:SetPoint("TOPLEFT", statusLabel, "BOTTOMLEFT", 0, -4)
-    zoneLabel:SetText("|cffc79c6eZona:|r")
+    zoneLabel:SetText("|cffffd200Zona:|r")
     local zoneVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     zoneVal:SetPoint("LEFT", zoneLabel, "RIGHT", 6, 0)
     self._zoneVal = zoneVal
 
-    -- Abaixo das colunas (Largura total do Inset 1):
-    -- Recrutador
-    local recruiterLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    recruiterLabel:SetPoint("TOPLEFT", dateJoinLabel, "BOTTOMLEFT", 0, -6)
-    recruiterLabel:SetText("|cffc79c6eRecrutador:|r")
+    -- Abaixo das colunas:
+    -- Nota Pública (Container no estilo Note do padrão clássico Blizzard)
+    local publicNoteLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    publicNoteLabel:SetPoint("TOPLEFT", dateJoinLabel, "BOTTOMLEFT", 0, -14)
+    publicNoteLabel:SetText("|cffffd200Nota Pública:|r")
 
-    local recruiterBtn = CreateFrame("Button", nil, inset1, template)
-    recruiterBtn:SetPoint("LEFT", recruiterLabel, "RIGHT", 6, 0)
-    recruiterBtn:SetPoint("RIGHT", inset1, "RIGHT", -10, 0)
-    recruiterBtn:SetHeight(20)
-    if recruiterBtn.SetBackdrop then
-        recruiterBtn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 6, edgeSize = 6,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        recruiterBtn:SetBackdropColor(0.12, 0.08, 0.05, 0.90)
-        recruiterBtn:SetBackdropBorderColor(0.50, 0.38, 0.20, 0.90)
+    local publicNoteBox = CreateFrame("Frame", nil, inset1, template)
+    publicNoteBox:SetPoint("TOPLEFT", publicNoteLabel, "BOTTOMLEFT", 0, -3)
+    publicNoteBox:SetPoint("RIGHT", inset1, "RIGHT", -10, 0)
+    publicNoteBox:SetHeight(38)
+    if publicNoteBox.SetBackdrop then
+        publicNoteBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        publicNoteBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        publicNoteBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
     end
 
-    local recruiterBtnText = recruiterBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    recruiterBtnText:SetPoint("LEFT", recruiterBtn, "LEFT", 6, 0)
-    recruiterBtnText:SetPoint("RIGHT", recruiterBtn, "RIGHT", -18, 0)
-    recruiterBtnText:SetJustifyH("LEFT")
-    self._recruiterBtnText = recruiterBtnText
-
-    local recruiterArrow = recruiterBtn:CreateTexture(nil, "OVERLAY")
-    recruiterArrow:SetSize(12, 12)
-    recruiterArrow:SetPoint("RIGHT", recruiterBtn, "RIGHT", -4, 0)
-    recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
-
-    recruiterBtn:SetScript("OnEnter", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.90, 0.75, 0.30, 1.0)
-            btn:SetBackdropColor(0.18, 0.13, 0.07, 0.95)
-        end
-        if recruiterArrow and recruiterArrow.SetTexture then
-            recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Down")
-        end
-        if GameTooltip then
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            local rec = self._currentMember and self._currentMember:getRecruiter() or ""
-            if rec ~= "" then
-                GameTooltip:SetText(string.format("Recrutador: |cffffffff%s|r\n|cffaaaaaaClique para selecionar outro membro da guilda|r", rec))
-            else
-                GameTooltip:SetText("Recrutador: |cff888888(Não informado)|r\n|cffaaaaaaClique para selecionar um membro da guilda|r")
-            end
-            GameTooltip:Show()
-        end
-    end)
-    recruiterBtn:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.38, 0.20, 0.90)
-            btn:SetBackdropColor(0.12, 0.08, 0.05, 0.90)
-        end
-        if recruiterArrow and recruiterArrow.SetTexture then
-            recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
-        end
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    recruiterBtn:SetScript("OnClick", function()
-        self:toggleRecruiterPicker()
-    end)
-    self._recruiterBtn = recruiterBtn
-    self._recruiterVal = recruiterBtn
-
-    -- Nota Pública
-    local publicNoteLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    publicNoteLabel:SetPoint("TOPLEFT", recruiterLabel, "BOTTOMLEFT", 0, -6)
-    publicNoteLabel:SetText("|cffc79c6eNota Pública:|r")
-    local publicNoteVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    publicNoteVal:SetPoint("TOPLEFT", publicNoteLabel, "BOTTOMLEFT", 0, -2)
-    publicNoteVal:SetPoint("RIGHT", inset1, "RIGHT", -10, 0)
+    local publicNoteVal = publicNoteBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    publicNoteVal:SetPoint("TOPLEFT", publicNoteBox, "TOPLEFT", 6, -4)
+    publicNoteVal:SetPoint("BOTTOMRIGHT", publicNoteBox, "BOTTOMRIGHT", -6, 4)
     publicNoteVal:SetJustifyH("LEFT")
+    if publicNoteVal.SetJustifyV then publicNoteVal:SetJustifyV("TOP") end
     if publicNoteVal.SetWordWrap then publicNoteVal:SetWordWrap(true) end
     self._publicNoteVal = publicNoteVal
 
-    -- Nota de Oficial
-    local officerNoteLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    officerNoteLabel:SetPoint("TOPLEFT", publicNoteVal, "BOTTOMLEFT", 0, -4)
-    officerNoteLabel:SetText("|cffc79c6eNota de Oficial:|r")
-    local officerNoteVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    officerNoteVal:SetPoint("TOPLEFT", officerNoteLabel, "BOTTOMLEFT", 0, -2)
-    officerNoteVal:SetPoint("RIGHT", inset1, "RIGHT", -10, 0)
+    -- Nota de Oficial (Container no estilo Officer's Note do padrão clássico Blizzard)
+    local officerNoteLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    officerNoteLabel:SetPoint("TOPLEFT", publicNoteBox, "BOTTOMLEFT", 0, -8)
+    officerNoteLabel:SetText("|cffffd200Nota de Oficial:|r")
+
+    local officerNoteBox = CreateFrame("Frame", nil, inset1, template)
+    officerNoteBox:SetPoint("TOPLEFT", officerNoteLabel, "BOTTOMLEFT", 0, -3)
+    officerNoteBox:SetPoint("RIGHT", inset1, "RIGHT", -10, 0)
+    officerNoteBox:SetHeight(38)
+    if officerNoteBox.SetBackdrop then
+        officerNoteBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        officerNoteBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        officerNoteBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+
+    local officerNoteVal = officerNoteBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    officerNoteVal:SetPoint("TOPLEFT", officerNoteBox, "TOPLEFT", 6, -4)
+    officerNoteVal:SetPoint("BOTTOMRIGHT", officerNoteBox, "BOTTOMRIGHT", -6, 4)
     officerNoteVal:SetJustifyH("LEFT")
+    if officerNoteVal.SetJustifyV then officerNoteVal:SetJustifyV("TOP") end
     if officerNoteVal.SetWordWrap then officerNoteVal:SetWordWrap(true) end
     self._officerNoteVal = officerNoteVal
 
     -- =========================================================================
-    -- PAINEL INSET 2: GESTÃO CUSTOMIZADA (Editável)
+    -- PAINEL INSET 2: INFORMAÇÕES ADICIONAIS
     -- =========================================================================
     local inset2 = CreateFrame("Frame", nil, frame, template)
     inset2:SetPoint("TOPLEFT", inset1, "BOTTOMLEFT", 0, -8)
-    inset2:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
-    inset2:SetHeight(155)
+    inset2:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+    inset2:SetHeight(190)
     if inset2.SetBackdrop then
-        inset2:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 8, edgeSize = 8,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        inset2:SetBackdropColor(0.035, 0.025, 0.018, 0.80)
-        inset2:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        inset2:SetBackdrop(CONTAINER_BACKDROP)
+        inset2:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        inset2:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
     end
 
     local secTitle2 = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     secTitle2:SetPoint("TOPLEFT", inset2, "TOPLEFT", 10, -8)
-    secTitle2:SetText("|cffffd200GESTÃO CUSTOMIZADA (EDITÁVEL)|r")
+    secTitle2:SetText("|cffffd200INFORMAÇÕES ADICIONAIS|r")
 
     local sep2 = inset2:CreateTexture(nil, "ARTWORK")
     sep2:SetPoint("TOPLEFT", inset2, "TOPLEFT", 8, -24)
     sep2:SetPoint("RIGHT", inset2, "RIGHT", -8, 0)
     sep2:SetHeight(1)
-    sep2:SetColorTexture(0.45, 0.35, 0.20, 0.65)
+    sep2:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
     -- Coluna Esquerda do Inset 2:
     -- 1. Data de Aniversário (birthDay)
-    local birthdayLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local birthdayLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     birthdayLabel:SetPoint("TOPLEFT", sep2, "BOTTOMLEFT", 2, -6)
-    birthdayLabel:SetText("|cffc79c6eAniversário (MM/DD):|r")
+    birthdayLabel:SetText("|cffffd200Aniversário (MM/DD):|r")
 
     local birthdayEB = CreateFrame("EditBox", nil, inset2, template)
     birthdayEB:SetPoint("TOPLEFT", birthdayLabel, "BOTTOMLEFT", 0, -2)
-    birthdayEB:SetSize(60, 20)
+    birthdayEB:SetSize(70, 20)
     birthdayEB:SetMaxLetters(5)
     styleEditBox(birthdayEB, "Data de Aniversário (MM/DD)\n|cffaaaaaaClique para editar|r")
     self._birthdayEB = birthdayEB
 
-    -- 2. Nota Interna Customizada (customNote)
-    local customNoteLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    -- 2. Nota Interna Customizada (customNote) - Altura Ampliada até próximo ao Recrutador (deixando espaçamento)
+    local customNoteLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     customNoteLabel:SetPoint("TOPLEFT", birthdayEB, "BOTTOMLEFT", 0, -6)
-    customNoteLabel:SetText("|cffc79c6eNota Interna Customizada:|r")
+    customNoteLabel:SetText("|cffffd200Nota Interna Customizada:|r")
 
-    local customNoteEB = CreateFrame("EditBox", nil, inset2, template)
-    customNoteEB:SetPoint("TOPLEFT", customNoteLabel, "BOTTOMLEFT", 0, -2)
-    customNoteEB:SetSize(155, 52)
+    -- Container da Nota Interna com Backdrop clássico (evita o colapso nativo do EditBox multiline no motor do WoW)
+    local customNoteBox = CreateFrame("Frame", nil, inset2, template)
+    customNoteBox:SetPoint("TOPLEFT", customNoteLabel, "BOTTOMLEFT", 0, -2)
+    customNoteBox:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 10, 36)
+    customNoteBox:SetWidth(155)
+    if customNoteBox.SetBackdrop then
+        customNoteBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        customNoteBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        customNoteBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+
+    local customNoteEB = CreateFrame("EditBox", nil, customNoteBox)
+    customNoteEB:SetPoint("TOPLEFT", customNoteBox, "TOPLEFT", 6, -4)
+    customNoteEB:SetPoint("BOTTOMRIGHT", customNoteBox, "BOTTOMRIGHT", -6, 4)
     customNoteEB:SetMultiLine(true)
+    customNoteEB:SetAutoFocus(false)
+    customNoteEB:SetFontObject("GameFontHighlightSmall")
     customNoteEB:SetMaxLetters(250)
-    styleEditBox(customNoteEB, "Nota Interna Customizada\n|cffaaaaaaClique para editar|r")
+    customNoteEB:SetTextInsets(0, 0, 0, 0)
+
+    -- Permite clicar em qualquer lugar da caixa para focar a edição
+    customNoteBox:EnableMouse(true)
+    customNoteBox:SetScript("OnMouseDown", function()
+        customNoteEB:SetFocus()
+    end)
+
+    local isCustomNoteFocused = false
+    local function updateCustomNoteBoxStyle(hovered)
+        if not customNoteBox.SetBackdropBorderColor then return end
+        if isCustomNoteFocused or hovered then
+            customNoteBox:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
+            customNoteBox:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
+        else
+            customNoteBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+            customNoteBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        end
+    end
+
+    local function showCustomNoteTip(owner)
+        if GameTooltip then
+            GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+            GameTooltip:SetText("Nota Interna Customizada\n|cffaaaaaaClique para editar|r")
+            GameTooltip:Show()
+        end
+    end
+    local function hideCustomNoteTip()
+        if GameTooltip then GameTooltip:Hide() end
+    end
+
+    customNoteEB:SetScript("OnEditFocusGained", function()
+        isCustomNoteFocused = true
+        updateCustomNoteBoxStyle(false)
+    end)
+    customNoteEB:SetScript("OnEditFocusLost", function()
+        isCustomNoteFocused = false
+        updateCustomNoteBoxStyle(false)
+        self:saveCurrentMember()
+    end)
+    customNoteEB:SetScript("OnEscapePressed", function(selfBox)
+        selfBox:ClearFocus()
+    end)
+    customNoteEB:SetScript("OnEnter", function(eb)
+        updateCustomNoteBoxStyle(true)
+        showCustomNoteTip(eb)
+    end)
+    customNoteEB:SetScript("OnLeave", function()
+        updateCustomNoteBoxStyle(false)
+        hideCustomNoteTip()
+    end)
+    customNoteBox:SetScript("OnEnter", function(box)
+        updateCustomNoteBoxStyle(true)
+        showCustomNoteTip(box)
+    end)
+    customNoteBox:SetScript("OnLeave", function()
+        updateCustomNoteBoxStyle(false)
+        hideCustomNoteTip()
+    end)
+
     self._customNoteEB = customNoteEB
+    self._customNoteBox = customNoteBox
 
     -- Coluna Direita do Inset 2:
-    -- Alts Vinculados (alts)
+    -- Alts Vinculados (alts) - Altura Expandida acompanhando a Nota Interna até próximo ao Recrutador
     local altsLabelBtn = CreateFrame("Button", nil, inset2)
     altsLabelBtn:SetPoint("TOPLEFT", sep2, "BOTTOMLEFT", 170, -6)
     altsLabelBtn:SetSize(160, 14)
 
-    local altsLabel = altsLabelBtn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local altsLabel = altsLabelBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     altsLabel:SetPoint("LEFT", altsLabelBtn, "LEFT", 0, 0)
-    altsLabel:SetText("|cffc79c6eAlts Vinculados:|r")
+    altsLabel:SetText("|cffffd200Alts Vinculados:|r")
 
     local altsManageHint = altsLabelBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     altsManageHint:SetPoint("LEFT", altsLabel, "RIGHT", 4, 0)
-    altsManageHint:SetText("|cffe6be6a[Gerenciar]|r")
+    altsManageHint:SetText("|cffffd200[Gerenciar]|r")
 
     altsLabelBtn:SetScript("OnClick", function()
         self:toggleAltManager()
@@ -549,34 +608,26 @@ function MemberView:createUI()
 
     local altsBtn = CreateFrame("Button", nil, inset2, template)
     altsBtn:SetPoint("TOPLEFT", altsLabelBtn, "BOTTOMLEFT", 0, -2)
-    altsBtn:SetSize(158, 80)
+    altsBtn:SetPoint("RIGHT", inset2, "RIGHT", -10, 0)
+    altsBtn:SetPoint("BOTTOM", customNoteBox, "BOTTOM", 0, 0)
     if altsBtn.SetBackdrop then
-        altsBtn:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 6, edgeSize = 6,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        altsBtn:SetBackdropColor(0.025, 0.018, 0.012, 0.90)
-        altsBtn:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        altsBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        altsBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        altsBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
     end
 
     local altsVal = altsBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    altsVal:SetPoint("TOPLEFT", altsBtn, "TOPLEFT", 4, -4)
-    altsVal:SetPoint("BOTTOMRIGHT", altsBtn, "BOTTOMRIGHT", -4, 4)
+    altsVal:SetPoint("TOPLEFT", altsBtn, "TOPLEFT", 6, -4)
+    altsVal:SetPoint("BOTTOMRIGHT", altsBtn, "BOTTOMRIGHT", -6, 4)
     altsVal:SetJustifyH("LEFT")
-    if altsVal.SetJustifyV then
-        altsVal:SetJustifyV("TOP")
-    end
-    if altsVal.SetWordWrap then
-        altsVal:SetWordWrap(true)
-    end
+    if altsVal.SetJustifyV then altsVal:SetJustifyV("TOP") end
+    if altsVal.SetWordWrap then altsVal:SetWordWrap(true) end
     self._altsVal = altsVal
     self._altsBtn = altsBtn
 
     local altsHl = altsBtn:CreateTexture(nil, "HIGHLIGHT")
     altsHl:SetAllPoints(altsBtn)
-    altsHl:SetColorTexture(0.85, 0.70, 0.25, 0.08)
+    altsHl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], PALETTE.HIGHLIGHT_TINT[4])
     altsBtn:SetHighlightTexture(altsHl)
 
     altsBtn:SetScript("OnClick", function()
@@ -584,7 +635,8 @@ function MemberView:createUI()
     end)
     altsBtn:SetScript("OnEnter", function(btn)
         if altsBtn.SetBackdropBorderColor then
-            altsBtn:SetBackdropBorderColor(0.85, 0.70, 0.25, 1.0)
+            altsBtn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
+            altsBtn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
         end
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
@@ -594,10 +646,72 @@ function MemberView:createUI()
     end)
     altsBtn:SetScript("OnLeave", function(btn)
         if altsBtn.SetBackdropBorderColor then
-            altsBtn:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+            altsBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+            altsBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
         end
         if GameTooltip then GameTooltip:Hide() end
     end)
+
+    -- Parte Inferior do Inset 2: Recrutador (Posicionado quase na borda inferior do container)
+    local recruiterBtn = CreateFrame("Button", nil, inset2, template)
+    recruiterBtn:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 76, 8)
+    recruiterBtn:SetPoint("RIGHT", inset2, "RIGHT", -10, 0)
+    recruiterBtn:SetHeight(20)
+    if recruiterBtn.SetBackdrop then
+        recruiterBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        recruiterBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        recruiterBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+
+    local recruiterLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    recruiterLabel:SetPoint("RIGHT", recruiterBtn, "LEFT", -6, 0)
+    recruiterLabel:SetText("|cffffd200Recrutador:|r")
+
+    local recruiterBtnText = recruiterBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    recruiterBtnText:SetPoint("LEFT", recruiterBtn, "LEFT", 6, 0)
+    recruiterBtnText:SetPoint("RIGHT", recruiterBtn, "RIGHT", -18, 0)
+    recruiterBtnText:SetJustifyH("LEFT")
+    self._recruiterBtnText = recruiterBtnText
+
+    local recruiterArrow = recruiterBtn:CreateTexture(nil, "OVERLAY")
+    recruiterArrow:SetSize(12, 12)
+    recruiterArrow:SetPoint("RIGHT", recruiterBtn, "RIGHT", -4, 0)
+    recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+
+    recruiterBtn:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
+            btn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
+        end
+        if recruiterArrow and recruiterArrow.SetTexture then
+            recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Down")
+        end
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            local rec = self._currentMember and self._currentMember:getRecruiter() or ""
+            if rec ~= "" then
+                GameTooltip:SetText(string.format("Recrutador: |cffffffff%s|r\n|cffaaaaaaClique para selecionar outro membro da guilda|r", rec))
+            else
+                GameTooltip:SetText("Recrutador: |cff888888(Não informado)|r\n|cffaaaaaaClique para selecionar um membro da guilda|r")
+            end
+            GameTooltip:Show()
+        end
+    end)
+    recruiterBtn:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+            btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        end
+        if recruiterArrow and recruiterArrow.SetTexture then
+            recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+        end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    recruiterBtn:SetScript("OnClick", function()
+        self:toggleRecruiterPicker()
+    end)
+    self._recruiterBtn = recruiterBtn
+    self._recruiterVal = recruiterBtn
 end
 
 --- Salva as alterações feitas nos campos customizados da View de forma automática.
@@ -630,14 +744,14 @@ function MemberView:updateMainTagVisual(isMain)
     if self._isMain then
         self._mainTagText:SetText("|cffffd200M|r")
         if self._mainTagBtn.SetBackdropColor then
-            self._mainTagBtn:SetBackdropColor(0.22, 0.16, 0.05, 0.95)
-            self._mainTagBtn:SetBackdropBorderColor(0.85, 0.68, 0.20, 0.95)
+            self._mainTagBtn:SetBackdropColor(PALETTE.MAIN_TAG_BG[1], PALETTE.MAIN_TAG_BG[2], PALETTE.MAIN_TAG_BG[3], PALETTE.MAIN_TAG_BG[4])
+            self._mainTagBtn:SetBackdropBorderColor(PALETTE.MAIN_TAG_BORDER[1], PALETTE.MAIN_TAG_BORDER[2], PALETTE.MAIN_TAG_BORDER[3], PALETTE.MAIN_TAG_BORDER[4])
         end
     else
-        self._mainTagText:SetText("|cffccb594A|r")
+        self._mainTagText:SetText("|cffffffffA|r")
         if self._mainTagBtn.SetBackdropColor then
-            self._mainTagBtn:SetBackdropColor(0.10, 0.09, 0.08, 0.95)
-            self._mainTagBtn:SetBackdropBorderColor(0.45, 0.38, 0.26, 0.90)
+            self._mainTagBtn:SetBackdropColor(PALETTE.ALT_TAG_BG[1], PALETTE.ALT_TAG_BG[2], PALETTE.ALT_TAG_BG[3], PALETTE.ALT_TAG_BG[4])
+            self._mainTagBtn:SetBackdropBorderColor(PALETTE.ALT_TAG_BORDER[1], PALETTE.ALT_TAG_BORDER[2], PALETTE.ALT_TAG_BORDER[3], PALETTE.ALT_TAG_BORDER[4])
         end
     end
 end
@@ -723,35 +837,36 @@ function MemberView:showMember(member, isLocked)
 
     local function getFactionTexture(m)
         local faction = nil
-        if UnitFactionGroup then
-            faction = UnitFactionGroup("player")
-        end
-
-        if not faction and m then
+        if m then
             local r = (m.getRace and m:getRace() or ""):lower()
-            if r:find("orc") or r:find("troll") or r:find("tauren") or r:find("undead") or r:find("renegad") or r:find("morto") or r:find("sangrent") then
+            if r:find("orc") or r:find("troll") or r:find("tauren") or r:find("undead") or r:find("renegad") or r:find("morto") or r:find("sangrent") or r:find("blood") or r:find("goblin") then
                 faction = "Horde"
-            elseif r:find("human") or r:find("dwarf") or r:find("anão") or r:find("elf") or r:find("gnom") or r:find("draenei") then
+            elseif r:find("human") or r:find("dwarf") or r:find("anão") or r:find("anao") or r:find("elf") or r:find("gnom") or r:find("draenei") or r:find("worgen") then
                 faction = "Alliance"
             end
         end
 
+        if not faction and UnitFactionGroup then
+            faction = UnitFactionGroup("player")
+        end
+
         if faction == "Horde" then
-            return "Interface\\PVPFrame\\PVP-Currency-Horde"
+            return "Interface\\AddOns\\GuildManager\\Textures\\Horde-Logo.tga"
         else
-            return "Interface\\PVPFrame\\PVP-Currency-Alliance"
+            return "Interface\\AddOns\\GuildManager\\Textures\\Alliance-Logo.tga"
         end
     end
 
-    -- Ícone da Facção (Leão da Aliança / Símbolo da Horda)
+    -- Ícone da Facção (Leão da Aliança / Símbolo da Horda exibido à esquerda do nome)
     if self._factionIcon then
         self._factionIcon:SetTexture(getFactionTexture(member))
         if self._factionIcon.SetTexCoord then
-            self._factionIcon:SetTexCoord(4/32, 29/32, 2/32, 30/32)
+            self._factionIcon:SetTexCoord(0, 1, 0, 1)
         end
+        self._factionIcon:Show()
     end
 
-    -- Raça do Jogador em português abaixo do ícone da facção
+    -- Raça do Jogador exibida em português diretamente abaixo do ícone da facção
     local race = (member.getRace and member:getRace()) or ""
     if race == "" and member:getGuid() and GetPlayerInfoByGUID then
         local _, _, locRace = GetPlayerInfoByGUID(member:getGuid())
@@ -765,22 +880,27 @@ function MemberView:showMember(member, isLocked)
 
     local racePt = getRaceInPortuguese(race)
     if self._raceText then
-        local level = member:getLevel() or 1
-        local classDisplay = member:getClassDisplayName() or member:getClass() or ""
-        local subParts = { string.format("Nv. %d", level) }
-        if racePt ~= "" then
-            table.insert(subParts, racePt)
+        local raceDisplay = racePt ~= "" and racePt or race
+        if raceDisplay ~= "" then
+            self._raceText:SetText(string.format("|cffffffff%s|r", raceDisplay))
+            self._raceText:Show()
+        else
+            self._raceText:SetText("")
+            self._raceText:Hide()
         end
-        if classDisplay ~= "" then
-            table.insert(subParts, classDisplay)
-        end
-        self._raceText:SetText(string.format("|cffccb594%s|r", table.concat(subParts, " • ")))
-        self._raceText:Show()
     end
 
-    -- Cabeçalho
-    local coloredName = member:getColoredName()
-    self._memberNameText:SetText(coloredName)
+    -- Cabeçalho com o nome do personagem na cor da sua respectiva classe
+    local rawName = member:getName() or ""
+    local classColor = RAID_CLASS_COLORS and member.getClass and RAID_CLASS_COLORS[member:getClass()]
+    if classColor then
+        local r = math.floor((classColor.r or 1) * 255)
+        local g = math.floor((classColor.g or 1) * 255)
+        local b = math.floor((classColor.b or 1) * 255)
+        self._memberNameText:SetText(string.format("|cff%02x%02x%02x%s|r", r, g, b, rawName))
+    else
+        self._memberNameText:SetText(self:formatColoredMemberName(rawName))
+    end
 
     -- Reposiciona e atualiza a tag M/A dinamicamente ao lado do nome do membro
     local textWidth = (self._memberNameText.GetStringWidth and self._memberNameText:GetStringWidth()) or 0
@@ -816,17 +936,17 @@ function MemberView:showMember(member, isLocked)
     if member:isOnline() then
         self._statusVal:SetText("|cff40ff40Online|r")
     else
-        self._statusVal:SetText("|cff888888Offline|r")
+        self._statusVal:SetText("|cffffffffOffline|r")
     end
 
     local zone = member:getZone()
     self._zoneVal:SetText(zone ~= "" and zone or "Desconhecida")
 
     local publicNote = member:getPublicNote()
-    self._publicNoteVal:SetText(publicNote ~= "" and publicNote or "|cff887766(Nenhuma)|r")
+    self._publicNoteVal:SetText(publicNote ~= "" and publicNote or "|cff888888(Nenhuma)|r")
 
     local officerNote = member:getOfficerNote()
-    self._officerNoteVal:SetText(officerNote ~= "" and officerNote or "|cff887766(Nenhuma)|r")
+    self._officerNoteVal:SetText(officerNote ~= "" and officerNote or "|cff888888(Nenhuma)|r")
 
     self:updateAltsVisual()
     self:updateRecruiterButtonVisual()
@@ -841,6 +961,11 @@ function MemberView:showMember(member, isLocked)
     self._birthdayEB:SetText(member:getBirthday() or "")
     self._dateJoinEB:SetText(member:getDateJoin() or "")
     self._customNoteEB:SetText(member:getCustomNote() or "")
+
+    -- Oculta o painel de detalhes nativo do WoW Classic para não vazar textos ou botões sob a janela do GuildManager
+    if GuildMemberDetailFrame and GuildMemberDetailFrame.Hide then
+        GuildMemberDetailFrame:Hide()
+    end
 
     self:anchorToGuildFrame()
     self._frame:Show()
@@ -1018,7 +1143,7 @@ function MemberView:createRecruiterPickerUI()
     self._recruiterPickerFrame = picker
     picker.SetVerticalScroll = function() end
 
-    picker:SetSize(240, 260)
+    picker:SetSize(250, 270)
     picker:SetFrameStrata("DIALOG")
     picker:SetToplevel(true)
     picker:SetClampedToScreen(true)
@@ -1027,15 +1152,15 @@ function MemberView:createRecruiterPickerUI()
 
     if picker.SetBackdrop then
         picker:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
             tile = true,
-            tileSize = 12,
-            edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
+            tileSize = 24,
+            edgeSize = 24,
+            insets = { left = 8, right = 8, top = 8, bottom = 8 },
         })
-        picker:SetBackdropColor(0.07, 0.05, 0.04, 0.98)
-        picker:SetBackdropBorderColor(0.65, 0.48, 0.22, 1.0)
+        picker:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], PALETTE.FRAME_BG[4])
+        picker:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], PALETTE.FRAME_BORDER[4])
     end
 
     -- Permite fechar a janela ao pressionar Escape
@@ -1045,49 +1170,50 @@ function MemberView:createRecruiterPickerUI()
 
     -- Título
     local title = picker:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("TOPLEFT", picker, "TOPLEFT", 12, -10)
+    title:SetPoint("TOPLEFT", picker, "TOPLEFT", 14, -12)
     title:SetText("|cffffd200SELECIONAR RECRUTADOR|r")
 
     -- Botão Fechar ("X")
     local closeBtn = CreateFrame("Button", nil, picker, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -2, -2)
-    closeBtn:SetSize(22, 22)
+    closeBtn:SetPoint("TOPRIGHT", picker, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(24, 24)
     closeBtn:SetScript("OnClick", function()
         picker:Hide()
     end)
 
     -- Campo de Busca (Filtro por nome em tempo real)
     local searchEB = CreateFrame("EditBox", nil, picker, template)
-    searchEB:SetPoint("TOPLEFT", picker, "TOPLEFT", 10, -28)
-    searchEB:SetPoint("RIGHT", picker, "RIGHT", -10, 0)
-    searchEB:SetHeight(20)
+    searchEB:SetPoint("TOPLEFT", picker, "TOPLEFT", 12, -32)
+    searchEB:SetPoint("RIGHT", picker, "RIGHT", -12, 0)
+    searchEB:SetHeight(22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
     searchEB:SetTextInsets(6, 6, 1, 1)
     if searchEB.SetBackdrop then
-        searchEB:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 6, edgeSize = 6,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        searchEB:SetBackdropColor(0.025, 0.018, 0.012, 0.90)
-        searchEB:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        searchEB:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        searchEB:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        searchEB:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
     end
     searchEB:SetScript("OnEditFocusGained", function(box)
         if box.SetBackdropBorderColor then
-            box:SetBackdropBorderColor(0.85, 0.70, 0.25, 1.0)
+            box:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
+        end
+        if box.SetBackdropColor then
+            box:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
         end
     end)
     searchEB:SetScript("OnEditFocusLost", function(box)
         if box.SetBackdropBorderColor then
-            box:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+            box:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+        end
+        if box.SetBackdropColor then
+            box:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
         end
     end)
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("Buscar membro...")
+    searchHint:SetText("|cffaaaaaaBuscar membro...|r")
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -1151,7 +1277,7 @@ function MemberView:createRecruiterPickerUI()
 
         local hl = btn:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(btn)
-        hl:SetColorTexture(0.85, 0.70, 0.25, 0.12)
+        hl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.12)
         btn:SetHighlightTexture(hl)
 
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1190,7 +1316,7 @@ function MemberView:toggleRecruiterPicker()
         self._recruiterPickerFrame:Hide()
     else
         self._recruiterPickerFrame:ClearAllPoints()
-        self._recruiterPickerFrame:SetPoint("TOPLEFT", self._recruiterBtn, "BOTTOMLEFT", 0, -4)
+        self._recruiterPickerFrame:SetPoint("BOTTOMLEFT", self._recruiterBtn, "TOPLEFT", 0, 4)
         if self._pickerSearchEB then
             self._pickerSearchEB:SetText("")
         end
@@ -1384,7 +1510,7 @@ function MemberView:createAltManagerUI()
     self._altManagerFrame = manager
     manager.SetVerticalScroll = function() end
 
-    manager:SetSize(340, 465)
+    manager:SetSize(350, 480)
     manager:SetFrameStrata("DIALOG")
     manager:SetToplevel(true)
     manager:SetClampedToScreen(true)
@@ -1392,16 +1518,9 @@ function MemberView:createAltManagerUI()
     manager:Hide()
 
     if manager.SetBackdrop then
-        manager:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 12,
-            edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
-        manager:SetBackdropColor(0.07, 0.05, 0.04, 0.98)
-        manager:SetBackdropBorderColor(0.65, 0.48, 0.22, 1.0)
+        manager:SetBackdrop(DIALOG_BACKDROP)
+        manager:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], PALETTE.FRAME_BG[4])
+        manager:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], PALETTE.FRAME_BORDER[4])
     end
 
     -- Permite fechar a janela ao pressionar Escape
@@ -1411,19 +1530,19 @@ function MemberView:createAltManagerUI()
 
     -- Título da Janela (Centralizado, Dourado)
     local title = manager:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOP", manager, "TOP", 0, -8)
+    title:SetPoint("TOP", manager, "TOP", 0, -12)
     title:SetText("|cffffd200Gerenciar Alts Vinculados|r")
 
     -- Subtítulo com o nome do membro inspecionado
     local subtitle = manager:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", manager, "TOPLEFT", 14, -24)
+    subtitle:SetPoint("TOPLEFT", manager, "TOPLEFT", 18, -28)
     subtitle:SetText("Família de alts")
     self._altManagerSubtitle = subtitle
 
     -- Botão Fechar ("X" clássico vermelho com moldura)
     local closeBtn = CreateFrame("Button", nil, manager, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", manager, "TOPRIGHT", -2, -2)
-    closeBtn:SetSize(22, 22)
+    closeBtn:SetPoint("TOPRIGHT", manager, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(26, 26)
     closeBtn:SetScript("OnClick", function()
         manager:Hide()
     end)
@@ -1432,18 +1551,13 @@ function MemberView:createAltManagerUI()
     -- INSET 1: PERSONAGENS VINCULADOS (Membros da mesma família)
     -- =========================================================================
     local inset1 = CreateFrame("Frame", nil, manager, template)
-    inset1:SetPoint("TOPLEFT", manager, "TOPLEFT", 10, -42)
-    inset1:SetPoint("RIGHT", manager, "RIGHT", -10, 0)
+    inset1:SetPoint("TOPLEFT", manager, "TOPLEFT", 12, -46)
+    inset1:SetPoint("RIGHT", manager, "RIGHT", -12, 0)
     inset1:SetHeight(188)
     if inset1.SetBackdrop then
-        inset1:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 8, edgeSize = 8,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        inset1:SetBackdropColor(0.035, 0.025, 0.018, 0.80)
-        inset1:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        inset1:SetBackdrop(CONTAINER_BACKDROP)
+        inset1:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        inset1:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
     end
 
     local sec1Title = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1454,18 +1568,18 @@ function MemberView:createAltManagerUI()
     sep1:SetPoint("TOPLEFT", inset1, "TOPLEFT", 8, -24)
     sep1:SetPoint("RIGHT", inset1, "RIGHT", -8, 0)
     sep1:SetHeight(1)
-    sep1:SetColorTexture(0.45, 0.35, 0.20, 0.65)
+    sep1:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
-    local sec1Hint = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local sec1Hint = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sec1Hint:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 2, -4)
-    sec1Hint:SetText("|cffc79c6eApenas 1 Main por família (clique em [A] para tornar Main):|r")
+    sec1Hint:SetText("|cffffd200Apenas 1 Main por família (clique em [A] para tornar Main):|r")
 
     -- Mensagem informativa caso não haja alts vinculados ainda
     local emptyNotice = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyNotice:SetPoint("TOPLEFT", sec1Hint, "BOTTOMLEFT", 6, -18)
     emptyNotice:SetPoint("RIGHT", inset1, "RIGHT", -12, 0)
     emptyNotice:SetJustifyH("LEFT")
-    emptyNotice:SetText("|cff887766Nenhum outro alt vinculado.\nUse a lista abaixo para selecionar e vincular membros.|r")
+    emptyNotice:SetText("|cffaaaaaaNenhum outro alt vinculado.\nUse a lista abaixo para selecionar e vincular membros.|r")
     emptyNotice:Hide()
     self._familyEmptyNotice = emptyNotice
 
@@ -1486,11 +1600,13 @@ function MemberView:createAltManagerUI()
         mainBtn:SetPoint("LEFT", row, "LEFT", 2, 0)
         if mainBtn.SetBackdrop then
             mainBtn:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
+                bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                 edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                tile = true, tileSize = 6, edgeSize = 6,
+                tile = true, tileSize = 16, edgeSize = 10,
                 insets = { left = 2, right = 2, top = 2, bottom = 2 }
             })
+            mainBtn:SetBackdropColor(PALETTE.ALT_TAG_BG[1], PALETTE.ALT_TAG_BG[2], PALETTE.ALT_TAG_BG[3], PALETTE.ALT_TAG_BG[4])
+            mainBtn:SetBackdropBorderColor(PALETTE.ALT_TAG_BORDER[1], PALETTE.ALT_TAG_BORDER[2], PALETTE.ALT_TAG_BORDER[3], PALETTE.ALT_TAG_BORDER[4])
         end
 
         local mainText = mainBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1515,7 +1631,7 @@ function MemberView:createAltManagerUI()
                 if row.isMain then
                     GameTooltip:SetText(string.format("|cffffd200Personagem Principal [M]|r\n|cffffffff%s|r\n|cffaaaaaa(Apenas um Main é permitido por família)|r", row.memberName))
                 else
-                    GameTooltip:SetText(string.format("|cffccb594Personagem Secundário [A]|r\n|cffffffff%s|r\n|cff00ff00Clique para definir como o ÚNICO Main desta família|r\n|cffaaaaaa(Todos os outros se tornarão automaticamente alts)|r", row.memberName))
+                    GameTooltip:SetText(string.format("|cffffffffPersonagem Secundário [A]|r\n|cffffffff%s|r\n|cff00ff00Clique para definir como o ÚNICO Main desta família|r\n|cffaaaaaa(Todos os outros se tornarão automaticamente alts)|r", row.memberName))
                 end
                 GameTooltip:Show()
             end
@@ -1532,13 +1648,13 @@ function MemberView:createAltManagerUI()
         unlinkBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
         if unlinkBtn.SetBackdrop then
             unlinkBtn:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
+                bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                 edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                tile = true, tileSize = 4, edgeSize = 4,
-                insets = { left = 1, right = 1, top = 1, bottom = 1 }
+                tile = true, tileSize = 16, edgeSize = 8,
+                insets = { left = 2, right = 2, top = 2, bottom = 2 }
             })
             unlinkBtn:SetBackdropColor(0.18, 0.06, 0.05, 0.90)
-            unlinkBtn:SetBackdropBorderColor(0.55, 0.22, 0.18, 0.85)
+            unlinkBtn:SetBackdropBorderColor(0.65, 0.25, 0.20, 0.90)
         end
 
         local unlinkText = unlinkBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1585,17 +1701,12 @@ function MemberView:createAltManagerUI()
     -- =========================================================================
     local inset2 = CreateFrame("Frame", nil, manager, template)
     inset2:SetPoint("TOPLEFT", inset1, "BOTTOMLEFT", 0, -8)
-    inset2:SetPoint("RIGHT", manager, "RIGHT", -10, 0)
+    inset2:SetPoint("RIGHT", manager, "RIGHT", -12, 0)
     inset2:SetHeight(218)
     if inset2.SetBackdrop then
-        inset2:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 8, edgeSize = 8,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        inset2:SetBackdropColor(0.035, 0.025, 0.018, 0.80)
-        inset2:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        inset2:SetBackdrop(CONTAINER_BACKDROP)
+        inset2:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        inset2:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
     end
 
     local sec2Title = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1606,40 +1717,41 @@ function MemberView:createAltManagerUI()
     sep2:SetPoint("TOPLEFT", inset2, "TOPLEFT", 8, -24)
     sep2:SetPoint("RIGHT", inset2, "RIGHT", -8, 0)
     sep2:SetHeight(1)
-    sep2:SetColorTexture(0.45, 0.35, 0.20, 0.65)
+    sep2:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
     -- Campo de Busca de Membros
     local searchEB = CreateFrame("EditBox", nil, inset2, template)
     searchEB:SetPoint("TOPLEFT", sep2, "BOTTOMLEFT", 2, -4)
     searchEB:SetPoint("RIGHT", inset2, "RIGHT", -8, 0)
-    searchEB:SetHeight(20)
+    searchEB:SetHeight(22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
     searchEB:SetTextInsets(6, 6, 1, 1)
     if searchEB.SetBackdrop then
-        searchEB:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 6, edgeSize = 6,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        searchEB:SetBackdropColor(0.025, 0.018, 0.012, 0.90)
-        searchEB:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+        searchEB:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        searchEB:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        searchEB:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
     end
     searchEB:SetScript("OnEditFocusGained", function(box)
         if box.SetBackdropBorderColor then
-            box:SetBackdropBorderColor(0.85, 0.70, 0.25, 1.0)
+            box:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
+        end
+        if box.SetBackdropColor then
+            box:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
         end
     end)
     searchEB:SetScript("OnEditFocusLost", function(box)
         if box.SetBackdropBorderColor then
-            box:SetBackdropBorderColor(0.38, 0.28, 0.16, 0.85)
+            box:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+        end
+        if box.SetBackdropColor then
+            box:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
         end
     end)
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("Buscar membro da guilda...")
+    searchHint:SetText("|cffaaaaaaBuscar membro da guilda...|r")
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -1703,7 +1815,7 @@ function MemberView:createAltManagerUI()
         -- Highlight suave ao passar o mouse
         local hl = row:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(row)
-        hl:SetColorTexture(0.85, 0.70, 0.25, 0.08)
+        hl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.08)
 
         -- Botão Vincular [+ Vincular]
         local linkBtn = CreateFrame("Button", nil, row, template)
@@ -1711,13 +1823,13 @@ function MemberView:createAltManagerUI()
         linkBtn:SetPoint("RIGHT", row, "RIGHT", -2, 0)
         if linkBtn.SetBackdrop then
             linkBtn:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
+                bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
                 edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-                tile = true, tileSize = 4, edgeSize = 4,
-                insets = { left = 1, right = 1, top = 1, bottom = 1 }
+                tile = true, tileSize = 16, edgeSize = 8,
+                insets = { left = 2, right = 2, top = 2, bottom = 2 }
             })
-            linkBtn:SetBackdropColor(0.10, 0.14, 0.08, 0.90)
-            linkBtn:SetBackdropBorderColor(0.35, 0.55, 0.25, 0.85)
+            linkBtn:SetBackdropColor(0.08, 0.14, 0.06, 0.90)
+            linkBtn:SetBackdropBorderColor(0.35, 0.65, 0.25, 0.85)
         end
 
         local linkBtnText = linkBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1833,14 +1945,14 @@ function MemberView:renderLinkedFamilyRows()
             if isThisMain then
                 row.mainBtn.text:SetText("|cffffd200M|r")
                 if row.mainBtn.SetBackdropColor then
-                    row.mainBtn:SetBackdropColor(0.22, 0.16, 0.05, 0.95)
-                    row.mainBtn:SetBackdropBorderColor(0.85, 0.68, 0.20, 0.95)
+                    row.mainBtn:SetBackdropColor(PALETTE.MAIN_TAG_BG[1], PALETTE.MAIN_TAG_BG[2], PALETTE.MAIN_TAG_BG[3], PALETTE.MAIN_TAG_BG[4])
+                    row.mainBtn:SetBackdropBorderColor(PALETTE.MAIN_TAG_BORDER[1], PALETTE.MAIN_TAG_BORDER[2], PALETTE.MAIN_TAG_BORDER[3], PALETTE.MAIN_TAG_BORDER[4])
                 end
             else
-                row.mainBtn.text:SetText("|cffccb594A|r")
+                row.mainBtn.text:SetText("|cffffffffA|r")
                 if row.mainBtn.SetBackdropColor then
-                    row.mainBtn:SetBackdropColor(0.10, 0.09, 0.08, 0.95)
-                    row.mainBtn:SetBackdropBorderColor(0.45, 0.38, 0.26, 0.90)
+                    row.mainBtn:SetBackdropColor(PALETTE.ALT_TAG_BG[1], PALETTE.ALT_TAG_BG[2], PALETTE.ALT_TAG_BG[3], PALETTE.ALT_TAG_BG[4])
+                    row.mainBtn:SetBackdropBorderColor(PALETTE.ALT_TAG_BORDER[1], PALETTE.ALT_TAG_BORDER[2], PALETTE.ALT_TAG_BORDER[3], PALETTE.ALT_TAG_BORDER[4])
                 end
             end
 

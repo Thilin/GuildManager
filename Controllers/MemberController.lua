@@ -355,10 +355,13 @@ function MemberController:hookClassicGuildFrame()
     -- Detalhes ao clicar no membro clássico
     if GuildMemberDetailFrame and not self._detailFrameHooked then
         self._detailFrameHooked = true
-        GuildMemberDetailFrame:HookScript("OnShow", function()
+        GuildMemberDetailFrame:HookScript("OnShow", function(frame)
             local index = GetGuildRosterSelection and GetGuildRosterSelection()
             if index and index > 0 then
                 self:handleMemberClick(index)
+            end
+            if frame and frame.Hide then
+                frame:Hide()
             end
         end)
     end
