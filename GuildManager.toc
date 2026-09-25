@@ -1,0 +1,21 @@
+## Interface: 11506
+## Title: Guild Manager
+## Notes: Gerenciador de guilda com rastreamento avançado de membros, notas e histórico.
+## Author: Thilin
+## Version: 0.1
+## SavedVariables: GM_DB
+
+Database/Database.lua
+
+Models/Member.lua
+
+Repositories/MemberRepository.lua
+
+Services/MemberService.lua
+Services/GuildRosterService.lua
+
+Views/MemberView.lua
+
+Controllers/MemberController.lua
+
+Core.lua
