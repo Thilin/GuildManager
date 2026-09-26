@@ -80,6 +80,9 @@ function GuildRosterService:scanRoster()
             if _G.GM.logService.cleanInvalidLeftLogs then
                 _G.GM.logService:cleanInvalidLeftLogs(self._memberService, activeRosterNames)
             end
+            if _G.GM.logService.cleanInvertedKickLogs then
+                _G.GM.logService:cleanInvertedKickLogs(self._memberService)
+            end
         end
     end
 

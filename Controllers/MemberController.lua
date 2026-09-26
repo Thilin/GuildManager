@@ -944,30 +944,84 @@ function MemberController:matchGuildKick(message)
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
 
-    -- 1. Variável global oficial da Blizzard ERR_GUILD_REMOVE_SS ("%s has kicked %s from the guild." / "%s removeu %s da guilda.")
+    -- 1. Variável global oficial da Blizzard ERR_GUILD_REMOVE_SS
+    -- No WoW, ERR_GUILD_REMOVE_SS = "%s has been kicked out of the guild by %s." / "%s foi expulso da guilda por %s."
+    -- Padrão oficial da Blizzard:
+    -- O 1º argumento (%1$s) é o membro expulso (TARGET).
+    -- O 2º argumento (%2$s) é quem realizou a expulsão (KICKER).
     if _G.ERR_GUILD_REMOVE_SS then
         local removeTpl = _G.ERR_GUILD_REMOVE_SS
-        local s = removeTpl:gsub("%%1%$s", "___GM_KICKER___"):gsub("%%2%$s", "___GM_TARGET___")
-        if not s:find("___GM_TARGET___") then
-            s = removeTpl:gsub("%%s", "___GM_KICKER___", 1):gsub("%%s", "___GM_TARGET___", 1)
+        local tplLower = removeTpl:lower()
+        -- Detecta se o template está em voz passiva ("foi expulso por", "has been kicked by")
+        -- ou voz ativa ("removeu", "expulsou", "has kicked")
+        local isPassive = tplLower:find(" foi ") or tplLower:find(" has been ") or tplLower:find(" was ")
+            or tplLower:find(" por ") or tplLower:find(" by ")
+
+        local s = removeTpl
+        local hasPositional = s:find("%%1%$s") or s:find("%%2%$s")
+        if hasPositional then
+            if isPassive then
+                s = s:gsub("%%1%$s", "___GM_TARGET___"):gsub("%%2%$s", "___GM_KICKER___")
+            else
+                s = s:gsub("%%1%$s", "___GM_KICKER___"):gsub("%%2%$s", "___GM_TARGET___")
+            end
+        else
+            if isPassive then
+                s = s:gsub("%%s", "___GM_TARGET___", 1):gsub("%%s", "___GM_KICKER___", 1)
+            else
+                s = s:gsub("%%s", "___GM_KICKER___", 1):gsub("%%s", "___GM_TARGET___", 1)
+            end
         end
         s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
-        s = s:gsub("___GM_KICKER___", "(.-)"):gsub("___GM_TARGET___", "(.+)")
-        local kicker, kicked = clean:match("^" .. s .. "$")
-        if not kicker then
-            kicker, kicked = clean:match(s)
-        end
-        if not kicker then
-            local sNoDot = s:gsub("%%%.$", "")
-            kicker, kicked = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
-        end
-        if kicked and kicker and kicked ~= "" and kicker ~= "" then
-            return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+
+        local targetPos = s:find("___GM_TARGET___")
+        local kickerPos = s:find("___GM_KICKER___")
+
+        if targetPos and kickerPos then
+            if targetPos < kickerPos then
+                s = s:gsub("___GM_TARGET___", "(.-)"):gsub("___GM_KICKER___", "(.+)")
+                local kicked, kicker = clean:match("^" .. s .. "$")
+                if not kicked then kicked, kicker = clean:match(s) end
+                if not kicked then
+                    local sNoDot = s:gsub("%%%.$", "")
+                    kicked, kicker = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+                end
+                if kicked and kicker and kicked ~= "" and kicker ~= "" then
+                    return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+                end
+            else
+                s = s:gsub("___GM_KICKER___", "(.-)"):gsub("___GM_TARGET___", "(.+)")
+                local kicker, kicked = clean:match("^" .. s .. "$")
+                if not kicker then kicker, kicked = clean:match(s) end
+                if not kicker then
+                    local sNoDot = s:gsub("%%%.$", "")
+                    kicker, kicked = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+                end
+                if kicked and kicker and kicked ~= "" and kicker ~= "" then
+                    return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+                end
+            end
         end
     end
 
-    -- 2. Fallbacks diretos em Português e Inglês
+    -- 2. Fallbacks diretos em Português e Inglês (Priorizando voz passiva oficial da Blizzard)
     local kickPatterns = {
+        -- Voz passiva oficial (ex: "X foi expulso da guilda por Y" / "X has been kicked out of the guild by Y"):
+        { pattern = "^(.-) foi expulso da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-) foi expulsa da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-) foi removido da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-) foi removida da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-) has been kicked out of the guild by (.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-) has been kicked from the guild by (.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-) has been removed from the guild by (.+)", kickedIdx = 1, kickerIdx = 2 },
+
+        -- Mensagens em primeira pessoa quando o próprio jogador expulsa alguém:
+        { pattern = "^Você removeu (.+) da guilda", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^Você expulsou (.+) da guilda", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^You have kicked (.+) from the guild", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^You have removed (.+) from the guild", kickedIdx = 1, isSelfKicker = true },
+
+        -- Voz ativa (ex: "Y removeu X da guilda"):
         { pattern = "^(.-) removeu (.+) da guilda", kickerIdx = 1, kickedIdx = 2 },
         { pattern = "^(.-) expulsou (.+) da guilda", kickerIdx = 1, kickedIdx = 2 },
         { pattern = "^(.-) has kicked (.+) from the guild", kickerIdx = 1, kickedIdx = 2 },
@@ -975,10 +1029,18 @@ function MemberController:matchGuildKick(message)
     }
     for _, item in ipairs(kickPatterns) do
         local m1, m2 = clean:match(item.pattern)
-        if m1 and m2 then
-            local kicker = (item.kickerIdx == 1) and m1 or m2
-            local kicked = (item.kickedIdx == 2) and m2 or m1
-            return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+        if m1 then
+            local kicked, kicker
+            if item.isSelfKicker then
+                kicked = m1
+                kicker = UnitName and UnitName("player") or ""
+            else
+                kicked = (item.kickedIdx == 1) and m1 or m2
+                kicker = (item.kickerIdx == 1) and m1 or m2
+            end
+            if kicked and kicked ~= "" then
+                return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+            end
         end
     end
 
@@ -1243,6 +1305,18 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
     local cleanKicker = self:sanitizeCharacterName(kickerName)
     if not cleanKicked or cleanKicked == "" then
         return
+    end
+
+    -- Trava de segurança contra inversão: se o jogador local estiver ativo na guilda, ele NÃO foi expulso
+    local myName = UnitName and UnitName("player") or ""
+    if myName ~= "" and cleanKicked:lower() == myName:lower() and IsInGuild and IsInGuild() then
+        if cleanKicker ~= "" then
+            local temp = cleanKicked
+            cleanKicked = cleanKicker
+            cleanKicker = temp
+        else
+            return
+        end
     end
 
     local member = self._memberService:getMember(cleanKicked)

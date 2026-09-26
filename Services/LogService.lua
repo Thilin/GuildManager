@@ -387,3 +387,20 @@ function LogService:cleanInvalidLeftLogs(memberService, activeRosterNames)
     return count
 end
 
+--- Remove do banco de dados registros de KICK invertidos onde o jogador local foi colocado como expulso.
+---@param memberService table|nil
+---@return number @Quantidade de registros removidos
+function LogService:cleanInvertedKickLogs(memberService)
+    local mService = memberService or self._memberService or (_G.GM and _G.GM.memberService)
+    if not mService or not self._repository or not self._repository.cleanInvertedKickLogs then
+        return 0
+    end
+
+    local count = self._repository:cleanInvertedKickLogs(mService)
+    if count > 0 then
+        print(string.format("|cff00ff00[GuildManager]|r %d log(s) de expulsão invertidos foram corrigidos.", count))
+    end
+    return count
+end
+
+

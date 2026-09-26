@@ -352,4 +352,51 @@ function LogRepository:removeInvalidLeftLogs(memberService, activeRosterNames)
     return removedCount
 end
 
+--- Remove logs de expulsão (KICK) invertidos onde o jogador local foi registrado falsamente como expulso
+--- mesmo continuando na guilda, enquanto quem ele removeu foi registrado como kicker.
+---@param memberService table
+---@return number @Quantidade de registros removidos
+function LogRepository:cleanInvertedKickLogs(memberService)
+    if not memberService or type(self._db.logs) ~= "table" then
+        return 0
+    end
+
+    local myName = UnitName and UnitName("player") or ""
+    if myName == "" or not IsInGuild or not IsInGuild() then
+        return 0
+    end
+    local myLower = myName:lower()
+
+    local removedCount = 0
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and rawData.event == "KICK" then
+            local name = rawData.name or ""
+            if name:lower() == myLower then
+                table.remove(self._db.logs, i)
+                removedCount = removedCount + 1
+
+                local myMember = memberService:getMember(myName)
+                if myMember and not myMember:isInGuild() then
+                    myMember:setInGuild(true)
+                    myMember:setDateLeft("")
+                    if (myMember:getTimesLeft() or 0) > 0 then
+                        myMember:setTimesLeft(math.max(0, myMember:getTimesLeft() - 1))
+                    end
+                    memberService:saveMember(myMember)
+                end
+            end
+        end
+    end
+
+    if removedCount > 0 then
+        for idx, rawData in ipairs(self._db.logs) do
+            rawData.id = idx
+        end
+    end
+
+    return removedCount
+end
+
+
 
