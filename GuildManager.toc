@@ -8,6 +8,7 @@
 Database/Database.lua
 
 Models/Member.lua
+Models/Log.lua
 
 Repositories/MemberRepository.lua
 
