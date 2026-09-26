@@ -11,12 +11,16 @@ Models/Member.lua
 Models/Log.lua
 
 Repositories/MemberRepository.lua
+Repositories/LogRepository.lua
 
+Services/LogService.lua
 Services/MemberService.lua
 Services/GuildRosterService.lua
 
 Views/MemberView.lua
+Views/LogView.lua
 
 Controllers/MemberController.lua
+Controllers/LogController.lua
 
 Core.lua

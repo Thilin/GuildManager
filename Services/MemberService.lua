@@ -1,16 +1,31 @@
 ---@class MemberService
 ---@field private _repository MemberRepository
+---@field private _logService LogService|nil
 MemberService = {}
 MemberService.__index = MemberService
 
 --- Construtor do serviço de membros.
 ---@param repository MemberRepository @Instância do repositório de membros
+---@param logService LogService|nil @Instância opcional do serviço de logs
 ---@return MemberService
-function MemberService:new(repository)
+function MemberService:new(repository, logService)
     local instance = setmetatable({}, self)
     instance._repository = repository
+    instance._logService = logService
     instance._pendingRecruiters = {}
     return instance
+end
+
+--- Define ou atualiza o serviço de logs.
+---@param logService LogService
+function MemberService:setLogService(logService)
+    self._logService = logService
+end
+
+--- Obtém o serviço de logs.
+---@return LogService|nil
+function MemberService:getLogService()
+    return self._logService
 end
 
 --- Registra um recrutador pendente na memória do serviço.
@@ -40,6 +55,9 @@ function MemberService:setMemberRecruiter(memberName, recruiterName)
     if member then
         member:setRecruiter(recruiterName)
         self._repository:save(member)
+        if self._logService then
+            self._logService:updateRecruiterForMember(memberName, recruiterName)
+        end
         return member
     end
     return nil
@@ -103,7 +121,7 @@ function MemberService:processRosterMember(rosterData)
     else
         -- Novo membro detectado: define data de entrada atual caso não definida
         if not rosterData.dateJoin or rosterData.dateJoin == "" then
-            rosterData.dateJoin = date("%Y-%m-%d")
+            rosterData.dateJoin = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
         end
         local rec = rosterData.recruiter or ""
         if pendingRecruiter and pendingRecruiter ~= "" then
@@ -115,6 +133,13 @@ function MemberService:processRosterMember(rosterData)
         rosterData.recruiter = rec
         rosterData.isInGuild = true
         member = Member:new(rosterData)
+
+        -- Se o banco já possuía membros sincronizados anteriormente, significa que este novo membro
+        -- entrou/foi recrutado para a guilda enquanto o jogador esteve offline.
+        local isExistingDb = (_G.GM_DB and _G.GM_DB.rosterInitialized) or (self._repository and self._repository._db and self._repository._db.rosterInitialized)
+        if self._logService and (isExistingDb or self._repository:count() > 0) then
+            self._logService:logRecruitment(member:getName(), member:getRecruiter(), member:getGuid())
+        end
     end
 
     self._repository:save(member)

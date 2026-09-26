@@ -49,10 +49,14 @@ local enumMeta = {
 LogEvent = setmetatable({}, enumMeta)
 
 ---@class Log
+---@field _id number|nil @Identificador único do log
 ---@field _name string @Nome do personagem
+---@field _class string @Token da classe do personagem (ex: WARRIOR)
 ---@field _guid string @GUID único do personagem no WoW
 ---@field _message string @Mensagem explicativa ou detalhe da alteração
 ---@field _event LogEventType @Tipo de evento associado (ENUM LogEvent)
+---@field _recruiter string @Nome do recrutador (caso aplicável)
+---@field _recruiterClass string @Token da classe do recrutador (caso aplicável)
 ---@field _timestamp number @Timestamp Unix de quando o evento ocorreu
 ---@field _date string @Data legível formatada (AAAA-MM-DD HH:MM:SS)
 Log = {}
@@ -78,9 +82,13 @@ function Log:new(data)
     data = data or {}
 
     -- Atributos obrigatórios do modelo:
+    instance._id = tonumber(data.id)
     instance._name = data.name or data.characterName or ""
+    instance._class = data.class or data.classToken or ""
     instance._guid = data.guid or ""
     instance._message = data.message or data.msg or ""
+    instance._recruiter = data.recruiter or ""
+    instance._recruiterClass = data.recruiterClass or ""
 
     local event = data.event
     if Log.isValidEvent(event) then
@@ -204,14 +212,66 @@ function Log:setDate(dateStr)
     self._date = tostring(dateStr or "")
 end
 
+--- Obtém o ID do log.
+---@return number|nil
+function Log:getId()
+    return self._id
+end
+
+--- Define o ID do log.
+---@param id number
+function Log:setId(id)
+    self._id = tonumber(id)
+end
+
+--- Obtém o recrutador associado ao log.
+---@return string
+function Log:getRecruiter()
+    return self._recruiter or ""
+end
+
+--- Define o recrutador do log.
+---@param recruiter string
+function Log:setRecruiter(recruiter)
+    self._recruiter = tostring(recruiter or "")
+end
+
+--- Obtém a classe do personagem.
+---@return string
+function Log:getClass()
+    return self._class or ""
+end
+
+--- Define a classe do personagem.
+---@param class string
+function Log:setClass(class)
+    self._class = tostring(class or "")
+end
+
+--- Obtém a classe do recrutador.
+---@return string
+function Log:getRecruiterClass()
+    return self._recruiterClass or ""
+end
+
+--- Define a classe do recrutador.
+---@param class string
+function Log:setRecruiterClass(class)
+    self._recruiterClass = tostring(class or "")
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
     return {
+        id = self._id,
         name = self._name,
+        class = self._class,
         guid = self._guid,
         message = self._message,
         event = self._event,
+        recruiter = self._recruiter,
+        recruiterClass = self._recruiterClass,
         timestamp = self._timestamp,
         date = self._date,
     }

@@ -65,6 +65,9 @@ function GuildRosterService:scanRoster()
     -- Reconcilia membros que saíram da guilda desde a última varredura
     if processedCount > 0 then
         self._memberService:reconcileGuildMembers(activeRosterNames)
+        if _G.GM_DB then
+            _G.GM_DB.rosterInitialized = true
+        end
     end
 
     return processedCount

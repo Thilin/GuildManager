@@ -2,6 +2,7 @@
 ---@field private _memberService MemberService
 ---@field private _guildRosterService GuildRosterService
 ---@field private _memberView MemberView
+---@field private _logService LogService|nil
 ---@field private _eventFrame table
 MemberController = {}
 MemberController.__index = MemberController
@@ -10,13 +11,15 @@ MemberController.__index = MemberController
 ---@param memberService MemberService @Serviço de membros
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
 ---@param memberView MemberView @Camada de visualização da ficha do membro
+---@param logService LogService|nil @Serviço de gerenciamento de logs
 ---@return MemberController
-function MemberController:new(memberService, guildRosterService, memberView)
+function MemberController:new(memberService, guildRosterService, memberView, logService)
     local instance = setmetatable({}, self)
 
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService
     instance._memberView = memberView
+    instance._logService = logService
     instance._eventFrame = nil
     instance._debounceTimer = nil
     instance._tooltipHooked = false
@@ -29,6 +32,18 @@ function MemberController:new(memberService, guildRosterService, memberView)
     instance._cGuildInviteHooked = false
 
     return instance
+end
+
+--- Define ou atualiza o serviço de logs.
+---@param logService LogService
+function MemberController:setLogService(logService)
+    self._logService = logService
+end
+
+--- Obtém o serviço de logs.
+---@return LogService|nil
+function MemberController:getLogService()
+    return self._logService
 end
 
 --- Registra ganchos (hooks) e ouvintes de eventos da Blizzard para capturar e persistir
@@ -55,6 +70,9 @@ function MemberController:initHooks()
             end
             if updatedFields.recruiter ~= nil then
                 member:setRecruiter(updatedFields.recruiter)
+                if self._logService then
+                    self._logService:updateRecruiterForMember(member:getName(), updatedFields.recruiter)
+                end
             end
 
             self._memberService:saveMember(member)
@@ -117,6 +135,9 @@ function MemberController:initHooks()
                 self:hookInviteAPIs()
                 if IsInGuild and IsInGuild() then
                     self._guildRosterService:requestRosterUpdate()
+                    if QueryGuildEventLog then
+                        pcall(QueryGuildEventLog)
+                    end
                     if GetNumGuildMembers and GetNumGuildMembers() > 0 then
                         self._guildRosterService:scanRoster()
                     end
@@ -994,6 +1015,14 @@ function MemberController:handleGuildJoin(newMemberName)
             isMain = true,
         })
         self._memberService:saveMember(newMember)
+        member = newMember
+    end
+
+    -- Registra o log de recrutamento do novo membro
+    if self._logService then
+        local m = member or self._memberService:getMember(cleanName)
+        local memberGuid = m and m:getGuid() or ""
+        self._logService:logRecruitment(cleanName, recruiter, memberGuid)
     end
 
     -- 4. Notificação no chat com destaque visual
@@ -1126,7 +1155,7 @@ function MemberController:checkGuildEventLog()
                     local recruit = entry.player2 or entry.name
                     local recruiter = entry.player1 or entry.sourceName
                     if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
-                        self:applyRecruiterIfEmpty(recruit, recruiter)
+                        self:applyRecruiterIfEmpty(recruit, recruiter, entry.time)
                     end
                 end
             end
@@ -1139,14 +1168,22 @@ function MemberController:checkGuildEventLog()
     if getNum and getInfo then
         local success, count = pcall(getNum)
         if success and type(count) == "number" and count > 0 then
-            local limit = math.min(count, 15)
+            local limit = math.min(count, 30)
             for i = 1, limit do
-                local s, eventType, p1, p2 = pcall(getInfo, i)
+                local s, eventType, p1, p2, _, years, months, days, hours = pcall(getInfo, i)
                 if s and eventType and (eventType == "invite" or tostring(eventType):lower():find("invite")) then
                     local recruiter = p1
                     local recruit = p2
                     if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
-                        self:applyRecruiterIfEmpty(recruit, recruiter)
+                        local eventTimestamp = nil
+                        if days or hours or months or years then
+                            local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                            local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                            if now > secAgo then
+                                eventTimestamp = now - secAgo
+                            end
+                        end
+                        self:applyRecruiterIfEmpty(recruit, recruiter, eventTimestamp)
                     end
                 end
             end
@@ -1154,14 +1191,20 @@ function MemberController:checkGuildEventLog()
     end
 end
 
---- Atribui o recrutador ao membro caso o campo ainda esteja vazio.
+--- Atribui o recrutador ao membro caso o campo ainda esteja vazio e registra no serviço de logs.
 ---@param recruitName string
 ---@param recruiterName string
-function MemberController:applyRecruiterIfEmpty(recruitName, recruiterName)
+---@param eventTimestamp number|nil
+function MemberController:applyRecruiterIfEmpty(recruitName, recruiterName, eventTimestamp)
     local cleanRecruit = self:sanitizeCharacterName(recruitName)
     local cleanRecruiter = self:sanitizeCharacterName(recruiterName)
     if cleanRecruit == "" or cleanRecruiter == "" then
         return
+    end
+
+    -- Registra como recrutador pendente no serviço de membros caso o membro ainda vá ser processado
+    if self._memberService and self._memberService.setPendingRecruiter then
+        self._memberService:setPendingRecruiter(cleanRecruit, cleanRecruiter)
     end
 
     local member = self._memberService:getMember(cleanRecruit)
@@ -1169,6 +1212,12 @@ function MemberController:applyRecruiterIfEmpty(recruitName, recruiterName)
         member:setRecruiter(cleanRecruiter)
         self._memberService:saveMember(member)
         print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r atualizado pelo log: |cff00bfff%s|r", cleanRecruit, cleanRecruiter))
+    end
+
+    -- Registra ou atualiza o log de JOINED com o recrutador e a mensagem padrão
+    if self._logService then
+        local memberGuid = member and member:getGuid() or ""
+        self._logService:logRecruitment(cleanRecruit, cleanRecruiter, memberGuid, eventTimestamp)
     end
 end
 

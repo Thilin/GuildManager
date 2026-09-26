@@ -10,13 +10,23 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local databaseManager = Database:new()
         local dbTable = databaseManager:init()
 
+        local logRepository = LogRepository:new(dbTable)
+        local logService = LogService:new(logRepository)
+
         local memberRepository = MemberRepository:new(dbTable)
-        local memberService = MemberService:new(memberRepository)
+        local memberService = MemberService:new(memberRepository, logService)
         local guildRosterService = GuildRosterService:new(memberService)
         local memberView = MemberView:new()
-        local memberController = MemberController:new(memberService, guildRosterService, memberView)
+        local memberController = MemberController:new(memberService, guildRosterService, memberView, logService)
+
+        local logView = LogView:new()
+        local logController = LogController:new(logService, logView)
 
         GM.database = databaseManager
+        GM.logRepository = logRepository
+        GM.logService = logService
+        GM.logView = logView
+        GM.logController = logController
         GM.memberRepository = memberRepository
         GM.memberService = memberService
         GM.guildRosterService = guildRosterService
@@ -24,8 +34,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.memberController = memberController
 
         memberController:initHooks()
+        logController:initHooks()
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r ou |cffffff00/gmlogs|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")
