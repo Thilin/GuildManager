@@ -40,12 +40,21 @@ function LogController:refreshLogs()
         return
     end
 
+    if self._logService.cleanInvalidInviteJoinedLogs then
+        self._logService:cleanInvalidInviteJoinedLogs()
+    end
+
     local allLogs = self._logService:getAllLogs() or {}
     self._logView:setLogs(allLogs)
 end
 
 --- Abre a tela de logs e carrega os registros.
 function LogController:show()
+    if _G.GM and _G.GM.memberController and _G.GM.memberController.requestGuildEventLog then
+        _G.GM.memberController:requestGuildEventLog(true)
+    elseif QueryGuildEventLog then
+        pcall(QueryGuildEventLog)
+    end
     self:refreshLogs()
     if self._logView then
         self._logView:show()

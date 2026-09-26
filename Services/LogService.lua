@@ -132,3 +132,225 @@ end
 function LogService:getLogsForMember(memberName)
     return self._repository:findByName(memberName)
 end
+
+--- Formata a mensagem padrão obrigatória para o evento LEFT.
+--- Padrão: "Player X SAIU da guilda"
+---@param memberName string
+---@return string
+function LogService:formatLeftMessage(memberName)
+    return string.format("%s SAIU da guilda", memberName)
+end
+
+--- Registra o evento de saída (LEFT) de um membro da guilda.
+--- Evita duplicidade se a saída já tiver sido registrada recentemente.
+---@param memberName string @Nome do membro que saiu
+---@param guid string|nil @GUID do personagem
+---@param timestamp number|nil @Timestamp Unix do evento
+---@param dateStr string|nil @Data legível formatada
+---@param memberClass string|nil @Token da classe do personagem (opcional)
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada
+function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberClass)
+    if not memberName or memberName == "" then
+        return nil, false
+    end
+
+    -- Se o membro foi removido (KICK), é um erro de lógica registrar que ele saiu (LEFT)
+    if self:hasKickLog(memberName) then
+        return nil, false
+    end
+
+    -- Evita duplicidade se já houver log registrado para este evento
+    if self._repository and self._repository.hasLeaveLog and timestamp and timestamp > 0 then
+        if self._repository:hasLeaveLog(memberName, timestamp) then
+            return nil, false
+        end
+    end
+    if self._repository and self._repository.findRecentLeaveLog then
+        local existingLog = self._repository:findRecentLeaveLog(memberName, 600)
+        if existingLog then
+            return existingLog, false
+        end
+    end
+
+    memberClass = memberClass or ""
+    if memberClass == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if not guid or guid == "" then
+                guid = m:getGuid() or ""
+            end
+        end
+    end
+    if memberClass == "" and guid and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    local message = self:formatLeftMessage(memberName)
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid or "",
+        message = message,
+        event = LogEvent.LEFT or "LEFT",
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
+--- Formata a mensagem padrão obrigatória para o evento KICK.
+--- Padrão: "Player X foi REMOVIDO da guilda por Player Y"
+---@param kickedName string @Nome do personagem expulso
+---@param kickerName string|nil @Nome de quem o expulsou
+---@return string
+function LogService:formatKickMessage(kickedName, kickerName)
+    local kicker = (kickerName and kickerName ~= "") and kickerName or "Desconhecido"
+    return string.format("%s foi REMOVIDO da guilda por %s", kickedName, kicker)
+end
+
+--- Verifica se existe algum log de saída (LEFT) para o personagem.
+---@param name string
+---@param timestamp number|nil
+---@return boolean
+function LogService:hasLeaveLog(name, timestamp)
+    if self._repository and self._repository.hasLeaveLog then
+        return self._repository:hasLeaveLog(name, timestamp)
+    end
+    return false
+end
+
+--- Verifica se existe algum log de expulsão (KICK) para o personagem.
+---@param name string
+---@param timestamp number|nil
+---@return boolean
+function LogService:hasKickLog(name, timestamp)
+    if self._repository and self._repository.hasKickLog then
+        return self._repository:hasKickLog(name, timestamp)
+    end
+    return false
+end
+
+--- Registra o evento de expulsão/remoção (KICK) de um membro da guilda.
+--- Evita duplicidade se o KICK já tiver sido registrado recentemente.
+--- Caso haja um log recente de saída voluntária (LEFT), converte-o para KICK com o autor correto.
+---@param kickedName string @Nome do membro removido
+---@param kickerName string|nil @Nome do membro que o removeu
+---@param guid string|nil @GUID do personagem expulso
+---@param timestamp number|nil @Timestamp Unix do evento
+---@param dateStr string|nil @Data legível formatada
+---@param kickedClass string|nil @Classe do membro expulso
+---@param kickerClass string|nil @Classe de quem expulsou
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada (false)
+function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateStr, kickedClass, kickerClass)
+    if not kickedName or kickedName == "" then
+        return nil, false
+    end
+
+    local kicker = kickerName or ""
+
+    -- 1. Verifica se já existe um KICK para este personagem no mesmo período
+    if self._repository and self._repository.hasKickLog and timestamp and timestamp > 0 then
+        if self._repository:hasKickLog(kickedName, timestamp) then
+            return nil, false
+        end
+    end
+    if self._repository and self._repository.findRecentKickLog then
+        local existingKick = self._repository:findRecentKickLog(kickedName, 600)
+        if existingKick then
+            -- Se já existe mas o autor era desconhecido e agora temos o autor, atualiza
+            if (existingKick:getKicker() == "" or existingKick:getKicker() == "Desconhecido") and kicker ~= "" then
+                existingKick:setKicker(kicker)
+                if kickerClass and kickerClass ~= "" then
+                    existingKick:setKickerClass(kickerClass)
+                end
+                existingKick:setMessage(self:formatKickMessage(kickedName, kicker))
+                self._repository:save(existingKick)
+            end
+            return existingKick, false
+        end
+    end
+
+    -- 2. Se houver um log de LEFT gerado para este membro, converte-o para KICK
+    if self._repository and self._repository.findRecentLeaveLog then
+        local existingLeave = self._repository:findRecentLeaveLog(kickedName, 86400)
+        if existingLeave then
+            existingLeave:setEvent(LogEvent.KICK)
+            existingLeave:setKicker(kicker)
+            if kickerClass and kickerClass ~= "" then
+                existingLeave:setKickerClass(kickerClass)
+            end
+            existingLeave:setMessage(self:formatKickMessage(kickedName, kicker))
+            if timestamp and timestamp > 0 then
+                existingLeave:setTimestamp(timestamp)
+            end
+            if dateStr and dateStr ~= "" then
+                existingLeave:setDate(dateStr)
+            end
+            self._repository:save(existingLeave)
+            return existingLeave, false
+        end
+    end
+
+    -- 3. Resolve classes se não informadas
+    kickedClass = kickedClass or ""
+    kickerClass = kickerClass or ""
+    if _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(kickedName)
+        if m then
+            if kickedClass == "" then kickedClass = m:getClass() or "" end
+            if not guid or guid == "" then guid = m:getGuid() or "" end
+        end
+        if kicker ~= "" and kickerClass == "" then
+            local k = _G.GM.memberService:getMember(kicker)
+            if k then kickerClass = k:getClass() or "" end
+        end
+    end
+    if kickedClass == "" and guid and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then kickedClass = classToken end
+    end
+
+    local message = self:formatKickMessage(kickedName, kicker)
+    local newLog = Log:new({
+        name = kickedName,
+        class = kickedClass,
+        guid = guid or "",
+        message = message,
+        event = LogEvent.KICK,
+        kicker = kicker,
+        kickerClass = kickerClass,
+        recruiter = kicker,
+        recruiterClass = kickerClass,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
+--- Remove do banco de dados registros de JOINED de personagens que nunca entraram na guilda (foram apenas convidados).
+---@param memberService table|nil
+---@return number @Quantidade de registros removidos
+function LogService:cleanInvalidInviteJoinedLogs(memberService)
+    local mService = memberService or (_G.GM and _G.GM.memberService)
+    if not mService or not self._repository or not self._repository.removeInvalidJoinedLogs then
+        return 0
+    end
+
+    local isRosterInit = (_G.GM_DB and _G.GM_DB.rosterInitialized)
+    if not isRosterInit and mService._repository and mService._repository:count() == 0 then
+        return 0
+    end
+
+    local count = self._repository:removeInvalidJoinedLogs(mService)
+    if count > 0 then
+        print(string.format("|cff00ff00[GuildManager]|r %d log(s) de convites não aceitos foram removidos do registro.", count))
+    end
+    return count
+end
+

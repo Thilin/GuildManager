@@ -543,13 +543,13 @@ function LogView:applyFilters()
         local evt = log:getEvent()
 
         if eventFilter == "JOINED" then
-            matchEvent = (evt == LogEvent.JOINED)
+            matchEvent = (evt == LogEvent.JOINED or evt == "JOINED")
         elseif eventFilter == "LEFT_KICK" then
-            matchEvent = (evt == LogEvent.LEFT or evt == LogEvent.KICK)
+            matchEvent = (evt == LogEvent.LEFT or evt == "LEFT" or evt == LogEvent.KICK or evt == "KICK")
         elseif eventFilter == "NOTES" then
-            matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE)
+            matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE or evt == "OFFICERNOTE" or evt == "PUBLICNOTE")
         elseif eventFilter == "OTHER" then
-            matchEvent = (evt ~= LogEvent.JOINED and evt ~= LogEvent.LEFT and evt ~= LogEvent.KICK and evt ~= LogEvent.OFFICERNOTE and evt ~= LogEvent.PUBLICNOTE)
+            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
         end
 
         if matchEvent then
@@ -702,7 +702,7 @@ function LogView:formatColoredMessage(log)
     local name = log:getName() or ""
     local recruiter = log:getRecruiter() or ""
 
-    if evt == LogEvent.JOINED then
+    if evt == LogEvent.JOINED or evt == "JOINED" then
         local recruitColored = self:formatColoredName(name, log:getGuid(), log:getClass())
         local recruiterColored
         if recruiter ~= "" and recruiter ~= "Desconhecido" then
@@ -711,6 +711,24 @@ function LogView:formatColoredMessage(log)
             recruiterColored = "|cff888888Desconhecido|r"
         end
         return string.format("%s foi RECRUTADO por %s", recruitColored, recruiterColored)
+    end
+
+    if evt == LogEvent.LEFT or evt == "LEFT" then
+        local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        return string.format("%s SAIU da guilda", coloredName)
+    end
+
+    if evt == LogEvent.KICK or evt == "KICK" then
+        local kickedColored = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local kicker = (log.getKicker and log:getKicker()) or ""
+        local kickerClass = (log.getKickerClass and log:getKickerClass()) or ""
+        local kickerColored
+        if kicker ~= "" and kicker ~= "Desconhecido" then
+            kickerColored = self:formatColoredName(kicker, nil, kickerClass)
+        else
+            kickerColored = "|cff888888Desconhecido|r"
+        end
+        return string.format("%s foi REMOVIDO da guilda por %s", kickedColored, kickerColored)
     end
 
     local rawMsg = log:getMessage() or ""

@@ -108,6 +108,122 @@ function LogRepository:findJoinedLog(name, guid)
     return nil, nil
 end
 
+--- Busca um log recente de saída (LEFT) para evitar registros duplicados.
+---@param name string
+---@param withinSeconds number|nil
+---@return Log|nil
+function LogRepository:findRecentLeaveLog(name, withinSeconds)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil
+    end
+
+    local lowerName = name:lower()
+    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    local threshold = withinSeconds or 600
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "LEAVED" or rawData.event == "LEFT") then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local logTime = rawData.timestamp or 0
+                if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                    rawData.id = rawData.id or i
+                    return Log:new(rawData)
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Busca um log recente de expulsão (KICK) para evitar registros duplicados.
+---@param name string
+---@param withinSeconds number|nil
+---@return Log|nil, number|nil
+function LogRepository:findRecentKickLog(name, withinSeconds)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil, nil
+    end
+
+    local lowerName = name:lower()
+    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    local threshold = withinSeconds or 600
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and rawData.event == "KICK" then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local logTime = rawData.timestamp or 0
+                if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                    rawData.id = rawData.id or i
+                    return Log:new(rawData), i
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--- Verifica se existe algum log de saída (LEFT) registrado para o personagem.
+--- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+---@param name string
+---@param eventTimestamp number|nil
+---@return boolean
+function LogRepository:hasLeaveLog(name, eventTimestamp)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    local lowerName = name:lower()
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED") then
+            if rawData.name and rawData.name:lower() == lowerName then
+                if not eventTimestamp or eventTimestamp == 0 then
+                    return true
+                end
+                local logTime = rawData.timestamp or 0
+                if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+--- Verifica se existe algum log de expulsão (KICK) registrado para o personagem.
+--- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+---@param name string
+---@param eventTimestamp number|nil
+---@return boolean
+function LogRepository:hasKickLog(name, eventTimestamp)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    local lowerName = name:lower()
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and rawData.event == "KICK" then
+            if rawData.name and rawData.name:lower() == lowerName then
+                if not eventTimestamp or eventTimestamp == 0 then
+                    return true
+                end
+                local logTime = rawData.timestamp or 0
+                if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 --- Retorna a quantidade total de logs registrados.
 ---@return number
 function LogRepository:count()
@@ -132,3 +248,36 @@ function LogRepository:wipe()
         table.wipe(self._db.logs)
     end
 end
+
+--- Remove logs do tipo JOINED de personagens que não existem no cadastro de membros (apenas receberam convite e nunca entraram).
+---@param memberService table
+---@return number @Quantidade de registros removidos
+function LogRepository:removeInvalidJoinedLogs(memberService)
+    if not memberService or type(self._db.logs) ~= "table" then
+        return 0
+    end
+
+    local removedCount = 0
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "JOINED" or rawData.event == "join") then
+            local name = rawData.name or ""
+            local member = memberService:getMember(name)
+            -- Se o membro nem existe no banco de membros, ele nunca esteve no roster da guilda
+            if not member then
+                table.remove(self._db.logs, i)
+                removedCount = removedCount + 1
+            end
+        end
+    end
+
+    -- Re-indexa os IDs após a remoção
+    if removedCount > 0 then
+        for idx, rawData in ipairs(self._db.logs) do
+            rawData.id = idx
+        end
+    end
+
+    return removedCount
+end
+

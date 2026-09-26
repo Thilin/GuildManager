@@ -162,16 +162,193 @@ function MemberService:reconcileGuildMembers(activeRosterNames)
         local nameLower = (memberName or ""):lower()
         if member:isInGuild() and not activeRosterNames[memberName] and not activeRosterNames[nameLower] then
             -- Membro saiu da guilda
+            local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
             member:setInGuild(false)
-            member:setLastRank(member:getRankName())
+            if member:getRankName() and member:getRankName() ~= "" then
+                member:setLastRank(member:getRankName())
+            end
             member:setDateLeft(today)
             member:setTimesLeft((member:getTimesLeft() or 0) + 1)
             self._repository:save(member)
 
             -- Desvincula imediatamente da lista de alts ao sair da guilda
             self:unlinkMemberOnGuildLeave(memberName)
+
+            -- Verifica se o membro foi expulso (KICK) pelo log de eventos da guilda da Blizzard
+            local kickInfo = self:findKickInGuildEventLog(memberName)
+            local alreadyKicked = self._logService and self._logService.hasKickLog and self._logService:hasKickLog(memberName)
+            local quitInfo = self:findQuitInGuildEventLog(memberName)
+
+            if kickInfo or alreadyKicked then
+                -- O membro foi REMOVIDO (KICK) - É um erro de lógica adicionar LEFT; registra apenas KICK!
+                if self._logService then
+                    local kicker = kickInfo and kickInfo.kicker or ""
+                    local kickTime = kickInfo and kickInfo.time or nil
+                    self._logService:logGuildKick(memberName, kicker, member:getGuid(), kickTime, nil, member:getClass())
+                end
+            elseif quitInfo then
+                -- O membro saiu voluntariamente (QUIT/LEFT) confirmado pelo registro oficial da Blizzard
+                if self._logService then
+                    local quitTime = quitInfo and quitInfo.time or nil
+                    self._logService:logGuildLeave(memberName, member:getGuid(), quitTime, nil, member:getClass())
+                end
+            else
+                -- Nem KICK nem QUIT encontrados no momento.
+                -- Se o log de eventos da Blizzard já possui entradas carregadas (e o evento não está nos últimos 100):
+                if self:hasGuildEventLogEntries() and not alreadyKicked then
+                    if self._logService then
+                        self._logService:logGuildLeave(memberName, member:getGuid(), nil, nil, member:getClass())
+                    end
+                else
+                    -- O log de eventos da Blizzard ainda NÃO chegou do servidor!
+                    -- NÃO registra LEFT prematuramente para evitar registrar KICK como LEFT!
+                    -- Dispara a consulta para carregar o registro oficial assim que possível.
+                    if _G.GM and _G.GM.memberController and _G.GM.memberController.requestGuildEventLog then
+                        _G.GM.memberController:requestGuildEventLog()
+                    elseif QueryGuildEventLog then
+                        pcall(QueryGuildEventLog)
+                    end
+                end
+            end
         end
     end
+end
+
+--- Verifica se há registros de eventos da guilda disponíveis na API da Blizzard.
+---@return boolean
+function MemberService:hasGuildEventLogEntries()
+    if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
+        local success, entries = pcall(C_GuildInfo.GetGuildEventLog)
+        if success and type(entries) == "table" and #entries > 0 then
+            return true
+        end
+    end
+
+    local getNum = GetNumGuildEvents or GetNumGuildEventLogEntries
+    if getNum then
+        local success, count = pcall(getNum)
+        if success and type(count) == "number" and count > 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+--- Procura se há registro de expulsão (remove/kick) para o membro no log de eventos da guilda da Blizzard.
+---@param memberName string
+---@return table|nil @{ kicker = string, time = number|nil }
+function MemberService:findKickInGuildEventLog(memberName)
+    if not memberName or memberName == "" then return nil end
+    local lowerName = memberName:lower()
+
+    if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
+        local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
+        if success and type(logEntries) == "table" then
+            for _, entry in ipairs(logEntries) do
+                if entry and (entry.type == "remove" or entry.type == 4 or entry.type == "kick") then
+                    local kicked = entry.player2 or entry.name or ""
+                    local cleanKicked = tostring(kicked):match("^[^-]+") or kicked
+                    cleanKicked = cleanKicked:match("^%s*(.-)%s*$")
+                    if cleanKicked:lower() == lowerName then
+                        local kicker = entry.player1 or entry.sourceName or ""
+                        local cleanKicker = tostring(kicker):match("^[^-]+") or kicker
+                        cleanKicker = cleanKicker:match("^%s*(.-)%s*$")
+                        return { kicker = cleanKicker, time = entry.time }
+                    end
+                end
+            end
+        end
+    end
+
+    local getNum = GetNumGuildEvents or GetNumGuildEventLogEntries
+    local getInfo = GetGuildEventInfo or GetGuildEventLogEntry
+    if getNum and getInfo then
+        local success, count = pcall(getNum)
+        if success and type(count) == "number" and count > 0 then
+            local limit = math.min(count, 100)
+            for i = 1, limit do
+                local s, eventType, p1, p2, _, years, months, days, hours = pcall(getInfo, i)
+                if s and eventType then
+                    local evtLower = tostring(eventType):lower()
+                    if evtLower == "remove" or evtLower == "kick" or evtLower:find("remove") or evtLower:find("kick") then
+                        local kicked = p2 or ""
+                        local cleanKicked = tostring(kicked):match("^[^-]+") or kicked
+                        cleanKicked = cleanKicked:match("^%s*(.-)%s*$")
+                        if cleanKicked:lower() == lowerName then
+                            local kicker = p1 or ""
+                            local cleanKicker = tostring(kicker):match("^[^-]+") or kicker
+                            cleanKicker = cleanKicker:match("^%s*(.-)%s*$")
+                            local eventTimestamp = nil
+                            if days or hours or months or years then
+                                local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                                local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                                if now > secAgo then eventTimestamp = now - secAgo end
+                            end
+                            return { kicker = cleanKicker, time = eventTimestamp }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Procura se há registro de saída voluntária (quit/leave) para o membro no log de eventos da guilda da Blizzard.
+---@param memberName string
+---@return table|nil @{ time = number|nil }
+function MemberService:findQuitInGuildEventLog(memberName)
+    if not memberName or memberName == "" then return nil end
+    local lowerName = memberName:lower()
+
+    if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
+        local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
+        if success and type(logEntries) == "table" then
+            for _, entry in ipairs(logEntries) do
+                if entry and (entry.type == "quit" or entry.type == 5 or entry.type == 3 or entry.type == "leave") then
+                    local quitter = entry.player1 or entry.name or ""
+                    local cleanQuitter = tostring(quitter):match("^[^-]+") or quitter
+                    cleanQuitter = cleanQuitter:match("^%s*(.-)%s*$")
+                    if cleanQuitter:lower() == lowerName then
+                        return { time = entry.time }
+                    end
+                end
+            end
+        end
+    end
+
+    local getNum = GetNumGuildEvents or GetNumGuildEventLogEntries
+    local getInfo = GetGuildEventInfo or GetGuildEventLogEntry
+    if getNum and getInfo then
+        local success, count = pcall(getNum)
+        if success and type(count) == "number" and count > 0 then
+            local limit = math.min(count, 100)
+            for i = 1, limit do
+                local s, eventType, p1, p2, _, years, months, days, hours = pcall(getInfo, i)
+                if s and eventType then
+                    local evtLower = tostring(eventType):lower()
+                    if evtLower == "quit" or evtLower == "leave" or evtLower:find("quit") or evtLower:find("leave") or evtLower:find("saiu") then
+                        local quitter = p1 or ""
+                        local cleanQuitter = tostring(quitter):match("^[^-]+") or quitter
+                        cleanQuitter = cleanQuitter:match("^%s*(.-)%s*$")
+                        if cleanQuitter:lower() == lowerName then
+                            local eventTimestamp = nil
+                            if days or hours or months or years then
+                                local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                                local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                                if now > secAgo then eventTimestamp = now - secAgo end
+                            end
+                            return { time = eventTimestamp }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
 end
 
 --- Retorna um membro pelo nome.
@@ -360,10 +537,10 @@ end
 
 --- Desvincula um membro de sua família de alts quando ele sai da guilda.
 --- Remove o membro da lista de alts de todos os seus parentes,
---- limpa sua própria lista de alts, restaura isMain = true e,
---- caso o membro que saiu fosse o Main da família, elege um dos alts restantes na guilda como novo Main.
+--- sincroniza as listas dos membros restantes, restaura o membro removido como Main independente,
+--- e remove quaisquer referências residuais em todo o banco de membros.
 ---@param memberName string
----@return boolean
+---@return boolean @Retorna true se o membro pertencia a uma lista de alts e foi desvinculado
 function MemberService:unlinkMemberOnGuildLeave(memberName)
     if not memberName or memberName == "" then
         return false
@@ -379,23 +556,66 @@ function MemberService:unlinkMemberOnGuildLeave(memberName)
         end
     end
 
-    if not leavingMember then
-        return false
+    local leavingLower = memberName:lower()
+    local familyMap = {}
+    local familyList = {}
+
+    local function addToFamily(m)
+        if not m then return end
+        local n = (m:getName() or ""):lower()
+        if n ~= "" and not familyMap[n] then
+            familyMap[n] = m
+            table.insert(familyList, m)
+            for _, alt in ipairs(m:getAlts() or {}) do
+                local am = self._repository:findByName(alt)
+                if not am then
+                    for _, ex in ipairs(self._repository:findAll()) do
+                        if (ex:getName() or ""):lower() == alt:lower() then
+                            am = ex
+                            break
+                        end
+                    end
+                end
+                if am and not familyMap[(am:getName() or ""):lower()] then
+                    addToFamily(am)
+                end
+            end
+        end
     end
 
-    local alts = leavingMember:getAlts() or {}
-    if #alts == 0 then
-        return false
+    if leavingMember then
+        addToFamily(leavingMember)
     end
 
-    local family = self:getAltFamily(leavingMember)
-    local leavingLower = (leavingMember:getName() or ""):lower()
+    -- Varre para encontrar membros que possam apontar para o membro que saiu
+    local all = self._repository:findAll()
+    for _, otherMember in ipairs(all) do
+        local oName = otherMember:getName() or ""
+        if oName:lower() ~= leavingLower then
+            for _, aName in ipairs(otherMember:getAlts() or {}) do
+                if (aName or ""):lower() == leavingLower then
+                    addToFamily(otherMember)
+                    break
+                end
+            end
+        end
+    end
+
+    local hadAlts = (#familyList > 1) or (leavingMember and #(leavingMember:getAlts() or {}) > 0)
+
+    -- Se o membro que saiu foi encontrado, isola-o
+    if leavingMember then
+        leavingMember:setAlts({})
+        leavingMember:setMain(true)
+        self._repository:save(leavingMember)
+    end
+
+    -- Coleta os membros restantes da família
     local remainingNames = {}
     local currentMainName = ""
-
-    for _, m in ipairs(family) do
-        local mName = m:getName()
-        if (mName or ""):lower() ~= leavingLower then
+    for _, m in ipairs(familyList) do
+        local mName = m:getName() or ""
+        if mName:lower() ~= leavingLower then
             table.insert(remainingNames, mName)
             if m:isMain() then
                 currentMainName = mName
@@ -403,20 +623,39 @@ function MemberService:unlinkMemberOnGuildLeave(memberName)
         end
     end
 
-    -- Limpa os alts do membro que saiu e torna-o Main independente
-    leavingMember:setAlts({})
-    leavingMember:setMain(true)
-    self._repository:save(leavingMember)
-
-    -- Sincroniza os membros restantes da família
+    -- Sincroniza e atualiza os membros restantes da família de alts
     if #remainingNames > 0 then
-        -- Se o membro que saiu era o Main (ou nenhum restante era Main), elege o primeiro restante como novo Main
         if currentMainName == "" or currentMainName:lower() == leavingLower then
             currentMainName = remainingNames[1]
         end
         self:syncAltFamily(remainingNames, currentMainName)
     end
 
-    return true
+    -- Varredura final preventiva: garante que nenhum membro em todo o banco possua o que saiu na lista de alts
+    local modifiedOther = false
+    for _, otherMember in ipairs(self._repository:findAll()) do
+        local oName = (otherMember:getName() or ""):lower()
+        if oName ~= leavingLower then
+            local modified = false
+            local remainingAlts = {}
+            for _, aName in ipairs(otherMember:getAlts() or {}) do
+                if (aName or ""):lower() == leavingLower then
+                    modified = true
+                else
+                    table.insert(remainingAlts, aName)
+                end
+            end
+            if modified then
+                otherMember:setAlts(remainingAlts)
+                if #remainingAlts == 0 then
+                    otherMember:setMain(true)
+                end
+                self._repository:save(otherMember)
+                modifiedOther = true
+            end
+        end
+    end
+
+    return hadAlts or modifiedOther
 end
 

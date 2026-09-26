@@ -135,11 +135,32 @@ function MemberController:initHooks()
                 self:hookInviteAPIs()
                 if IsInGuild and IsInGuild() then
                     self._guildRosterService:requestRosterUpdate()
-                    if QueryGuildEventLog then
-                        pcall(QueryGuildEventLog)
-                    end
+                    self:requestGuildEventLog(true)
                     if GetNumGuildMembers and GetNumGuildMembers() > 0 then
                         self._guildRosterService:scanRoster()
+                    end
+
+                    -- Varreduras de confirmação com delay após login
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(2.0, function()
+                            if IsInGuild and IsInGuild() then
+                                self:requestGuildEventLog()
+                            end
+                        end)
+                        C_Timer.After(5.0, function()
+                            if IsInGuild and IsInGuild() then
+                                self:requestGuildEventLog()
+                            end
+                        end)
+                    end
+
+                    -- Inicia varredura periódica do log de eventos a cada 60 segundos
+                    if not self._eventLogTicker and C_Timer and C_Timer.NewTicker then
+                        self._eventLogTicker = C_Timer.NewTicker(60, function()
+                            if IsInGuild and IsInGuild() then
+                                self:requestGuildEventLog()
+                            end
+                        end)
                     end
                 end
                 self:registerAllHooks()
@@ -150,11 +171,13 @@ function MemberController:initHooks()
                             self._debounceTimer = nil
                             if IsInGuild and IsInGuild() then
                                 self._guildRosterService:scanRoster()
+                                self:requestGuildEventLog()
                             end
                         end)
                     else
                         if IsInGuild and IsInGuild() then
                             self._guildRosterService:scanRoster()
+                            self:requestGuildEventLog()
                         end
                     end
                 end
@@ -762,7 +785,14 @@ function MemberController:handleSystemChatMessage(message)
         return
     end
 
-    -- 2. Verifica se um membro saiu ou foi expulso da guilda
+    -- 2. Verifica se um membro foi removido/expulso da guilda por outro membro
+    local kickedName, kickerName = self:matchGuildKick(message)
+    if kickedName then
+        self:handleGuildKick(kickedName, kickerName)
+        return
+    end
+
+    -- 3. Verifica se um membro saiu voluntariamente da guilda
     local leftMemberName = self:matchGuildLeave(message)
     if leftMemberName then
         self:handleGuildLeave(leftMemberName)
@@ -849,6 +879,7 @@ function MemberController:matchGuildJoin(message)
     local fallbacks = {
         "^(.+) entrou para a guilda",
         "^(.+) entrou na guilda",
+        "^(.+) entra na guilda",
         "^(.+) ingressou na guilda",
         "^(.+) juntou%-se à guilda",
         "^(.+) has joined the guild",
@@ -902,7 +933,59 @@ function MemberController:matchGuildInvite(message)
     return nil
 end
 
---- Extrai o nome do membro que saiu ou foi expulso da guilda a partir das mensagens do sistema da Blizzard.
+--- Extrai o nome do membro expulso e de quem o expulsou a partir das mensagens do sistema da Blizzard.
+---@param message string
+---@return string|nil, string|nil @kickedName, kickerName
+function MemberController:matchGuildKick(message)
+    if not message or type(message) ~= "string" or message == "" then
+        return nil, nil
+    end
+
+    local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
+    clean = clean:match("^%s*(.-)%s*$")
+
+    -- 1. Variável global oficial da Blizzard ERR_GUILD_REMOVE_SS ("%s has kicked %s from the guild." / "%s removeu %s da guilda.")
+    if _G.ERR_GUILD_REMOVE_SS then
+        local removeTpl = _G.ERR_GUILD_REMOVE_SS
+        local s = removeTpl:gsub("%%1%$s", "___GM_KICKER___"):gsub("%%2%$s", "___GM_TARGET___")
+        if not s:find("___GM_TARGET___") then
+            s = removeTpl:gsub("%%s", "___GM_KICKER___", 1):gsub("%%s", "___GM_TARGET___", 1)
+        end
+        s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+        s = s:gsub("___GM_KICKER___", "(.-)"):gsub("___GM_TARGET___", "(.+)")
+        local kicker, kicked = clean:match("^" .. s .. "$")
+        if not kicker then
+            kicker, kicked = clean:match(s)
+        end
+        if not kicker then
+            local sNoDot = s:gsub("%%%.$", "")
+            kicker, kicked = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+        end
+        if kicked and kicker and kicked ~= "" and kicker ~= "" then
+            return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+        end
+    end
+
+    -- 2. Fallbacks diretos em Português e Inglês
+    local kickPatterns = {
+        { pattern = "^(.-) removeu (.+) da guilda", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-) expulsou (.+) da guilda", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-) has kicked (.+) from the guild", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-) removed (.+) from the guild", kickerIdx = 1, kickedIdx = 2 },
+    }
+    for _, item in ipairs(kickPatterns) do
+        local m1, m2 = clean:match(item.pattern)
+        if m1 and m2 then
+            local kicker = (item.kickerIdx == 1) and m1 or m2
+            local kicked = (item.kickedIdx == 2) and m2 or m1
+            return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+        end
+    end
+
+    return nil, nil
+end
+
+--- Extrai o nome do membro que saiu voluntariamente da guilda a partir das mensagens do sistema da Blizzard.
 ---@param message string
 ---@return string|nil
 function MemberController:matchGuildLeave(message)
@@ -925,29 +1008,11 @@ function MemberController:matchGuildLeave(message)
         end
     end
 
-    -- 2. Variável global ERR_GUILD_REMOVE_SS ("%s has kicked %s from the guild." / "%s removeu %s da guilda.")
-    if _G.ERR_GUILD_REMOVE_SS then
-        local removeTpl = _G.ERR_GUILD_REMOVE_SS
-        local s = removeTpl:gsub("%%1%$s", "___GM_KICKER___"):gsub("%%2%$s", "___GM_TARGET___")
-        if not s:find("___GM_TARGET___") then
-            s = removeTpl:gsub("%%s", "___GM_KICKER___", 1):gsub("%%s", "___GM_TARGET___", 1)
-        end
-        s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
-        s = s:gsub("___GM_KICKER___", ".-"):gsub("___GM_TARGET___", "(.+)")
-        local kicked = clean:match("^" .. s .. "$") or clean:match(s)
-        if kicked and kicked ~= "" then
-            return self:sanitizeCharacterName(kicked)
-        end
-    end
-
-    -- 3. Fallbacks diretos em Português e Inglês
+    -- 2. Fallbacks diretos em Português e Inglês (apenas saída voluntária)
     local leaveFallbacks = {
         "^(.+) saiu da guilda",
         "^(.+) deixou a guilda",
         "^(.+) has left the guild",
-        "^.- removeu (.+) da guilda",
-        "^.- expulsou (.+) da guilda",
-        "^.- has kicked (.+) from the guild",
     }
     for _, fb in ipairs(leaveFallbacks) do
         local name = clean:match(fb)
@@ -1062,24 +1127,61 @@ function MemberController:handleGuildJoin(newMemberName)
     end
 end
 
---- Manipula a saída de um membro da guilda.
+--- Manipula a saída de um membro da guilda (LEFT).
 --- Atualiza a entidade no banco de dados e desvincula imediatamente da lista de alts.
 ---@param memberName string
-function MemberController:handleGuildLeave(memberName)
+---@param eventTimestamp number|nil @Timestamp Unix do evento (opcional)
+function MemberController:handleGuildLeave(memberName, eventTimestamp)
     local cleanName = self:sanitizeCharacterName(memberName)
     if not cleanName or cleanName == "" then
         return
     end
 
-    local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+    -- Se o membro foi removido (KICK), é um erro de lógica registrar que ele saiu (LEFT)
+    if self._logService and self._logService.hasKickLog and self._logService:hasKickLog(cleanName) then
+        return
+    end
+
     local member = self._memberService:getMember(cleanName)
 
+    -- Se o membro já está fora da guilda e já possui log de LEFT registrado para este evento, evita reprocessamento
+    if member and not member:isInGuild() and self._logService and self._logService.hasLeaveLog and self._logService:hasLeaveLog(cleanName, eventTimestamp) then
+        return
+    end
+
+    local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+    local dateStr = today
+    if eventTimestamp and eventTimestamp > 0 then
+        if date then
+            dateStr = date("%Y-%m-%d", eventTimestamp)
+        elseif os and os.date then
+            dateStr = os.date("%Y-%m-%d", eventTimestamp)
+        end
+    end
+
     if member then
+        local wasInGuild = member:isInGuild()
         member:setInGuild(false)
-        member:setLastRank(member:getRankName())
-        member:setDateLeft(today)
-        member:setTimesLeft((member:getTimesLeft() or 0) + 1)
+        if member:getRankName() and member:getRankName() ~= "" then
+            member:setLastRank(member:getRankName())
+        end
+        if member:getDateLeft() == "" or (eventTimestamp and eventTimestamp > 0) then
+            member:setDateLeft(dateStr)
+        end
+        if wasInGuild or member:getTimesLeft() == 0 then
+            member:setTimesLeft((member:getTimesLeft() or 0) + 1)
+        end
         self._memberService:saveMember(member)
+    else
+        local newMember = Member:new({
+            name = cleanName,
+            isInGuild = false,
+            dateLeft = dateStr,
+            timesLeft = 1,
+            isMain = true,
+        })
+        self._memberService:saveMember(newMember)
+        member = newMember
     end
 
     -- Desvincula imediatamente da lista de alts
@@ -1088,6 +1190,122 @@ function MemberController:handleGuildLeave(memberName)
         print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda e foi desvinculado da lista de alts.", cleanName))
     else
         print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda.", cleanName))
+    end
+
+    -- Registra o log de saída da guilda (LEFT)
+    if self._logService then
+        local guid = member and member:getGuid() or ""
+        local memberClass = member and member:getClass() or ""
+        self._logService:logGuildLeave(cleanName, guid, eventTimestamp, dateStr, memberClass)
+    end
+
+    -- Se a janela estiver aberta exibindo o membro que saiu ou seus alts, atualiza o visual
+    if self._memberView and self._memberView._frame and self._memberView._frame:IsShown() and self._memberView._currentMember then
+        local currentName = self._memberView._currentMember:getName()
+        local refreshed = self._memberService:getMember(currentName)
+        if refreshed then
+            self._memberView._currentMember = refreshed
+        end
+        if self._memberView.updateAltsVisual then
+            self._memberView:updateAltsVisual()
+        end
+        if self._memberView.updateMainTagVisual then
+            self._memberView:updateMainTagVisual(self._memberView._currentMember:isMain())
+        end
+        if self._memberView._altManagerFrame and self._memberView._altManagerFrame:IsShown() and self._memberView.refreshAltManager then
+            self._memberView:refreshAltManager()
+        end
+    end
+
+    -- Solicita atualização do roster
+    if C_Timer and C_Timer.After then
+        C_Timer.After(1.0, function()
+            if IsInGuild and IsInGuild() then
+                self._guildRosterService:requestRosterUpdate()
+            end
+        end)
+    else
+        self._guildRosterService:requestRosterUpdate()
+    end
+end
+
+--- Manipula a expulsão/remoção de um membro da guilda por outro membro.
+--- Atualiza a entidade no banco de dados, desvincula imediatamente da lista de alts e registra o log de KICK.
+---@param kickedName string @Nome do personagem expulso
+---@param kickerName string|nil @Nome de quem o expulsou
+---@param eventTimestamp number|nil @Timestamp Unix do evento (opcional)
+function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp)
+    local cleanKicked = self:sanitizeCharacterName(kickedName)
+    local cleanKicker = self:sanitizeCharacterName(kickerName)
+    if not cleanKicked or cleanKicked == "" then
+        return
+    end
+
+    local member = self._memberService:getMember(cleanKicked)
+
+    -- Se o membro já está fora da guilda e já possui log de KICK registrado para este evento, evita reprocessamento
+    if member and not member:isInGuild() and self._logService and self._logService.hasKickLog and self._logService:hasKickLog(cleanKicked, eventTimestamp) then
+        return
+    end
+
+    local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+    local dateStr = today
+    if eventTimestamp and eventTimestamp > 0 then
+        if date then
+            dateStr = date("%Y-%m-%d", eventTimestamp)
+        elseif os and os.date then
+            dateStr = os.date("%Y-%m-%d", eventTimestamp)
+        end
+    end
+
+    if member then
+        local wasInGuild = member:isInGuild()
+        member:setInGuild(false)
+        if member:getRankName() and member:getRankName() ~= "" then
+            member:setLastRank(member:getRankName())
+        end
+        if member:getDateLeft() == "" or (eventTimestamp and eventTimestamp > 0) then
+            member:setDateLeft(dateStr)
+        end
+        if wasInGuild then
+            member:setTimesLeft((member:getTimesLeft() or 0) + 1)
+        end
+        self._memberService:saveMember(member)
+    else
+        local newMember = Member:new({
+            name = cleanKicked,
+            isInGuild = false,
+            dateLeft = dateStr,
+            timesLeft = 1,
+            isMain = true,
+        })
+        self._memberService:saveMember(newMember)
+        member = newMember
+    end
+
+    -- Desvincula imediatamente da lista de alts
+    local unlinked = self._memberService:unlinkMemberOnGuildLeave(cleanKicked)
+    if cleanKicker ~= "" then
+        if unlinked then
+            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda por %s e desvinculado dos alts.", cleanKicked, cleanKicker))
+        else
+            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda por %s.", cleanKicked, cleanKicker))
+        end
+    else
+        if unlinked then
+            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda e desvinculado dos alts.", cleanKicked))
+        else
+            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda.", cleanKicked))
+        end
+    end
+
+    -- Registra o log de expulsão (KICK)
+    if self._logService then
+        local guid = member and member:getGuid() or ""
+        local kickedClass = member and member:getClass() or ""
+        local kickerMember = cleanKicker ~= "" and self._memberService:getMember(cleanKicker)
+        local kickerClass = kickerMember and kickerMember:getClass() or ""
+        self._logService:logGuildKick(cleanKicked, cleanKicker, guid, eventTimestamp, dateStr, kickedClass, kickerClass)
     end
 
     -- Se a janela estiver aberta exibindo o membro que saiu ou seus alts, atualiza o visual
@@ -1145,17 +1363,86 @@ function MemberController:handleAddonChatMessage(prefix, msg, channel, sender)
     end
 end
 
---- Verifica o registro de eventos de guilda da Blizzard para associar recrutadores caso ainda ausentes.
+--- Verifica se há registros de eventos da guilda disponíveis na API da Blizzard.
+---@return boolean
+function MemberController:hasGuildEventLogEntries()
+    if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
+        local success, entries = pcall(C_GuildInfo.GetGuildEventLog)
+        if success and type(entries) == "table" and #entries > 0 then
+            return true
+        end
+    end
+
+    local getNum = GetNumGuildEvents or GetNumGuildEventLogEntries
+    if getNum then
+        local success, count = pcall(getNum)
+        if success and type(count) == "number" and count > 0 then
+            return true
+        end
+    end
+
+    return false
+end
+
+--- Solicita à Blizzard a atualização do log de eventos da guilda com limitação de taxa (throttle).
+---@param force boolean|nil @Se true, ignora o intervalo mínimo de 10 segundos
+function MemberController:requestGuildEventLog(force)
+    if not IsInGuild or not IsInGuild() then
+        return
+    end
+
+    local now = (GetTime and GetTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    if not force and self._lastEventLogQuery and (now - self._lastEventLogQuery < 10) then
+        if self:hasGuildEventLogEntries() then
+            self:checkGuildEventLog()
+        end
+        return
+    end
+
+    self._lastEventLogQuery = now
+    if QueryGuildEventLog then
+        pcall(QueryGuildEventLog)
+    end
+
+    if self:hasGuildEventLogEntries() then
+        self:checkGuildEventLog()
+    end
+end
+
+--- Verifica o registro de eventos de guilda da Blizzard para associar recrutadores,
+--- registrar expulsões (KICK) e registrar saídas voluntárias do passado (LEFT).
 function MemberController:checkGuildEventLog()
+    self._guildEventLogLoaded = true
+
     if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
         local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
         if success and type(logEntries) == "table" then
             for _, entry in ipairs(logEntries) do
-                if entry and (entry.type == "invite" or entry.type == 1) then
-                    local recruit = entry.player2 or entry.name
-                    local recruiter = entry.player1 or entry.sourceName
-                    if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
-                        self:applyRecruiterIfEmpty(recruit, recruiter, entry.time)
+                if entry then
+                    if entry.type == "invite" or entry.type == 1 then
+                        -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
+                        local recruit = entry.player2 or entry.name
+                        local recruiter = entry.player1 or entry.sourceName
+                        if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
+                            self:applyRecruiterIfEmpty(recruit, recruiter, entry.time)
+                        end
+                    elseif entry.type == "join" or entry.type == "joined" then
+                        -- Membro de fato entrou na guilda!
+                        local joinedName = entry.player1 or entry.name or entry.player2 or ""
+                        if joinedName and joinedName ~= "" then
+                            self:handleOfflineGuildJoin(joinedName, entry.time)
+                        end
+                    elseif entry.type == "remove" or entry.type == 4 or entry.type == "kick" then
+                        local kicker = entry.player1 or entry.sourceName or ""
+                        local kicked = entry.player2 or entry.name or ""
+                        if kicked and kicked ~= "" then
+                            self:handleGuildKick(kicked, kicker, entry.time)
+                        end
+                    elseif entry.type == "quit" or entry.type == 5 or entry.type == 3 or entry.type == "leave" then
+                        local quitter = entry.player1 or entry.name or ""
+                        if quitter and quitter ~= "" then
+                            self:handleGuildLeave(quitter, entry.time)
+                        end
                     end
                 end
             end
@@ -1168,22 +1455,44 @@ function MemberController:checkGuildEventLog()
     if getNum and getInfo then
         local success, count = pcall(getNum)
         if success and type(count) == "number" and count > 0 then
-            local limit = math.min(count, 30)
+            local limit = math.min(count, 100)
             for i = 1, limit do
                 local s, eventType, p1, p2, _, years, months, days, hours = pcall(getInfo, i)
-                if s and eventType and (eventType == "invite" or tostring(eventType):lower():find("invite")) then
-                    local recruiter = p1
-                    local recruit = p2
-                    if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
-                        local eventTimestamp = nil
-                        if days or hours or months or years then
-                            local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-                            local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
-                            if now > secAgo then
-                                eventTimestamp = now - secAgo
-                            end
+                if s and eventType then
+                    local evtLower = tostring(eventType):lower()
+                    local eventTimestamp = nil
+                    if days or hours or months or years then
+                        local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                        local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                        if now > secAgo then
+                            eventTimestamp = now - secAgo
                         end
-                        self:applyRecruiterIfEmpty(recruit, recruiter, eventTimestamp)
+                    end
+
+                    if evtLower == "invite" or evtLower:find("invite") or evtLower:find("convida") then
+                        -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
+                        local recruiter = p1
+                        local recruit = p2
+                        if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
+                            self:applyRecruiterIfEmpty(recruit, recruiter, eventTimestamp)
+                        end
+                    elseif evtLower == "join" or evtLower == "joined" or evtLower:find("join") or evtLower:find("entra") then
+                        -- Membro de fato entrou na guilda!
+                        local joinedName = p1 or p2 or ""
+                        if joinedName and joinedName ~= "" then
+                            self:handleOfflineGuildJoin(joinedName, eventTimestamp)
+                        end
+                    elseif evtLower == "remove" or evtLower == "kick" or evtLower:find("remove") or evtLower:find("kick") then
+                        local kicker = p1
+                        local kicked = p2
+                        if kicked and kicked ~= "" then
+                            self:handleGuildKick(kicked, kicker, eventTimestamp)
+                        end
+                    elseif evtLower == "quit" or evtLower == "leave" or evtLower:find("quit") or evtLower:find("leave") or evtLower:find("saiu") then
+                        local quitter = p1
+                        if quitter and quitter ~= "" then
+                            self:handleGuildLeave(quitter, eventTimestamp)
+                        end
                     end
                 end
             end
@@ -1191,7 +1500,8 @@ function MemberController:checkGuildEventLog()
     end
 end
 
---- Atribui o recrutador ao membro caso o campo ainda esteja vazio e registra no serviço de logs.
+--- Atribui o recrutador ao membro caso o membro já exista na guilda, ou registra como recrutador pendente.
+--- Convites (invites) NÃO são registros de entrada e NUNCA devem criar logs de JOINED nem ser registrados no log.
 ---@param recruitName string
 ---@param recruiterName string
 ---@param eventTimestamp number|nil
@@ -1202,22 +1512,94 @@ function MemberController:applyRecruiterIfEmpty(recruitName, recruiterName, even
         return
     end
 
-    -- Registra como recrutador pendente no serviço de membros caso o membro ainda vá ser processado
+    -- 1. Registra como recrutador pendente (caso a pessoa venha a aceitar o convite e ingressar)
     if self._memberService and self._memberService.setPendingRecruiter then
         self._memberService:setPendingRecruiter(cleanRecruit, cleanRecruiter)
     end
-
-    local member = self._memberService:getMember(cleanRecruit)
-    if member and member:getRecruiter() == "" then
-        member:setRecruiter(cleanRecruiter)
-        self._memberService:saveMember(member)
-        print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r atualizado pelo log: |cff00bfff%s|r", cleanRecruit, cleanRecruiter))
+    if self._pendingInvites then
+        self._pendingInvites[cleanRecruit:lower()] = {
+            target = cleanRecruit,
+            recruiter = cleanRecruiter,
+            time = eventTimestamp or (GetTime and GetTime()) or 0,
+        }
     end
 
-    -- Registra ou atualiza o log de JOINED com o recrutador e a mensagem padrão
+    -- 2. Se o membro JÁ está na guilda, atualiza o recrutador na entidade
+    local member = self._memberService:getMember(cleanRecruit)
+    if member and member:isInGuild() then
+        if member:getRecruiter() == "" or member:getRecruiter() == "Desconhecido" then
+            member:setRecruiter(cleanRecruiter)
+            self._memberService:saveMember(member)
+            print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r atualizado pelo log: |cff00bfff%s|r", cleanRecruit, cleanRecruiter))
+        end
+
+        -- Se o membro já possui um log de JOINED, apenas atualiza o nome do recrutador no log existente
+        if self._logService and self._logService._repository and self._logService._repository.findJoinedLog then
+            local existingLog = self._logService._repository:findJoinedLog(cleanRecruit, member:getGuid())
+            if existingLog then
+                local curRecruiter = existingLog:getRecruiter()
+                if curRecruiter == "" or curRecruiter == "Desconhecido" then
+                    existingLog:setRecruiter(cleanRecruiter)
+                    existingLog:setMessage(self._logService:formatJoinedMessage(cleanRecruit, cleanRecruiter))
+                    local recClass = ""
+                    local r = self._memberService:getMember(cleanRecruiter)
+                    if r then recClass = r:getClass() or "" end
+                    if recClass ~= "" then
+                        existingLog:setRecruiterClass(recClass)
+                    end
+                    self._logService._repository:save(existingLog)
+                end
+            end
+        end
+    end
+
+    -- Convites NÃO são registrados como JOINED e NÃO são salvos no log!
+end
+
+--- Trata a confirmação de que um membro de fato ENTROU na guilda (evento JOIN da Blizzard).
+---@param joinedName string
+---@param eventTimestamp number|nil
+function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
+    local cleanName = self:sanitizeCharacterName(joinedName)
+    if not cleanName or cleanName == "" then
+        return
+    end
+
+    local member = self._memberService:getMember(cleanName)
+
+    -- Verifica se já possui log de JOINED para evitar duplicatas
+    if self._logService and self._logService._repository and self._logService._repository.findJoinedLog then
+        local guid = member and member:getGuid() or ""
+        local existingLog = self._logService._repository:findJoinedLog(cleanName, guid)
+        if existingLog then
+            return
+        end
+    end
+
+    -- Busca o recrutador correspondente (caso tenha havido um convite prévio registrado)
+    local recruiter = ""
+    local lowerName = cleanName:lower()
+    if self._pendingInvites and self._pendingInvites[lowerName] then
+        recruiter = self._pendingInvites[lowerName].recruiter or ""
+    elseif self._memberService and self._memberService.getPendingRecruiter then
+        recruiter = self._memberService:getPendingRecruiter(cleanName) or ""
+    end
+    if recruiter == "" and member and member:getRecruiter() ~= "" then
+        recruiter = member:getRecruiter()
+    end
+
+    -- Registra o log de JOINED somente agora que a entrada de fato ocorreu
     if self._logService then
-        local memberGuid = member and member:getGuid() or ""
-        self._logService:logRecruitment(cleanRecruit, cleanRecruiter, memberGuid, eventTimestamp)
+        local guid = member and member:getGuid() or ""
+        local dateStr = nil
+        if eventTimestamp and eventTimestamp > 0 then
+            if date then
+                dateStr = date("%Y-%m-%d %H:%M:%S", eventTimestamp)
+            elseif os and os.date then
+                dateStr = os.date("%Y-%m-%d %H:%M:%S", eventTimestamp)
+            end
+        end
+        self._logService:logRecruitment(cleanName, recruiter, guid, eventTimestamp, dateStr)
     end
 end
 

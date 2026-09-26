@@ -39,7 +39,7 @@ local enumMeta = {
 
 ---@class LogEventsEnum
 ---@field JOINED "JOINED" @Membro entrou na guilda
----@field LEFT "LEFT" @Membro saiu voluntariamente da guilda
+---@field LEFT "LEFT" @Membro saiu da guilda
 ---@field KICK "KICK" @Membro foi expulso da guilda
 ---@field LEVELED "LEVELED" @Membro subiu de nível
 ---@field OFFICERNOTE "OFFICERNOTE" @Nota de oficial foi alterada
@@ -57,6 +57,8 @@ LogEvent = setmetatable({}, enumMeta)
 ---@field _event LogEventType @Tipo de evento associado (ENUM LogEvent)
 ---@field _recruiter string @Nome do recrutador (caso aplicável)
 ---@field _recruiterClass string @Token da classe do recrutador (caso aplicável)
+---@field _kicker string @Nome de quem expulsou o membro (caso KICK)
+---@field _kickerClass string @Token da classe de quem expulsou o membro (caso KICK)
 ---@field _timestamp number @Timestamp Unix de quando o evento ocorreu
 ---@field _date string @Data legível formatada (AAAA-MM-DD HH:MM:SS)
 Log = {}
@@ -89,8 +91,13 @@ function Log:new(data)
     instance._message = data.message or data.msg or ""
     instance._recruiter = data.recruiter or ""
     instance._recruiterClass = data.recruiterClass or ""
+    instance._kicker = data.kicker or ""
+    instance._kickerClass = data.kickerClass or ""
 
     local event = data.event
+    if event == "LEAVED" then
+        event = LogEvent.LEFT
+    end
     if Log.isValidEvent(event) then
         instance._event = event
     else
@@ -260,6 +267,30 @@ function Log:setRecruiterClass(class)
     self._recruiterClass = tostring(class or "")
 end
 
+--- Obtém o nome de quem expulsou/removeu o membro (KICK).
+---@return string
+function Log:getKicker()
+    return self._kicker or ""
+end
+
+--- Define quem expulsou/removeu o membro (KICK).
+---@param kicker string
+function Log:setKicker(kicker)
+    self._kicker = tostring(kicker or "")
+end
+
+--- Obtém a classe de quem expulsou/removeu o membro (KICK).
+---@return string
+function Log:getKickerClass()
+    return self._kickerClass or ""
+end
+
+--- Define a classe de quem expulsou/removeu o membro (KICK).
+---@param class string
+function Log:setKickerClass(class)
+    self._kickerClass = tostring(class or "")
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
@@ -272,6 +303,8 @@ function Log:serialize()
         event = self._event,
         recruiter = self._recruiter,
         recruiterClass = self._recruiterClass,
+        kicker = self._kicker,
+        kickerClass = self._kickerClass,
         timestamp = self._timestamp,
         date = self._date,
     }

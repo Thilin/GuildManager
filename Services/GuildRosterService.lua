@@ -68,6 +68,9 @@ function GuildRosterService:scanRoster()
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
         end
+        if _G.GM and _G.GM.logService and _G.GM.logService.cleanInvalidInviteJoinedLogs then
+            _G.GM.logService:cleanInvalidInviteJoinedLogs(self._memberService)
+        end
     end
 
     return processedCount
