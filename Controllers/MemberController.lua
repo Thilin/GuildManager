@@ -30,6 +30,7 @@ function MemberController:new(memberService, guildRosterService, memberView, log
     instance._lastPlayerInvite = nil
     instance._guildInviteHooked = false
     instance._cGuildInviteHooked = false
+    instance._rosterTicker = nil
 
     return instance
 end
@@ -159,6 +160,23 @@ function MemberController:initHooks()
                         self._eventLogTicker = C_Timer.NewTicker(60, function()
                             if IsInGuild and IsInGuild() then
                                 self:requestGuildEventLog()
+                            end
+                        end)
+                    end
+
+                    -- Inicia varredura periódica do Roster da guilda para capturar eventos de LEVELED a cada 30 segundos
+                    if not self._rosterTicker and C_Timer and C_Timer.NewTicker then
+                        self._rosterTicker = C_Timer.NewTicker(30, function()
+                            self:onPeriodicRosterScan()
+                        end)
+                    end
+                    if not (C_Timer and C_Timer.NewTicker) then
+                        local elapsedAccum = 0
+                        frame:SetScript("OnUpdate", function(_, elapsed)
+                            elapsedAccum = elapsedAccum + (elapsed or 0)
+                            if elapsedAccum >= 30 then
+                                elapsedAccum = 0
+                                self:onPeriodicRosterScan()
                             end
                         end)
                     end
@@ -1682,6 +1700,16 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
             end
         end
         self._logService:logRecruitment(cleanName, recruiter, guid, eventTimestamp, dateStr)
+    end
+end
+
+--- Executa a varredura periódica do Roster da guilda para detecção de alterações (como LEVELED).
+function MemberController:onPeriodicRosterScan()
+    if IsInGuild and IsInGuild() then
+        self._guildRosterService:requestRosterUpdate()
+        if GetNumGuildMembers and GetNumGuildMembers() > 0 then
+            self._guildRosterService:scanRoster()
+        end
     end
 end
 

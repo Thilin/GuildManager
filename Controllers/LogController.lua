@@ -40,6 +40,10 @@ function LogController:refreshLogs()
         return
     end
 
+    if _G.GM and _G.GM.guildRosterService and IsInGuild and IsInGuild() then
+        _G.GM.guildRosterService:scanRoster()
+    end
+
     if self._logService.cleanInvalidInviteJoinedLogs then
         self._logService:cleanInvalidInviteJoinedLogs()
     end

@@ -342,6 +342,121 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
     return newLog, true
 end
 
+--- Formata o nome de um membro com o código hexadecimal da cor da sua classe.
+---@param name string
+---@param classToken string|nil
+---@return string
+function LogService:formatColoredMemberName(name, classToken)
+    if not name or name == "" then return "" end
+    local clean = name:match("^[^-]+") or name
+    clean = clean:match("^%s*(.-)%s*$") or clean
+
+    local token = classToken or ""
+    if token == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(clean)
+        if m then token = m:getClass() or "" end
+    end
+
+    if token ~= "" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[token] then
+        local color = RAID_CLASS_COLORS[token]
+        if color.colorStr then
+            return "|c" .. color.colorStr .. clean .. "|r"
+        end
+        local r = math.floor((color.r or 1) * 255)
+        local g = math.floor((color.g or 1) * 255)
+        local b = math.floor((color.b or 1) * 255)
+        return string.format("|cff%02x%02x%02x%s|r", r, g, b, clean)
+    end
+
+    return clean
+end
+
+--- Formata a mensagem padrão obrigatória para o evento LEVELED.
+--- Padrão: "Membro X SUBIU para o nível Y" com X colorido pela cor da sua classe.
+---@param memberName string|Member @Nome do membro ou objeto Member
+---@param newLevel number @Nível alcançado
+---@param memberClass string|nil @Token da classe
+---@return string
+function LogService:formatLeveledMessage(memberName, newLevel, memberClass)
+    local name = memberName
+    local classToken = memberClass or ""
+    if type(memberName) == "table" and memberName.getName then
+        name = memberName:getName()
+        classToken = memberName:getClass() or classToken
+    end
+
+    local coloredName = self:formatColoredMemberName(name, classToken)
+    return string.format("Membro %s SUBIU para o nível %d", coloredName, tonumber(newLevel) or 1)
+end
+
+--- Registra o evento de evolução de nível (LEVELED) de um membro da guilda.
+--- Salva a mensagem: "Membro X SUBIU para o nível Y" com o nome na cor da classe.
+--- Evita duplicidade se já houver registro deste nível para o membro.
+---@param member Member|string @Instância do membro ou nome
+---@param newLevel number @Novo nível alcançado
+---@param oldLevel number|nil @Nível anterior (opcional)
+---@param timestamp number|nil @Timestamp Unix do evento (opcional)
+---@param dateStr string|nil @Data legível formatada (opcional)
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou já existia (false)
+function LogService:logMemberLeveled(member, newLevel, oldLevel, timestamp, dateStr)
+    if not member or not newLevel then
+        return nil, false
+    end
+
+    local memberName = ""
+    local memberClass = ""
+    local guid = ""
+    if type(member) == "table" and member.getName then
+        memberName = member:getName()
+        memberClass = member:getClass() or ""
+        guid = member:getGuid() or ""
+    else
+        memberName = tostring(member)
+    end
+
+    if memberName == "" then
+        return nil, false
+    end
+
+    local targetLevel = tonumber(newLevel) or 1
+
+    -- Evita duplicidade se o log deste nível já foi registrado
+    if self._repository and self._repository.findLeveledLog then
+        local existing = self._repository:findLeveledLog(memberName, targetLevel)
+        if existing then
+            return existing, false
+        end
+    end
+
+    if memberClass == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if guid == "" then guid = m:getGuid() or "" end
+        end
+    end
+    if memberClass == "" and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    local message = self:formatLeveledMessage(memberName, targetLevel, memberClass)
+
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid,
+        level = targetLevel,
+        message = message,
+        event = LogEvent.LEVELED,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
 --- Remove do banco de dados registros de JOINED de personagens que nunca entraram na guilda (foram apenas convidados).
 ---@param memberService table|nil
 ---@return number @Quantidade de registros removidos

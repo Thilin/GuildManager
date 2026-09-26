@@ -224,6 +224,43 @@ function LogRepository:hasKickLog(name, eventTimestamp)
     return false
 end
 
+--- Busca um log existente de evolução de nível (LEVELED) para o personagem e nível especificados.
+---@param name string @Nome do personagem
+---@param level number @Nível alcançado
+---@return Log|nil
+function LogRepository:findLeveledLog(name, level)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil
+    end
+
+    local lowerName = name:lower()
+    local targetLevel = tonumber(level)
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and rawData.event == "LEVELED" then
+            if rawData.name and rawData.name:lower() == lowerName then
+                if targetLevel then
+                    local logLvl = tonumber(rawData.level)
+                    if logLvl == targetLevel then
+                        rawData.id = rawData.id or i
+                        return Log:new(rawData)
+                    end
+                    if rawData.message and rawData.message:find("nível " .. targetLevel, 1, true) then
+                        rawData.id = rawData.id or i
+                        return Log:new(rawData)
+                    end
+                else
+                    rawData.id = rawData.id or i
+                    return Log:new(rawData)
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
 --- Retorna a quantidade total de logs registrados.
 ---@return number
 function LogRepository:count()
@@ -245,7 +282,15 @@ end
 --- Limpa todos os logs do repositório.
 function LogRepository:wipe()
     if self._db and type(self._db.logs) == "table" then
-        table.wipe(self._db.logs)
+        if table.wipe then
+            table.wipe(self._db.logs)
+        elseif wipe then
+            wipe(self._db.logs)
+        else
+            for k in pairs(self._db.logs) do
+                self._db.logs[k] = nil
+            end
+        end
     end
 end
 

@@ -260,6 +260,7 @@ function LogView:createUI()
     local filterTabs = {
         { id = "ALL", label = "Todos" },
         { id = "JOINED", label = "Recrutamentos" },
+        { id = "LEVELED", label = "Níveis" },
         { id = "LEFT_KICK", label = "Saídas / Kicks" },
         { id = "NOTES", label = "Notas" },
         { id = "OTHER", label = "Outros" },
@@ -544,12 +545,14 @@ function LogView:applyFilters()
 
         if eventFilter == "JOINED" then
             matchEvent = (evt == LogEvent.JOINED or evt == "JOINED")
+        elseif eventFilter == "LEVELED" then
+            matchEvent = (evt == LogEvent.LEVELED or evt == "LEVELED")
         elseif eventFilter == "LEFT_KICK" then
             matchEvent = (evt == LogEvent.LEFT or evt == "LEFT" or evt == LogEvent.KICK or evt == "KICK")
         elseif eventFilter == "NOTES" then
             matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE or evt == "OFFICERNOTE" or evt == "PUBLICNOTE")
         elseif eventFilter == "OTHER" then
-            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
+            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
         end
 
         if matchEvent then
@@ -729,6 +732,23 @@ function LogView:formatColoredMessage(log)
             kickerColored = "|cff888888Desconhecido|r"
         end
         return string.format("%s foi REMOVIDO da guilda por %s", kickedColored, kickerColored)
+    end
+
+    if evt == LogEvent.LEVELED or evt == "LEVELED" then
+        local rawMsg = log:getMessage() or ""
+        if rawMsg ~= "" then
+            if rawMsg:find("|c") then
+                return rawMsg
+            end
+            local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+            if rawMsg:find(name, 1, true) then
+                return (rawMsg:gsub(name, coloredName))
+            end
+            return rawMsg
+        end
+        local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local lvl = (log.getLevel and log:getLevel()) or "?"
+        return string.format("Membro %s SUBIU para o nível %s", coloredName, tostring(lvl))
     end
 
     local rawMsg = log:getMessage() or ""

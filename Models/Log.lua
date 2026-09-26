@@ -93,6 +93,7 @@ function Log:new(data)
     instance._recruiterClass = data.recruiterClass or ""
     instance._kicker = data.kicker or ""
     instance._kickerClass = data.kickerClass or ""
+    instance._level = tonumber(data.level or data.newLevel)
 
     local event = data.event
     if event == "LEAVED" then
@@ -291,6 +292,18 @@ function Log:setKickerClass(class)
     self._kickerClass = tostring(class or "")
 end
 
+--- Obtém o nível associado ao log (evento LEVELED).
+---@return number|nil
+function Log:getLevel()
+    return self._level
+end
+
+--- Define o nível associado ao log (evento LEVELED).
+---@param level number
+function Log:setLevel(level)
+    self._level = tonumber(level)
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
@@ -299,6 +312,7 @@ function Log:serialize()
         name = self._name,
         class = self._class,
         guid = self._guid,
+        level = self._level,
         message = self._message,
         event = self._event,
         recruiter = self._recruiter,

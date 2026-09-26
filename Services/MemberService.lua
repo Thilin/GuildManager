@@ -166,6 +166,25 @@ function MemberService:processRosterMember(rosterData)
     local pendingRecruiter = self:getPendingRecruiter(rosterData.name)
 
     if member then
+        local oldLevel = member:getLevel()
+        local newLevel = tonumber(rosterData.level)
+
+        -- Detecta se o membro subiu de nível e registra o evento LEVELED
+        if oldLevel and oldLevel > 0 and newLevel and newLevel > oldLevel then
+            if rosterData.class and rosterData.class ~= "" and member:getClass() == "" then
+                member:setClass(rosterData.class)
+            end
+            if self._logService then
+                if (newLevel - oldLevel) <= 5 then
+                    for lvl = oldLevel + 1, newLevel do
+                        self._logService:logMemberLeveled(member, lvl, oldLevel)
+                    end
+                else
+                    self._logService:logMemberLeveled(member, newLevel, oldLevel)
+                end
+            end
+        end
+
         -- Membro já existente: atualiza dados dinâmicos da API
         member:updateFromRoster(rosterData)
 
