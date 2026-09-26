@@ -159,6 +159,15 @@ function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberCl
         return nil, false
     end
 
+    -- Se o membro acabou de entrar na guilda (período de carência) e não há timestamp oficial de saída,
+    -- rejeita a criação do log de LEFT para evitar falsos positivos decorrentes do delay da Blizzard
+    local mService = self._memberService or (_G.GM and _G.GM.memberService)
+    if mService and mService.isRecentlyJoined and mService:isRecentlyJoined(memberName) then
+        if not timestamp or timestamp <= 0 then
+            return nil, false
+        end
+    end
+
     -- Evita duplicidade se já houver log registrado para este evento
     if self._repository and self._repository.hasLeaveLog and timestamp and timestamp > 0 then
         if self._repository:hasLeaveLog(memberName, timestamp) then
@@ -350,6 +359,30 @@ function LogService:cleanInvalidInviteJoinedLogs(memberService)
     local count = self._repository:removeInvalidJoinedLogs(mService)
     if count > 0 then
         print(string.format("|cff00ff00[GuildManager]|r %d log(s) de convites não aceitos foram removidos do registro.", count))
+    end
+    return count
+end
+
+--- Define a referência ao serviço de membros.
+---@param memberService table
+function LogService:setMemberService(memberService)
+    self._memberService = memberService
+end
+
+--- Remove do banco de dados registros de LEFT que foram falsamente registrados logo após o JOINED
+--- devido a atraso de propagação do roster pela Blizzard, para membros que permanecem na guilda.
+---@param memberService table|nil
+---@param activeRosterNames table|nil
+---@return number @Quantidade de registros removidos
+function LogService:cleanInvalidLeftLogs(memberService, activeRosterNames)
+    local mService = memberService or self._memberService or (_G.GM and _G.GM.memberService)
+    if not mService or not self._repository or not self._repository.removeInvalidLeftLogs then
+        return 0
+    end
+
+    local count = self._repository:removeInvalidLeftLogs(mService, activeRosterNames)
+    if count > 0 then
+        print(string.format("|cff00ff00[GuildManager]|r %d log(s) de saída indevidos (falso positivo pós-entrada) foram removidos do registro.", count))
     end
     return count
 end

@@ -50,6 +50,7 @@ function GuildRosterService:scanRoster()
     end
 
     local activeRosterNames = {}
+    local activeRosterGuids = {}
     local processedCount = 0
 
     for i = 1, numMembers do
@@ -58,18 +59,27 @@ function GuildRosterService:scanRoster()
             local cleanName = member:getName()
             activeRosterNames[cleanName] = true
             activeRosterNames[cleanName:lower()] = true
+            local guid = member:getGuid()
+            if guid and guid ~= "" then
+                activeRosterGuids[guid] = true
+            end
             processedCount = processedCount + 1
         end
     end
 
     -- Reconcilia membros que saíram da guilda desde a última varredura
     if processedCount > 0 then
-        self._memberService:reconcileGuildMembers(activeRosterNames)
+        self._memberService:reconcileGuildMembers(activeRosterNames, activeRosterGuids)
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
         end
-        if _G.GM and _G.GM.logService and _G.GM.logService.cleanInvalidInviteJoinedLogs then
-            _G.GM.logService:cleanInvalidInviteJoinedLogs(self._memberService)
+        if _G.GM and _G.GM.logService then
+            if _G.GM.logService.cleanInvalidInviteJoinedLogs then
+                _G.GM.logService:cleanInvalidInviteJoinedLogs(self._memberService)
+            end
+            if _G.GM.logService.cleanInvalidLeftLogs then
+                _G.GM.logService:cleanInvalidLeftLogs(self._memberService, activeRosterNames)
+            end
         end
     end
 

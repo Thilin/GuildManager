@@ -1032,6 +1032,10 @@ function MemberController:handleGuildJoin(newMemberName)
         return
     end
 
+    if self._memberService and self._memberService.recordRecentJoin then
+        self._memberService:recordRecentJoin(cleanName)
+    end
+
     local lowerName = cleanName:lower()
     local recruiter = ""
 
@@ -1438,7 +1442,7 @@ function MemberController:checkGuildEventLog()
                         if kicked and kicked ~= "" then
                             self:handleGuildKick(kicked, kicker, entry.time)
                         end
-                    elseif entry.type == "quit" or entry.type == 5 or entry.type == 3 or entry.type == "leave" then
+                    elseif entry.type == "quit" or entry.type == 5 or entry.type == "leave" then
                         local quitter = entry.player1 or entry.name or ""
                         if quitter and quitter ~= "" then
                             self:handleGuildLeave(quitter, entry.time)
@@ -1563,6 +1567,10 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
     local cleanName = self:sanitizeCharacterName(joinedName)
     if not cleanName or cleanName == "" then
         return
+    end
+
+    if self._memberService and self._memberService.recordRecentJoin then
+        self._memberService:recordRecentJoin(cleanName)
     end
 
     local member = self._memberService:getMember(cleanName)

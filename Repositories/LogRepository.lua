@@ -281,3 +281,75 @@ function LogRepository:removeInvalidJoinedLogs(memberService)
     return removedCount
 end
 
+--- Remove logs do tipo LEFT de personagens que continuam ativos na guilda e cujo log de LEFT
+--- foi registrado indevidamente logo após o evento de JOINED (falso positivo por delay de roster).
+---@param memberService table
+---@param activeRosterNames table|nil
+---@return number @Quantidade de registros removidos
+function LogRepository:removeInvalidLeftLogs(memberService, activeRosterNames)
+    if not memberService or type(self._db.logs) ~= "table" then
+        return 0
+    end
+
+    local removedCount = 0
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED") then
+            local name = rawData.name or ""
+            local lowerName = name:lower()
+            local member = memberService:getMember(name)
+            local isInRoster = (activeRosterNames and (activeRosterNames[name] or activeRosterNames[lowerName])) or (member and member:isInGuild())
+
+            if isInRoster then
+                local joinedLog = self:findJoinedLog(name, member and member:getGuid())
+                local isFalsePositive = false
+
+                if joinedLog then
+                    local leftTime = rawData.timestamp or 0
+                    local joinedTime = joinedLog:getTimestamp() or 0
+                    local leftDate = rawData.date or ""
+                    local joinedDate = joinedLog:getDate() or ""
+
+                    if leftTime > 0 and joinedTime > 0 then
+                        if math.abs(leftTime - joinedTime) <= 600 then
+                            isFalsePositive = true
+                        end
+                    elseif leftDate ~= "" and joinedDate ~= "" then
+                        local leftDay = leftDate:match("^(%d%d%d%d%-%d%d%-%d%d)") or leftDate
+                        local joinedDay = joinedDate:match("^(%d%d%d%d%-%d%d%-%d%d)") or joinedDate
+                        if leftDay == joinedDay then
+                            isFalsePositive = true
+                        end
+                    else
+                        -- Se ambos não têm timestamp/data detalhada, mas o membro está ativo
+                        isFalsePositive = true
+                    end
+                end
+
+                if isFalsePositive then
+                    table.remove(self._db.logs, i)
+                    removedCount = removedCount + 1
+
+                    if member then
+                        member:setInGuild(true)
+                        member:setDateLeft("")
+                        if (member:getTimesLeft() or 0) > 0 then
+                            member:setTimesLeft(math.max(0, member:getTimesLeft() - 1))
+                        end
+                        memberService:saveMember(member)
+                    end
+                end
+            end
+        end
+    end
+
+    if removedCount > 0 then
+        for idx, rawData in ipairs(self._db.logs) do
+            rawData.id = idx
+        end
+    end
+
+    return removedCount
+end
+
+

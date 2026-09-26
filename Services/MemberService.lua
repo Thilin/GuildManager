@@ -13,6 +13,8 @@ function MemberService:new(repository, logService)
     instance._repository = repository
     instance._logService = logService
     instance._pendingRecruiters = {}
+    instance._recentlyJoinedMembers = {}
+    instance._missingRosterScans = {}
     return instance
 end
 
@@ -44,6 +46,72 @@ function MemberService:getPendingRecruiter(memberName)
     if not memberName or not self._pendingRecruiters then return nil end
     return self._pendingRecruiters[memberName:lower()]
 end
+
+--- Registra que um membro acabou de ingressar na guilda (para período de carência contra falsos positivos).
+---@param memberName string
+function MemberService:recordRecentJoin(memberName)
+    if not memberName or memberName == "" then return end
+    self._recentlyJoinedMembers = self._recentlyJoinedMembers or {}
+    local lower = memberName:lower()
+    local now = (GetTime and GetTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    self._recentlyJoinedMembers[lower] = now
+end
+
+--- Verifica se o membro acabou de entrar na guilda (dentro da janela de carência de propagação do roster).
+---@param memberName string
+---@return boolean
+function MemberService:isRecentlyJoined(memberName)
+    if not memberName or memberName == "" then return false end
+    local lower = memberName:lower()
+    local now = (GetTime and GetTime()) or (time and time()) or (os and os.time and os.time()) or 0
+
+    if self._recentlyJoinedMembers and self._recentlyJoinedMembers[lower] then
+        local joinTime = self._recentlyJoinedMembers[lower]
+        if (now - joinTime) < 180 then -- 3 minutos de carência
+            return true
+        end
+    end
+
+    local member = self:getMember(memberName)
+    if member and member:isInGuild() then
+        local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+        if member:getDateJoin() == today and (member:getTimesLeft() or 0) == 0 then
+            if not self:findQuitInGuildEventLog(memberName) and not self:findKickInGuildEventLog(memberName) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+--- Atualiza o status de saída da guilda na entidade Member e desvincula da lista de alts.
+---@param member Member
+---@param dateStr string|nil
+---@param timestamp number|nil
+function MemberService:_markMemberLeftGuild(member, dateStr, timestamp)
+    if not member or not member:isInGuild() then return end
+    local memberName = member:getName()
+    local dateToSet = dateStr or ((date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or "")
+    if timestamp and timestamp > 0 then
+        if date then
+            dateToSet = date("%Y-%m-%d", timestamp)
+        elseif os and os.date then
+            dateToSet = os.date("%Y-%m-%d", timestamp)
+        end
+    end
+
+    member:setInGuild(false)
+    if member:getRankName() and member:getRankName() ~= "" then
+        member:setLastRank(member:getRankName())
+    end
+    member:setDateLeft(dateToSet)
+    member:setTimesLeft((member:getTimesLeft() or 0) + 1)
+    self._repository:save(member)
+
+    self:unlinkMemberOnGuildLeave(memberName)
+end
+
 
 --- Define e persiste o recrutador de um membro.
 ---@param memberName string @Nome do membro
@@ -132,6 +200,7 @@ function MemberService:processRosterMember(rosterData)
         end
         rosterData.recruiter = rec
         rosterData.isInGuild = true
+        self:recordRecentJoin(rosterData.name)
         member = Member:new(rosterData)
 
         -- Se o banco já possuía membros sincronizados anteriormente, significa que este novo membro
@@ -149,7 +218,8 @@ end
 --- Reconcilia os membros do banco com os membros atualmente presentes no roster.
 --- Identifica membros que saíram da guilda e atualiza seus status.
 ---@param activeRosterNames table<string, boolean> @Tabela hash com nomes dos membros ativos na guilda
-function MemberService:reconcileGuildMembers(activeRosterNames)
+---@param activeRosterGuids table<string, boolean>|nil @Tabela hash opcional com GUIDs dos membros ativos
+function MemberService:reconcileGuildMembers(activeRosterNames, activeRosterGuids)
     if type(activeRosterNames) ~= "table" then
         return
     end
@@ -160,53 +230,69 @@ function MemberService:reconcileGuildMembers(activeRosterNames)
     for _, member in ipairs(allMembers) do
         local memberName = member:getName()
         local nameLower = (memberName or ""):lower()
-        if member:isInGuild() and not activeRosterNames[memberName] and not activeRosterNames[nameLower] then
-            -- Membro saiu da guilda
-            local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
-            member:setInGuild(false)
-            if member:getRankName() and member:getRankName() ~= "" then
-                member:setLastRank(member:getRankName())
+        local guid = member:getGuid() or ""
+
+        -- Verifica se o membro está presente no roster ativo (por nome ou GUID)
+        local inRoster = activeRosterNames[memberName] or activeRosterNames[nameLower]
+        if not inRoster and guid ~= "" and activeRosterGuids then
+            inRoster = activeRosterGuids[guid]
+        end
+
+        if inRoster then
+            -- Membro está presente e ativo: reseta qualquer contador de ausência pendente
+            if self._missingRosterScans and self._missingRosterScans[nameLower] then
+                self._missingRosterScans[nameLower] = nil
             end
-            member:setDateLeft(today)
-            member:setTimesLeft((member:getTimesLeft() or 0) + 1)
-            self._repository:save(member)
-
-            -- Desvincula imediatamente da lista de alts ao sair da guilda
-            self:unlinkMemberOnGuildLeave(memberName)
-
-            -- Verifica se o membro foi expulso (KICK) pelo log de eventos da guilda da Blizzard
-            local kickInfo = self:findKickInGuildEventLog(memberName)
-            local alreadyKicked = self._logService and self._logService.hasKickLog and self._logService:hasKickLog(memberName)
-            local quitInfo = self:findQuitInGuildEventLog(memberName)
-
-            if kickInfo or alreadyKicked then
-                -- O membro foi REMOVIDO (KICK) - É um erro de lógica adicionar LEFT; registra apenas KICK!
-                if self._logService then
-                    local kicker = kickInfo and kickInfo.kicker or ""
-                    local kickTime = kickInfo and kickInfo.time or nil
-                    self._logService:logGuildKick(memberName, kicker, member:getGuid(), kickTime, nil, member:getClass())
-                end
-            elseif quitInfo then
-                -- O membro saiu voluntariamente (QUIT/LEFT) confirmado pelo registro oficial da Blizzard
-                if self._logService then
-                    local quitTime = quitInfo and quitInfo.time or nil
-                    self._logService:logGuildLeave(memberName, member:getGuid(), quitTime, nil, member:getClass())
-                end
+        elseif member:isInGuild() then
+            -- 1. Se o membro acabou de entrar na guilda (período de carência de propagação do roster),
+            -- NUNCA marca como LEFT!
+            if self:isRecentlyJoined(memberName) then
+                -- Membro recém-chegado em trânsito de cache no servidor, preserva o status
             else
-                -- Nem KICK nem QUIT encontrados no momento.
-                -- Se o log de eventos da Blizzard já possui entradas carregadas (e o evento não está nos últimos 100):
-                if self:hasGuildEventLogEntries() and not alreadyKicked then
+                -- 2. Membro ausente: verifica confirmação no registro oficial de eventos da Blizzard
+                local kickInfo = self:findKickInGuildEventLog(memberName)
+                local alreadyKicked = self._logService and self._logService.hasKickLog and self._logService:hasKickLog(memberName)
+                local quitInfo = self:findQuitInGuildEventLog(memberName)
+
+                if kickInfo or alreadyKicked then
+                    -- O membro foi REMOVIDO (KICK) - É um erro de lógica adicionar LEFT; registra apenas KICK!
+                    self:_markMemberLeftGuild(member, today, kickInfo and kickInfo.time)
                     if self._logService then
-                        self._logService:logGuildLeave(memberName, member:getGuid(), nil, nil, member:getClass())
+                        local kicker = kickInfo and kickInfo.kicker or ""
+                        local kickTime = kickInfo and kickInfo.time or nil
+                        self._logService:logGuildKick(memberName, kicker, member:getGuid(), kickTime, nil, member:getClass())
                     end
+                    if self._missingRosterScans then self._missingRosterScans[nameLower] = nil end
+                elseif quitInfo then
+                    -- O membro saiu voluntariamente (QUIT/LEFT) confirmado pelo registro oficial da Blizzard
+                    self:_markMemberLeftGuild(member, today, quitInfo and quitInfo.time)
+                    if self._logService then
+                        local quitTime = quitInfo and quitInfo.time or nil
+                        self._logService:logGuildLeave(memberName, member:getGuid(), quitTime, nil, member:getClass())
+                    end
+                    if self._missingRosterScans then self._missingRosterScans[nameLower] = nil end
                 else
-                    -- O log de eventos da Blizzard ainda NÃO chegou do servidor!
-                    -- NÃO registra LEFT prematuramente para evitar registrar KICK como LEFT!
-                    -- Dispara a consulta para carregar o registro oficial assim que possível.
-                    if _G.GM and _G.GM.memberController and _G.GM.memberController.requestGuildEventLog then
-                        _G.GM.memberController:requestGuildEventLog()
-                    elseif QueryGuildEventLog then
-                        pcall(QueryGuildEventLog)
+                    -- Nem KICK nem QUIT encontrados no registro oficial.
+                    -- Para evitar falsos positivos causados por lag ou scans intermediários, exige confirmação em múltiplos scans
+                    self._missingRosterScans = self._missingRosterScans or {}
+                    self._missingRosterScans[nameLower] = (self._missingRosterScans[nameLower] or 0) + 1
+
+                    -- Apenas marca como saída se ausente por pelo menos 3 scans consecutivos E se o log oficial de eventos já está disponível
+                    if self._missingRosterScans[nameLower] >= 3 and self:hasGuildEventLogEntries() then
+                        self:_markMemberLeftGuild(member, today)
+                        if self._logService then
+                            self._logService:logGuildLeave(memberName, member:getGuid(), nil, nil, member:getClass())
+                        end
+                        self._missingRosterScans[nameLower] = nil
+                    else
+                        -- Dispara consulta do log de eventos caso ainda não esteja disponível
+                        if not self:hasGuildEventLogEntries() then
+                            if _G.GM and _G.GM.memberController and _G.GM.memberController.requestGuildEventLog then
+                                _G.GM.memberController:requestGuildEventLog()
+                            elseif QueryGuildEventLog then
+                                pcall(QueryGuildEventLog)
+                            end
+                        end
                     end
                 end
             end
@@ -307,7 +393,7 @@ function MemberService:findQuitInGuildEventLog(memberName)
         local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
         if success and type(logEntries) == "table" then
             for _, entry in ipairs(logEntries) do
-                if entry and (entry.type == "quit" or entry.type == 5 or entry.type == 3 or entry.type == "leave") then
+                if entry and (entry.type == "quit" or entry.type == 5 or entry.type == "leave") then
                     local quitter = entry.player1 or entry.name or ""
                     local cleanQuitter = tostring(quitter):match("^[^-]+") or quitter
                     cleanQuitter = cleanQuitter:match("^%s*(.-)%s*$")
