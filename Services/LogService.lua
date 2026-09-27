@@ -13,13 +13,22 @@ function LogService:new(repository)
 end
 
 --- Formata a mensagem padrão obrigatória para o evento JOINED.
---- Padrão: "Player X foi RECRUTADO por Player Y"
+--- Padrão: "Player X foi RECRUTADO por Player Y" com cores temáticas.
 ---@param recruitName string @Nome do personagem recrutado
 ---@param recruiterName string|nil @Nome do recrutador
+---@param recruitClass string|nil @Classe do recrutado (opcional)
+---@param recClass string|nil @Classe do recrutador (opcional)
 ---@return string
-function LogService:formatJoinedMessage(recruitName, recruiterName)
+function LogService:formatJoinedMessage(recruitName, recruiterName, recruitClass, recClass)
     local recruiter = (recruiterName and recruiterName ~= "") and recruiterName or "Desconhecido"
-    return string.format("%s foi RECRUTADO por %s", recruitName, recruiter)
+    local coloredRecruit = self:formatColoredMemberName(recruitName, recruitClass)
+    local coloredRecruiter
+    if recruiter ~= "Desconhecido" then
+        coloredRecruiter = self:formatColoredMemberName(recruiter, recClass)
+    else
+        coloredRecruiter = "|cff888888Desconhecido|r"
+    end
+    return string.format("%s |cffa8f0a8foi|r |cff40ff40RECRUTADO|r |cffa8f0a8por|r %s", coloredRecruit, coloredRecruiter)
 end
 
 --- Registra o evento de recrutamento (JOINED) de um novo membro.
@@ -58,7 +67,7 @@ function LogService:logRecruitment(recruitName, recruiterName, guid, timestamp, 
         local curRecruiter = existingLog:getRecruiter()
         if recruiterName and recruiterName ~= "" and (curRecruiter == "" or curRecruiter == "Desconhecido" or curRecruiter ~= recruiterName) then
             existingLog:setRecruiter(recruiterName)
-            existingLog:setMessage(self:formatJoinedMessage(recruitName, recruiterName))
+            existingLog:setMessage(self:formatJoinedMessage(recruitName, recruiterName, memberClass, recClass))
             if guid and guid ~= "" and existingLog:getGuid() == "" then
                 existingLog:setGuid(guid)
             end
@@ -74,7 +83,7 @@ function LogService:logRecruitment(recruitName, recruiterName, guid, timestamp, 
     end
 
     -- Cria um novo registro de log de JOINED
-    local message = self:formatJoinedMessage(recruitName, recruiterName)
+    local message = self:formatJoinedMessage(recruitName, recruiterName, memberClass, recClass)
     local newLog = Log:new({
         name = recruitName,
         class = memberClass,
@@ -103,7 +112,7 @@ function LogService:updateRecruiterForMember(recruitName, recruiterName)
     local existingLog = self._repository:findJoinedLog(recruitName)
     if existingLog then
         existingLog:setRecruiter(recruiterName)
-        existingLog:setMessage(self:formatJoinedMessage(recruitName, recruiterName))
+        existingLog:setMessage(self:formatJoinedMessage(recruitName, recruiterName, existingLog:getClass(), existingLog:getRecruiterClass()))
         return self._repository:save(existingLog)
     else
         local _, created = self:logRecruitment(recruitName, recruiterName)
@@ -134,11 +143,13 @@ function LogService:getLogsForMember(memberName)
 end
 
 --- Formata a mensagem padrão obrigatória para o evento LEFT.
---- Padrão: "Player X SAIU da guilda"
+--- Padrão: "Player X SAIU da guilda" com cores temáticas.
 ---@param memberName string
+---@param memberClass string|nil
 ---@return string
-function LogService:formatLeftMessage(memberName)
-    return string.format("%s SAIU da guilda", memberName)
+function LogService:formatLeftMessage(memberName, memberClass)
+    local coloredName = self:formatColoredMemberName(memberName, memberClass)
+    return string.format("%s |cffff9926SAIU|r |cffffcca0da guilda|r", coloredName)
 end
 
 --- Registra o evento de saída (LEFT) de um membro da guilda.
@@ -196,7 +207,7 @@ function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberCl
         if classToken then memberClass = classToken end
     end
 
-    local message = self:formatLeftMessage(memberName)
+    local message = self:formatLeftMessage(memberName, memberClass)
     local newLog = Log:new({
         name = memberName,
         class = memberClass,
@@ -212,13 +223,22 @@ function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberCl
 end
 
 --- Formata a mensagem padrão obrigatória para o evento KICK.
---- Padrão: "Player X foi REMOVIDO da guilda por Player Y"
+--- Padrão: "Player X foi REMOVIDO da guilda por Player Y" com cores temáticas.
 ---@param kickedName string @Nome do personagem expulso
 ---@param kickerName string|nil @Nome de quem o expulsou
+---@param kickedClass string|nil @Classe do expulso
+---@param kickerClass string|nil @Classe do autor
 ---@return string
-function LogService:formatKickMessage(kickedName, kickerName)
+function LogService:formatKickMessage(kickedName, kickerName, kickedClass, kickerClass)
     local kicker = (kickerName and kickerName ~= "") and kickerName or "Desconhecido"
-    return string.format("%s foi REMOVIDO da guilda por %s", kickedName, kicker)
+    local coloredKicked = self:formatColoredMemberName(kickedName, kickedClass)
+    local coloredKicker
+    if kicker ~= "Desconhecido" then
+        coloredKicker = self:formatColoredMemberName(kicker, kickerClass)
+    else
+        coloredKicker = "|cff888888Desconhecido|r"
+    end
+    return string.format("%s |cffffa6a6foi|r |cffff4040REMOVIDO|r |cffffa6a6da guilda por|r %s", coloredKicked, coloredKicker)
 end
 
 --- Verifica se existe algum log de saída (LEFT) para o personagem.
@@ -276,7 +296,7 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
                 if kickerClass and kickerClass ~= "" then
                     existingKick:setKickerClass(kickerClass)
                 end
-                existingKick:setMessage(self:formatKickMessage(kickedName, kicker))
+                existingKick:setMessage(self:formatKickMessage(kickedName, kicker, existingKick:getClass(), kickerClass))
                 self._repository:save(existingKick)
             end
             return existingKick, false
@@ -292,7 +312,7 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
             if kickerClass and kickerClass ~= "" then
                 existingLeave:setKickerClass(kickerClass)
             end
-            existingLeave:setMessage(self:formatKickMessage(kickedName, kicker))
+            existingLeave:setMessage(self:formatKickMessage(kickedName, kicker, existingLeave:getClass(), kickerClass))
             if timestamp and timestamp > 0 then
                 existingLeave:setTimestamp(timestamp)
             end
@@ -323,7 +343,7 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
         if classToken then kickedClass = classToken end
     end
 
-    local message = self:formatKickMessage(kickedName, kicker)
+    local message = self:formatKickMessage(kickedName, kicker, kickedClass, kickerClass)
     local newLog = Log:new({
         name = kickedName,
         class = kickedClass,
@@ -372,7 +392,7 @@ function LogService:formatColoredMemberName(name, classToken)
 end
 
 --- Formata a mensagem padrão obrigatória para o evento LEVELED.
---- Padrão: "Membro X SUBIU para o nível Y" com X colorido pela cor da sua classe.
+--- Padrão: "X SUBIU para o nível Y" com X colorido pela cor da sua classe e cores temáticas.
 ---@param memberName string|Member @Nome do membro ou objeto Member
 ---@param newLevel number @Nível alcançado
 ---@param memberClass string|nil @Token da classe
@@ -386,11 +406,11 @@ function LogService:formatLeveledMessage(memberName, newLevel, memberClass)
     end
 
     local coloredName = self:formatColoredMemberName(name, classToken)
-    return string.format("Membro %s SUBIU para o nível %d", coloredName, tonumber(newLevel) or 1)
+    return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%d|r", coloredName, tonumber(newLevel) or 1)
 end
 
 --- Registra o evento de evolução de nível (LEVELED) de um membro da guilda.
---- Salva a mensagem: "Membro X SUBIU para o nível Y" com o nome na cor da classe.
+--- Salva a mensagem: "X SUBIU para o nível Y" com o nome na cor da classe.
 --- Evita duplicidade se já houver registro deste nível para o membro.
 ---@param member Member|string @Instância do membro ou nome
 ---@param newLevel number @Novo nível alcançado

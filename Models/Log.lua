@@ -105,6 +105,10 @@ function Log:new(data)
         instance._event = event or ""
     end
 
+    if (instance._event == LogEvent.LEVELED or instance._event == "LEVELED" or event == "LEVELED") and instance._message ~= "" then
+        instance._message = instance._message:gsub("^%s*[Mm]embro%s+", "")
+    end
+
     -- Metadados de data e hora para ordenação e histórico:
     local currentUnix = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
     instance._timestamp = tonumber(data.timestamp) or currentUnix
@@ -173,7 +177,11 @@ end
 --- Define a mensagem do log.
 ---@param message string
 function Log:setMessage(message)
-    self._message = tostring(message or "")
+    local msg = tostring(message or "")
+    if self._event == LogEvent.LEVELED or self._event == "LEVELED" then
+        msg = msg:gsub("^%s*[Mm]embro%s+", "")
+    end
+    self._message = msg
 end
 
 --- Obtém o tipo de evento (ENUM).

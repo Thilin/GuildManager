@@ -327,16 +327,8 @@ function LogView:createUI()
     col1:SetText("|cffffd200DATA / HORA|r")
 
     local col2 = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    col2:SetPoint("LEFT", headerRow, "LEFT", 136, 0)
-    col2:SetText("|cffffd200EVENTO|r")
-
-    local col3 = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    col3:SetPoint("LEFT", headerRow, "LEFT", 226, 0)
-    col3:SetText("|cffffd200PERSONAGEM|r")
-
-    local col4 = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    col4:SetPoint("LEFT", headerRow, "LEFT", 346, 0)
-    col4:SetText("|cffffd200MENSAGEM / HISTÓRICO|r")
+    col2:SetPoint("LEFT", headerRow, "LEFT", 150, 0)
+    col2:SetText("|cffffd200MENSAGEM / HISTÓRICO|r")
 
     -- Scrollbar lateral
     local scrollBar = CreateFrame("Slider", "GM_LogScrollBar", tableInset, "UIPanelScrollBarTemplate")
@@ -398,27 +390,13 @@ function LogView:createUI()
         -- Texto: Data
         local dateTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         dateTxt:SetPoint("LEFT", row, "LEFT", 8, 0)
-        dateTxt:SetWidth(122)
+        dateTxt:SetWidth(135)
         dateTxt:SetJustifyH("LEFT")
         row.dateTxt = dateTxt
 
-        -- Texto: Evento
-        local eventTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        eventTxt:SetPoint("LEFT", row, "LEFT", 136, 0)
-        eventTxt:SetWidth(85)
-        eventTxt:SetJustifyH("LEFT")
-        row.eventTxt = eventTxt
-
-        -- Texto: Personagem
-        local nameTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        nameTxt:SetPoint("LEFT", row, "LEFT", 226, 0)
-        nameTxt:SetWidth(115)
-        nameTxt:SetJustifyH("LEFT")
-        row.nameTxt = nameTxt
-
-        -- Texto: Mensagem
+        -- Texto: Mensagem / Histórico
         local msgTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        msgTxt:SetPoint("LEFT", row, "LEFT", 346, 0)
+        msgTxt:SetPoint("LEFT", row, "LEFT", 150, 0)
         msgTxt:SetPoint("RIGHT", row, "RIGHT", -6, 0)
         msgTxt:SetJustifyH("LEFT")
         msgTxt:SetWordWrap(false)
@@ -564,7 +542,18 @@ function LogView:applyFilters()
                 local dateStr = (log:getDate() or ""):lower()
                 local evtStr = (evt or ""):lower()
 
-                if not (name:find(search, 1, true) or recruiter:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
+                local matchKeyword = false
+                if (evt == "LEVELED" or evt == LogEvent.LEVELED) and ("subiu"):find(search, 1, true) then
+                    matchKeyword = true
+                elseif (evt == "JOINED" or evt == LogEvent.JOINED) and ("recrutado"):find(search, 1, true) then
+                    matchKeyword = true
+                elseif (evt == "LEFT" or evt == LogEvent.LEFT) and ("saiu"):find(search, 1, true) then
+                    matchKeyword = true
+                elseif (evt == "KICK" or evt == LogEvent.KICK) and ("removido expulso kick"):find(search, 1, true) then
+                    matchKeyword = true
+                end
+
+                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
                     matchSearch = false
                 end
             end
@@ -695,7 +684,8 @@ function LogView:formatColoredName(name, guid, fallbackClass)
     return "|cffffffff" .. clean .. "|r"
 end
 
---- Formata a mensagem do log aplicando as cores de classe aos nomes dos personagens citados.
+--- Formata a mensagem do log aplicando as cores de classe aos personagens e cores temáticas
+--- para palavras-chave (SUBIU, SAIU, RECRUTADO, REMOVIDO, etc.) e texto de cada evento.
 ---@param log Log
 ---@return string
 function LogView:formatColoredMessage(log)
@@ -713,12 +703,12 @@ function LogView:formatColoredMessage(log)
         else
             recruiterColored = "|cff888888Desconhecido|r"
         end
-        return string.format("%s foi RECRUTADO por %s", recruitColored, recruiterColored)
+        return string.format("%s |cffa8f0a8foi|r |cff40ff40RECRUTADO|r |cffa8f0a8por|r %s", recruitColored, recruiterColored)
     end
 
     if evt == LogEvent.LEFT or evt == "LEFT" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
-        return string.format("%s SAIU da guilda", coloredName)
+        return string.format("%s |cffff9926SAIU|r |cffffcca0da guilda|r", coloredName)
     end
 
     if evt == LogEvent.KICK or evt == "KICK" then
@@ -731,35 +721,66 @@ function LogView:formatColoredMessage(log)
         else
             kickerColored = "|cff888888Desconhecido|r"
         end
-        return string.format("%s foi REMOVIDO da guilda por %s", kickedColored, kickerColored)
+        return string.format("%s |cffffa6a6foi|r |cffff4040REMOVIDO|r |cffffa6a6da guilda por|r %s", kickedColored, kickerColored)
     end
 
     if evt == LogEvent.LEVELED or evt == "LEVELED" then
-        local rawMsg = log:getMessage() or ""
-        if rawMsg ~= "" then
-            if rawMsg:find("|c") then
-                return rawMsg
-            end
-            local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
-            if rawMsg:find(name, 1, true) then
-                return (rawMsg:gsub(name, coloredName))
-            end
-            return rawMsg
-        end
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
-        local lvl = (log.getLevel and log:getLevel()) or "?"
-        return string.format("Membro %s SUBIU para o nível %s", coloredName, tostring(lvl))
+        local lvl = (log.getLevel and log:getLevel())
+        if not lvl or lvl == 0 or lvl == "" then
+            local rawMsg = log:getMessage() or ""
+            lvl = rawMsg:match("n[íi]vel%s+(%d+)") or "?"
+        end
+        return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
+    end
+
+    if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then
+        local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local rawMsg = log:getMessage() or ""
+        rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+de%s+[Oo]ficial:?%s*", "")
+        return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffb3e5fc%s|r", coloredName, rawMsg)
+    end
+
+    if evt == LogEvent.PUBLICNOTE or evt == "PUBLICNOTE" then
+        local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local rawMsg = log:getMessage() or ""
+        rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+[Pp]ública:?%s*", "")
+        return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffe0f7fa%s|r", coloredName, rawMsg)
+    end
+
+    if evt == LogEvent.NAMECHANGE or evt == "NAMECHANGE" then
+        local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local rawMsg = log:getMessage() or ""
+        return string.format("%s |cffd98cffALTEROU NOME|r |cffe1bee7%s|r", coloredName, rawMsg)
+    end
+
+    if evt == LogEvent.INACTIVERETURN or evt == "INACTIVERETURN" then
+        local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        return string.format("%s |cff26ffbfRETORNOU|r |cffb2dfdbà atividade na guilda|r", coloredName)
     end
 
     local rawMsg = log:getMessage() or ""
     if name ~= "" and rawMsg:find(name, 1, true) then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
-        rawMsg = rawMsg:gsub(name, coloredName)
+        local escName = name:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+        rawMsg = rawMsg:gsub(escName, coloredName)
     end
     if recruiter ~= "" and recruiter ~= "Desconhecido" and rawMsg:find(recruiter, 1, true) then
         local coloredRecruiter = self:formatColoredName(recruiter, nil, log:getRecruiterClass())
-        rawMsg = rawMsg:gsub(recruiter, coloredRecruiter)
+        local escRecruiter = recruiter:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+        rawMsg = rawMsg:gsub(escRecruiter, coloredRecruiter)
     end
+
+    -- Realça palavras-chave em logs genéricos ou legados
+    rawMsg = rawMsg:gsub("SUBIU", "|cffffd91aSUBIU|r")
+    rawMsg = rawMsg:gsub("RECRUTADO", "|cff40ff40RECRUTADO|r")
+    rawMsg = rawMsg:gsub("SAIU", "|cffff9926SAIU|r")
+    rawMsg = rawMsg:gsub("REMOVIDO", "|cffff4040REMOVIDO|r")
+    rawMsg = rawMsg:gsub("EXPULSO", "|cffff4040EXPULSO|r")
+    rawMsg = rawMsg:gsub("NOTA DE OFICIAL", "|cff40bfffNOTA DE OFICIAL|r")
+    rawMsg = rawMsg:gsub("NOTA PÚBLICA", "|cff73e6ffNOTA PÚBLICA|r")
+    rawMsg = rawMsg:gsub("ALTEROU NOME", "|cffd98cffALTEROU NOME|r")
+    rawMsg = rawMsg:gsub("RETORNOU", "|cff26ffbfRETORNOU|r")
 
     return rawMsg
 end
@@ -793,15 +814,6 @@ function LogView:renderRows()
             -- Data
             local d = log:getDate() or ""
             row.dateTxt:SetText("|cffcccccc" .. d .. "|r")
-
-            -- Evento
-            local evt = log:getEvent() or ""
-            local colorInfo = EVENT_COLORS[evt] or { hex = "|cffffffff" }
-            row.eventTxt:SetText(colorInfo.hex .. evt .. "|r")
-
-            -- Personagem com a cor da respectiva classe
-            local name = log:getName() or ""
-            row.nameTxt:SetText(self:formatColoredName(name, log:getGuid(), log:getClass()))
 
             -- Mensagem formatada com as cores de classe dos membros
             row.msgTxt:SetText(self:formatColoredMessage(log))
