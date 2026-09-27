@@ -22,6 +22,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local logView = LogView:new()
         local logController = LogController:new(logService, logView)
 
+        local auditView = AuditView:new()
+        local auditController = AuditController:new(memberService, guildRosterService, auditView, logService)
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -32,11 +35,14 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.guildRosterService = guildRosterService
         GM.memberView = memberView
         GM.memberController = memberController
+        GM.auditView = auditView
+        GM.auditController = auditController
 
         memberController:initHooks()
         logController:initHooks()
+        auditController:initHooks()
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r ou |cffffff00/gmlogs|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r ou |cffffff00/gmaudit|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

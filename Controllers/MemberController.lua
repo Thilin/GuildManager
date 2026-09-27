@@ -215,7 +215,20 @@ function MemberController:initHooks()
     -- Comando de chat /gm
     SLASH_GUILDMANAGER1 = "/gm"
     SLASH_GUILDMANAGER2 = "/guildmanager"
-    SlashCmdList["GUILDMANAGER"] = function()
+    SlashCmdList["GUILDMANAGER"] = function(msg)
+        local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
+        if arg == "audit" or arg == "auditoria" then
+            if _G.GM and _G.GM.auditController then
+                _G.GM.auditController:toggle()
+                return
+            end
+        elseif arg == "logs" or arg == "log" then
+            if _G.GM and _G.GM.logController then
+                _G.GM.logController:toggle()
+                return
+            end
+        end
+
         if IsInGuild and IsInGuild() then
             local count = self._guildRosterService:scanRoster()
             print(string.format("|cff00ff00[GuildManager]|r Roster sincronizado! %d membro(s) no banco.", count))

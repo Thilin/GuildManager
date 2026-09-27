@@ -49,6 +49,7 @@ function Member:new(data)
     instance._publicNote = data.publicNote or ""
     instance._officerNote = data.officerNote or ""
     instance._isOnline = data.isOnline or false
+    instance._lastOnline = data.lastOnline or ""
     instance._status = data.status or 0
     instance._class = data.class or ""
     instance._achievementPoints = tonumber(data.achievementPoints) or 0
@@ -189,6 +190,18 @@ end
 ---@param isOnline boolean
 function Member:setOnline(isOnline)
     self._isOnline = (isOnline == true)
+end
+
+--- Obtém o tempo desde a última vez que o membro esteve online.
+---@return string
+function Member:getLastOnline()
+    return self._lastOnline or ""
+end
+
+--- Define o tempo desde a última vez que o membro esteve online.
+---@param lastOnline string
+function Member:setLastOnline(lastOnline)
+    self._lastOnline = tostring(lastOnline or "")
 end
 
 --- Obtém a nota pública da guilda.
@@ -348,6 +361,7 @@ function Member:serialize()
         publicNote = self._publicNote,
         officerNote = self._officerNote,
         isOnline = self._isOnline,
+        lastOnline = self._lastOnline,
         status = self._status,
         class = self._class,
         achievementPoints = self._achievementPoints,
@@ -382,6 +396,7 @@ function Member:updateFromRoster(data)
     if data.publicNote ~= nil then self._publicNote = tostring(data.publicNote) end
     if data.officerNote ~= nil then self._officerNote = tostring(data.officerNote) end
     if data.isOnline ~= nil then self._isOnline = (data.isOnline == true) end
+    if data.lastOnline ~= nil then self._lastOnline = tostring(data.lastOnline) end
     if data.status ~= nil then self._status = tonumber(data.status) or self._status end
     if data.class then self._class = data.class end
     if data.achievementPoints ~= nil then self._achievementPoints = tonumber(data.achievementPoints) or self._achievementPoints end

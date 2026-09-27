@@ -127,6 +127,18 @@ function GuildRosterService:getAndProcessMember(index)
         end
     end
 
+    local isOnlineBool = (isOnline == true)
+    local lastOnlineText = ""
+    if not isOnlineBool then
+        local years, months, days, hours = 0, 0, 0, 0
+        if GetGuildRosterLastOnline then
+            years, months, days, hours = GetGuildRosterLastOnline(index)
+        elseif C_GuildInfo and C_GuildInfo.GetGuildRosterLastOnline then
+            years, months, days, hours = C_GuildInfo.GetGuildRosterLastOnline(index)
+        end
+        lastOnlineText = self:formatLastOnline(years, months, days, hours)
+    end
+
     local rosterData = {
         name = cleanName,
         race = race,
@@ -138,7 +150,8 @@ function GuildRosterService:getAndProcessMember(index)
         zone = zone or "",
         publicNote = publicNote or "",
         officerNote = officerNote or "",
-        isOnline = (isOnline == true),
+        isOnline = isOnlineBool,
+        lastOnline = lastOnlineText,
         status = status or 0,
         class = class or "",
         achievementPoints = achievementPoints or 0,
@@ -149,4 +162,29 @@ function GuildRosterService:getAndProcessMember(index)
     }
 
     return self._memberService:processRosterMember(rosterData)
+end
+
+--- Formata o tempo decorrido desde a última vez que o membro esteve online.
+---@param years number|nil
+---@param months number|nil
+---@param days number|nil
+---@param hours number|nil
+---@return string
+function GuildRosterService:formatLastOnline(years, months, days, hours)
+    years = tonumber(years) or 0
+    months = tonumber(months) or 0
+    days = tonumber(days) or 0
+    hours = tonumber(hours) or 0
+
+    if years > 0 then
+        return string.format(years == 1 and "%d ano atrás" or "%d anos atrás", years)
+    elseif months > 0 then
+        return string.format(months == 1 and "%d mês atrás" or "%d meses atrás", months)
+    elseif days > 0 then
+        return string.format(days == 1 and "%d d atrás" or "%d d atrás", days)
+    elseif hours > 0 then
+        return string.format(hours == 1 and "%d h atrás" or "%d h atrás", hours)
+    else
+        return "< 1 hora"
+    end
 end
