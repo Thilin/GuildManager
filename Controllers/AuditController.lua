@@ -82,11 +82,34 @@ function AuditController:refreshAudit()
 
     local all = self._memberService:getAllMembers() or {}
     local activeGuildMembers = {}
+    local activeRosterNames = self._guildRosterService and self._guildRosterService.getActiveRosterNames and self._guildRosterService:getActiveRosterNames()
+    local hasRosterFilter = (activeRosterNames and next(activeRosterNames) ~= nil)
 
     for _, member in ipairs(all) do
-        -- Exibe estritamente membros que pertencem atualmente à guilda
-        if member:isInGuild() then
-            table.insert(activeGuildMembers, member)
+        local mName = member:getName()
+        local mLower = (mName or ""):lower()
+
+        if hasRosterFilter then
+            -- Se temos a lista ativa direta da Blizzard, quem não está no roster NÃO pertence mais à guilda!
+            if activeRosterNames[mName] or activeRosterNames[mLower] then
+                if not member:isInGuild() then
+                    member:setInGuild(true)
+                    self._memberService:saveMember(member)
+                end
+                table.insert(activeGuildMembers, member)
+            else
+                -- Membro ausente no roster oficial da Blizzard: desativa e desvincula dos alts
+                if member:isInGuild() then
+                    member:setInGuild(false)
+                    self._memberService:unlinkMemberOnGuildLeave(mName)
+                    self._memberService:saveMember(member)
+                end
+            end
+        else
+            -- Fallback caso scan do roster não esteja disponível no momento
+            if member:isInGuild() then
+                table.insert(activeGuildMembers, member)
+            end
         end
     end
 

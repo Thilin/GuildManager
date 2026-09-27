@@ -149,7 +149,7 @@ function AuditView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerAuditFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(960, 540)
+    frame:SetSize(840, 510)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -257,7 +257,7 @@ function AuditView:createUI()
     -- =========================================================================
     local searchEB = CreateFrame("EditBox", nil, frame, template)
     searchEB:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", 0, -8)
-    searchEB:SetSize(200, 22)
+    searchEB:SetSize(175, 22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
     searchEB:SetTextInsets(6, 6, 1, 1)
@@ -803,6 +803,140 @@ function AuditView:createUI()
 
     self:updateFilterButtonsVisual()
     self:createEditModal()
+    self:createSideTabs()
+end
+
+--- Cria as abas de navegação lateral (estilo Profissões Blizzard) na borda direita da janela.
+function AuditView:createSideTabs()
+    local frame = self._frame
+    if not frame then return end
+
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+
+    local SIDE_TAB_BACKDROP = {
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    }
+
+    -- ---------------------------------------------------------
+    -- Aba 1: Auditoria (Ativa nesta tela - Ícone Livro Aberto)
+    -- ---------------------------------------------------------
+    local tabAudit = CreateFrame("Button", "GM_AuditSideTab_Audit", frame, template)
+    tabAudit:SetSize(36, 36)
+    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -44)
+    if tabAudit.SetBackdrop then
+        tabAudit:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabAudit:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
+        tabAudit:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+    end
+
+    local auditIcon = tabAudit:CreateTexture(nil, "ARTWORK")
+    auditIcon:SetPoint("TOPLEFT", tabAudit, "TOPLEFT", 4, -4)
+    auditIcon:SetPoint("BOTTOMRIGHT", tabAudit, "BOTTOMRIGHT", -4, 4)
+    auditIcon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
+    auditIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    auditIcon:SetVertexColor(1.0, 1.0, 1.0)
+    tabAudit.icon = auditIcon
+
+    -- Brilho dourado de aba ativa
+    local auditGlow = tabAudit:CreateTexture(nil, "OVERLAY")
+    auditGlow:SetPoint("TOPLEFT", tabAudit, "TOPLEFT", -2, 2)
+    auditGlow:SetPoint("BOTTOMRIGHT", tabAudit, "BOTTOMRIGHT", 2, -2)
+    auditGlow:SetTexture("Interface\\Buttons\\CheckButtonHilight")
+    auditGlow:SetBlendMode("ADD")
+    auditGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
+    tabAudit.glow = auditGlow
+
+    tabAudit:SetScript("OnEnter", function(btn)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
+        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Visualização completa dos membros, cargos, alts e notas de gestão.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabAudit:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    -- ---------------------------------------------------------
+    -- Aba 2: Logs (Inativa nesta tela - Folhas de Papel / Jornal)
+    -- ---------------------------------------------------------
+    local tabLogs = CreateFrame("Button", "GM_AuditSideTab_Logs", frame, template)
+    tabLogs:SetSize(36, 36)
+    tabLogs:SetPoint("TOPLEFT", tabAudit, "BOTTOMLEFT", 0, -8)
+    if tabLogs.SetBackdrop then
+        tabLogs:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabLogs:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabLogs:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+
+    local logsIcon = tabLogs:CreateTexture(nil, "ARTWORK")
+    logsIcon:SetPoint("TOPLEFT", tabLogs, "TOPLEFT", 4, -4)
+    logsIcon:SetPoint("BOTTOMRIGHT", tabLogs, "BOTTOMRIGHT", -4, 4)
+    logsIcon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
+    logsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    logsIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabLogs.icon = logsIcon
+
+    local logsHl = tabLogs:CreateTexture(nil, "HIGHLIGHT")
+    logsHl:SetAllPoints(tabLogs)
+    logsHl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.30)
+    tabLogs:SetHighlightTexture(logsHl)
+
+    tabLogs:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        logsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
+        GameTooltip:AddLine("Clique para alternar para a tela de Logs da guilda.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+
+    tabLogs:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        logsIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+
+    tabLogs:SetScript("OnClick", function()
+        if PlaySound then
+            if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then
+                PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
+            else
+                pcall(PlaySound, 841)
+            end
+        end
+
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+
+        local logCtrl = (_G.GM and _G.GM.logController) or _G.logController
+        if logCtrl then
+            logCtrl:show()
+            local logFrame = (_G.GM and _G.GM.logView and _G.GM.logView.getFrame and _G.GM.logView:getFrame()) or (logCtrl._logView and logCtrl._logView:getFrame())
+            if logFrame and point then
+                logFrame:ClearAllPoints()
+                if relativeTo then
+                    logFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs)
+                else
+                    logFrame:SetPoint(point, xOfs, yOfs)
+                end
+            end
+        end
+    end)
+
+    self._tabAudit = tabAudit
+    self._tabLogs = tabLogs
 end
 
 --- Cria a janela modal de edição de informações de gestão do membro.
@@ -1099,8 +1233,8 @@ end
 
 --- Atualiza as dimensões de rolagem horizontal com base no tamanho atual da tabela.
 function AuditView:updateScrollDimensions()
-    local insetWidth = self._tableInset and self._tableInset:GetWidth() or 932
-    if insetWidth <= 0 then insetWidth = 932 end
+    local insetWidth = self._tableInset and self._tableInset:GetWidth() or 812
+    if insetWidth <= 0 then insetWidth = 812 end
     local visibleWidth = math.max(100, insetWidth - 24)
     self._visibleWidth = visibleWidth
     self._maxHOffset = math.max(0, TOTAL_TABLE_WIDTH - visibleWidth)
@@ -1249,73 +1383,129 @@ function AuditView:setMembers(members)
 end
 
 --- Reconstrói a estrutura hierárquica plana de linhas (Mains seguidos de seus respectivos Alts).
+--- Garante que cada membro pertença a exatamente um grupo e elimina qualquer duplicação.
 function AuditView:rebuildFlatRows()
-    local guildMap = {}
-    for _, m in ipairs(self._members) do
-        guildMap[(m:getName() or ""):lower()] = m
+    -- 1. Indexa membros ativos únicos da guilda
+    local memberByName = {}
+    local uniqueMembers = {}
+    for _, m in ipairs(self._members or {}) do
+        local nLower = (m:getName() or ""):lower()
+        if nLower ~= "" and not memberByName[nLower] then
+            memberByName[nLower] = m
+            table.insert(uniqueMembers, m)
+        end
     end
 
-    local familyHandled = {}
-    local mainGroups = {}
+    -- 2. Constrói grafo de conexões de alts (bidirecional e simétrico)
+    local adj = {}
+    for _, m in ipairs(uniqueMembers) do
+        local mLower = (m:getName() or ""):lower()
+        adj[mLower] = adj[mLower] or {}
 
-    for _, m in ipairs(self._members) do
-        local mNameLower = (m:getName() or ""):lower()
-        if not familyHandled[mNameLower] then
-            local family = {}
-            if _G.GM and _G.GM.memberService then
-                family = _G.GM.memberService:getAltFamily(m)
-            else
-                family = { m }
+        -- Conexões diretas da entidade Member
+        for _, altName in ipairs(m:getAlts() or {}) do
+            local aLower = (altName or ""):lower()
+            if aLower ~= "" and aLower ~= mLower and memberByName[aLower] then
+                adj[mLower][aLower] = true
+                adj[aLower] = adj[aLower] or {}
+                adj[aLower][mLower] = true
             end
+        end
 
-            -- Filtra os membros da família que estão atualmente na guilda
-            local guildFamily = {}
-            for _, famMember in ipairs(family) do
-                local famLower = (famMember:getName() or ""):lower()
-                local activeMember = guildMap[famLower]
-                if activeMember then
-                    table.insert(guildFamily, activeMember)
-                    familyHandled[famLower] = true
-                end
-            end
-
-            if #guildFamily > 0 then
-                local mainMember = nil
-                local altMembers = {}
-
-                for _, famMember in ipairs(guildFamily) do
-                    if famMember:isMain() then
-                        if not mainMember then
-                            mainMember = famMember
-                        else
-                            table.insert(altMembers, famMember)
-                        end
-                    else
-                        table.insert(altMembers, famMember)
+        -- Conexões de família registradas no serviço
+        if _G.GM and _G.GM.memberService and _G.GM.memberService.getAltFamily then
+            local fam = _G.GM.memberService:getAltFamily(m)
+            if fam then
+                for _, famM in ipairs(fam) do
+                    local fLower = (famM:getName() or ""):lower()
+                    if fLower ~= "" and fLower ~= mLower and memberByName[fLower] then
+                        adj[mLower][fLower] = true
+                        adj[fLower] = adj[fLower] or {}
+                        adj[fLower][mLower] = true
                     end
                 end
+            end
+        end
+    end
 
-                -- Se nenhum foi marcado como isMain, elege o de maior nível ou primeiro da lista
-                if not mainMember then
-                    table.sort(altMembers, function(a, b)
-                        return (a:getLevel() or 0) > (b:getLevel() or 0)
-                    end)
-                    mainMember = table.remove(altMembers, 1)
+    -- 3. Identifica famílias completas via busca em largura (BFS) sem sobreposições
+    local visited = {}
+    local mainGroups = {}
+
+    for _, m in ipairs(uniqueMembers) do
+        local mLower = (m:getName() or ""):lower()
+        if not visited[mLower] then
+            local component = {}
+            local queue = { mLower }
+            visited[mLower] = true
+
+            while #queue > 0 do
+                local curr = table.remove(queue, 1)
+                local mem = memberByName[curr]
+                if mem then
+                    table.insert(component, mem)
                 end
 
-                -- Ordena os alts do grupo por nível decrescente e nome
+                if adj[curr] then
+                    for neighbor, _ in pairs(adj[curr]) do
+                        if not visited[neighbor] then
+                            visited[neighbor] = true
+                            table.insert(queue, neighbor)
+                        end
+                    end
+                end
+            end
+
+            -- Determina quem é o Main da família e separa os Alts
+            local mainMember = nil
+            local altMembers = {}
+
+            for _, mem in ipairs(component) do
+                if mem:isMain() then
+                    if not mainMember then
+                        mainMember = mem
+                    else
+                        -- Se mais de um estiver com flag isMain, desempata pelo cargo de maior prestígio ou nível
+                        local curRank = mem:getRankIndex() or 99
+                        local mainRank = mainMember:getRankIndex() or 99
+                        if curRank < mainRank or (curRank == mainRank and (mem:getLevel() or 0) > (mainMember:getLevel() or 0)) then
+                            table.insert(altMembers, mainMember)
+                            mainMember = mem
+                        else
+                            table.insert(altMembers, mem)
+                        end
+                    end
+                else
+                    table.insert(altMembers, mem)
+                end
+            end
+
+            -- Se nenhum estiver explicitamente marcado como isMain, elege o de maior nível / rank
+            if not mainMember then
                 table.sort(altMembers, function(a, b)
                     local lvlA = a:getLevel() or 0
                     local lvlB = b:getLevel() or 0
                     if lvlA ~= lvlB then return lvlA > lvlB end
+                    local rA = a:getRankIndex() or 99
+                    local rB = b:getRankIndex() or 99
+                    if rA ~= rB then return rA < rB end
                     return (a:getName() or "") < (b:getName() or "")
                 end)
-
-                table.insert(mainGroups, {
-                    main = mainMember,
-                    alts = altMembers,
-                })
+                mainMember = table.remove(altMembers, 1)
             end
+
+            -- Ordena os alts do grupo por nível decrescente e nome
+            table.sort(altMembers, function(a, b)
+                local lvlA = a:getLevel() or 0
+                local lvlB = b:getLevel() or 0
+                if lvlA ~= lvlB then return lvlA > lvlB end
+                return (a:getName() or "") < (b:getName() or "")
+            end)
+
+            table.insert(mainGroups, {
+                main = mainMember,
+                alts = altMembers,
+            })
         end
     end
 
@@ -1513,9 +1703,9 @@ function AuditView:renderRows()
                 end
             else
                 row.toggleBtn:Hide()
-                local branch = rowData.isLastAlt and "└──" or "├──"
-                row.nameTxt:SetPoint("LEFT", row, "LEFT", 24, 0)
-                row.nameTxt:SetText(string.format("|cff888888%s|r |cff00e5ff[ALT]|r %s", branch, coloredName))
+                local branch = "|cff888888»|r"
+                row.nameTxt:SetPoint("LEFT", row, "LEFT", 26, 0)
+                row.nameTxt:SetText(string.format("%s |cff00e5ff[ALT]|r %s", branch, coloredName))
             end
 
             -- Coluna 2: Nível (Centralizado e nítido)
@@ -1656,6 +1846,12 @@ function AuditView:toggle()
     else
         self:show()
     end
+end
+
+--- Retorna o frame principal da janela de auditoria.
+---@return table
+function AuditView:getFrame()
+    return self._frame
 end
 
 --- Verifica se a janela de auditoria está aberta.

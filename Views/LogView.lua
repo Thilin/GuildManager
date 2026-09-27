@@ -80,8 +80,8 @@ function LogView:new()
     instance._rows = {}
     instance._filterText = ""
     instance._activeEventFilter = "ALL"
-    instance._numVisibleRows = 14
-    instance._rowHeight = 22
+    instance._numVisibleRows = 15
+    instance._rowHeight = 23
     instance._onRefreshCallback = nil
 
     instance:createUI()
@@ -105,7 +105,7 @@ function LogView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerLogFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(720, 480)
+    frame:SetSize(840, 510)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -467,6 +467,140 @@ function LogView:createUI()
     self._refreshBtn = refreshBtn
 
     self:updateFilterButtonsVisual()
+    self:createSideTabs()
+end
+
+--- Cria as abas de navegação lateral (estilo Profissões Blizzard) na borda direita da janela.
+function LogView:createSideTabs()
+    local frame = self._frame
+    if not frame then return end
+
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+
+    local SIDE_TAB_BACKDROP = {
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    }
+
+    -- ---------------------------------------------------------
+    -- Aba 1: Auditoria (Inativa nesta tela - Ícone Livro Aberto)
+    -- ---------------------------------------------------------
+    local tabAudit = CreateFrame("Button", "GM_LogSideTab_Audit", frame, template)
+    tabAudit:SetSize(36, 36)
+    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -44)
+    if tabAudit.SetBackdrop then
+        tabAudit:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabAudit:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabAudit:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+
+    local auditIcon = tabAudit:CreateTexture(nil, "ARTWORK")
+    auditIcon:SetPoint("TOPLEFT", tabAudit, "TOPLEFT", 4, -4)
+    auditIcon:SetPoint("BOTTOMRIGHT", tabAudit, "BOTTOMRIGHT", -4, 4)
+    auditIcon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
+    auditIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    auditIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabAudit.icon = auditIcon
+
+    local auditHl = tabAudit:CreateTexture(nil, "HIGHLIGHT")
+    auditHl:SetAllPoints(tabAudit)
+    auditHl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.30)
+    tabAudit:SetHighlightTexture(auditHl)
+
+    tabAudit:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        auditIcon:SetVertexColor(1.0, 1.0, 1.0)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
+        GameTooltip:AddLine("Clique para alternar para a tela de Auditoria de Membros.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+
+    tabAudit:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        auditIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+
+    tabAudit:SetScript("OnClick", function()
+        if PlaySound then
+            if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then
+                PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
+            else
+                pcall(PlaySound, 841)
+            end
+        end
+
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+
+        local auditCtrl = (_G.GM and _G.GM.auditController) or _G.auditController
+        if auditCtrl then
+            auditCtrl:show()
+            local auditFrame = (_G.GM and _G.GM.auditView and _G.GM.auditView.getFrame and _G.GM.auditView:getFrame()) or (auditCtrl._auditView and auditCtrl._auditView:getFrame())
+            if auditFrame and point then
+                auditFrame:ClearAllPoints()
+                if relativeTo then
+                    auditFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs)
+                else
+                    auditFrame:SetPoint(point, xOfs, yOfs)
+                end
+            end
+        end
+    end)
+
+    -- ---------------------------------------------------------
+    -- Aba 2: Logs (Ativa nesta tela - Folhas de Papel / Jornal)
+    -- ---------------------------------------------------------
+    local tabLogs = CreateFrame("Button", "GM_LogSideTab_Logs", frame, template)
+    tabLogs:SetSize(36, 36)
+    tabLogs:SetPoint("TOPLEFT", tabAudit, "BOTTOMLEFT", 0, -8)
+    if tabLogs.SetBackdrop then
+        tabLogs:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabLogs:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
+        tabLogs:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+    end
+
+    local logsIcon = tabLogs:CreateTexture(nil, "ARTWORK")
+    logsIcon:SetPoint("TOPLEFT", tabLogs, "TOPLEFT", 4, -4)
+    logsIcon:SetPoint("BOTTOMRIGHT", tabLogs, "BOTTOMRIGHT", -4, 4)
+    logsIcon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
+    logsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    logsIcon:SetVertexColor(1.0, 1.0, 1.0)
+    tabLogs.icon = logsIcon
+
+    -- Brilho dourado de aba ativa
+    local logsGlow = tabLogs:CreateTexture(nil, "OVERLAY")
+    logsGlow:SetPoint("TOPLEFT", tabLogs, "TOPLEFT", -2, 2)
+    logsGlow:SetPoint("BOTTOMRIGHT", tabLogs, "BOTTOMRIGHT", 2, -2)
+    logsGlow:SetTexture("Interface\\Buttons\\CheckButtonHilight")
+    logsGlow:SetBlendMode("ADD")
+    logsGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
+    tabLogs.glow = logsGlow
+
+    tabLogs:SetScript("OnEnter", function(btn)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
+        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine("Histórico completo de eventos, níveis e registros da guilda.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabLogs:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    self._tabAudit = tabAudit
+    self._tabLogs = tabLogs
 end
 
 --- Atualiza a aparência dos botões de filtro de eventos.
@@ -731,7 +865,7 @@ function LogView:formatColoredMessage(log)
             local rawMsg = log:getMessage() or ""
             lvl = rawMsg:match("n[íi]vel%s+(%d+)") or "?"
         end
-        return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
+        return string.format("Membro %s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
     end
 
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then
@@ -871,6 +1005,12 @@ function LogView:toggle()
     else
         self:show()
     end
+end
+
+--- Retorna o frame principal da janela de logs.
+---@return table
+function LogView:getFrame()
+    return self._frame
 end
 
 --- Verifica se a janela de logs está aberta.

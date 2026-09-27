@@ -69,6 +69,7 @@ function GuildRosterService:scanRoster()
 
     -- Reconcilia membros que saíram da guilda desde a última varredura
     if processedCount > 0 then
+        self._activeRosterNames = activeRosterNames
         self._memberService:reconcileGuildMembers(activeRosterNames, activeRosterGuids)
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
@@ -187,4 +188,10 @@ function GuildRosterService:formatLastOnline(years, months, days, hours)
     else
         return "< 1 hora"
     end
+end
+
+--- Retorna a tabela hash de nomes de membros ativos encontrados no último scan.
+---@return table<string, boolean>|nil
+function GuildRosterService:getActiveRosterNames()
+    return self._activeRosterNames
 end

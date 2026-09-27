@@ -296,8 +296,8 @@ function MemberService:reconcileGuildMembers(activeRosterNames, activeRosterGuid
                     self._missingRosterScans = self._missingRosterScans or {}
                     self._missingRosterScans[nameLower] = (self._missingRosterScans[nameLower] or 0) + 1
 
-                    -- Apenas marca como saída se ausente por pelo menos 3 scans consecutivos E se o log oficial de eventos já está disponível
-                    if self._missingRosterScans[nameLower] >= 3 and self:hasGuildEventLogEntries() then
+                    -- Marca como saída se ausente por pelo menos 3 scans consecutivos
+                    if self._missingRosterScans[nameLower] >= 3 then
                         self:_markMemberLeftGuild(member, today)
                         if self._logService then
                             self._logService:logGuildLeave(memberName, member:getGuid(), nil, nil, member:getClass())
