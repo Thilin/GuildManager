@@ -25,6 +25,8 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local auditView = AuditView:new()
         local auditController = AuditController:new(memberService, guildRosterService, auditView, logService)
 
+        local minimapButton = MinimapButton:new()
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -37,6 +39,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.memberController = memberController
         GM.auditView = auditView
         GM.auditController = auditController
+        GM.minimapButton = minimapButton
 
         memberController:initHooks()
         logController:initHooks()

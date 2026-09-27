@@ -20,6 +20,7 @@ Services/GuildRosterService.lua
 Views/MemberView.lua
 Views/LogView.lua
 Views/AuditView.lua
+Views/MinimapButton.lua
 
 Controllers/MemberController.lua
 Controllers/LogController.lua
