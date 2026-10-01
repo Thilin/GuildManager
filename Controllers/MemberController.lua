@@ -1393,20 +1393,7 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
     end
 
     -- Desvincula imediatamente da lista de alts
-    local unlinked = self._memberService:unlinkMemberOnGuildLeave(cleanKicked)
-    if cleanKicker ~= "" then
-        if unlinked then
-            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda por %s e desvinculado dos alts.", cleanKicked, cleanKicker))
-        else
-            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda por %s.", cleanKicked, cleanKicker))
-        end
-    else
-        if unlinked then
-            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda e desvinculado dos alts.", cleanKicked))
-        else
-            print(string.format("|cffff4040[GuildManager]|r %s foi REMOVIDO da guilda.", cleanKicked))
-        end
-    end
+    self._memberService:unlinkMemberOnGuildLeave(cleanKicked)
 
     -- Registra o log de expulsão (KICK)
     if self._logService then
