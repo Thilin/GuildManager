@@ -66,6 +66,7 @@ local EVENT_COLORS = {
     PUBLICNOTE = { r = 0.45, g = 0.90, b = 1.00, hex = "|cff73e6ff" },
     NAMECHANGE = { r = 0.85, g = 0.55, b = 1.00, hex = "|cffd98cff" },
     INACTIVERETURN = { r = 0.15, g = 1.00, b = 0.75, hex = "|cff26ffbf" },
+    MEMBERRETURN = { r = 1.00, g = 0.70, b = 0.20, hex = "|cffffb333" },
 }
 
 --- Construtor da View de Logs.
@@ -656,7 +657,7 @@ function LogView:applyFilters()
         local evt = log:getEvent()
 
         if eventFilter == "JOINED" then
-            matchEvent = (evt == LogEvent.JOINED or evt == "JOINED")
+            matchEvent = (evt == LogEvent.JOINED or evt == "JOINED" or evt == LogEvent.MEMBERRETURN or evt == "MEMBERRETURN")
         elseif eventFilter == "LEVELED" then
             matchEvent = (evt == LogEvent.LEVELED or evt == "LEVELED")
         elseif eventFilter == "LEFT_KICK" then
@@ -664,7 +665,7 @@ function LogView:applyFilters()
         elseif eventFilter == "NOTES" then
             matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE or evt == "OFFICERNOTE" or evt == "PUBLICNOTE")
         elseif eventFilter == "OTHER" then
-            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
+            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.MEMBERRETURN and evt ~= "MEMBERRETURN" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
         end
 
         if matchEvent then
@@ -684,6 +685,8 @@ function LogView:applyFilters()
                 elseif (evt == "LEFT" or evt == LogEvent.LEFT) and ("saiu"):find(search, 1, true) then
                     matchKeyword = true
                 elseif (evt == "KICK" or evt == LogEvent.KICK) and ("removido expulso kick"):find(search, 1, true) then
+                    matchKeyword = true
+                elseif (evt == "MEMBERRETURN" or evt == LogEvent.MEMBERRETURN) and ("retornou retorno volta voltar"):find(search, 1, true) then
                     matchKeyword = true
                 end
 

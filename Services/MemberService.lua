@@ -166,6 +166,17 @@ function MemberService:processRosterMember(rosterData)
     local pendingRecruiter = self:getPendingRecruiter(rosterData.name)
 
     if member then
+        local wasOutOfGuild = not member:isInGuild()
+        local hadLeftBefore = (member:getTimesLeft() and member:getTimesLeft() > 0) or (member:getDateLeft() and member:getDateLeft() ~= "")
+        local wasExMember = wasOutOfGuild or hadLeftBefore
+        local lastRank = member:getLastRank() or ""
+        local dateLeft = member:getDateLeft() or ""
+        local timesLeft = member:getTimesLeft() or 0
+        if wasExMember and timesLeft == 0 then
+            timesLeft = 1
+            member:setTimesLeft(1)
+        end
+
         local oldLevel = member:getLevel()
         local newLevel = tonumber(rosterData.level)
 
@@ -187,6 +198,18 @@ function MemberService:processRosterMember(rosterData)
 
         -- Membro já existente: atualiza dados dinâmicos da API
         member:updateFromRoster(rosterData)
+
+        -- Se o membro estava fora da guilda e retornou detectado pelo roster:
+        if wasOutOfGuild then
+            member:setInGuild(true)
+            local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+            if member:getDateJoin() == "" or member:getDateJoin() ~= today then
+                member:setDateJoin(today)
+            end
+            if _G.GM and _G.GM.memberController and _G.GM.memberController.notifyExMemberReturn then
+                _G.GM.memberController:notifyExMemberReturn(member:getName(), lastRank, dateLeft, timesLeft, member:getRecruiter(), member:getClass())
+            end
+        end
 
         -- Se o membro ainda não tiver recrutador registrado, associa o recrutador pendente ou vindo dos dados
         if member:getRecruiter() == "" then

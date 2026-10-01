@@ -7,6 +7,7 @@
 ---| "PUBLICNOTE"
 ---| "NAMECHANGE"
 ---| "INACTIVERETURN"
+---| "MEMBERRETURN"
 
 --- Enum de Eventos de Log suportados pelo GuildManager
 local RAW_EVENTS = {
@@ -18,6 +19,7 @@ local RAW_EVENTS = {
     PUBLICNOTE = "PUBLICNOTE",
     NAMECHANGE = "NAMECHANGE",
     INACTIVERETURN = "INACTIVERETURN",
+    MEMBERRETURN = "MEMBERRETURN",
 }
 
 -- Tabela para validação rápida O(1) de eventos válidos
@@ -46,6 +48,7 @@ local enumMeta = {
 ---@field PUBLICNOTE "PUBLICNOTE" @Nota pública foi alterada
 ---@field NAMECHANGE "NAMECHANGE" @Membro alterou o nome do personagem
 ---@field INACTIVERETURN "INACTIVERETURN" @Membro inativo retornou à atividade
+---@field MEMBERRETURN "MEMBERRETURN" @Ex-membro retornou à guilda
 LogEvent = setmetatable({}, enumMeta)
 
 ---@class Log

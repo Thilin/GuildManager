@@ -410,7 +410,7 @@ function Member:updateFromRoster(data)
     -- Se o jogador estava marcado como fora da guilda e reapareceu no roster:
     if not self._isInGuild then
         self._isInGuild = true
-        self._dateLeft = ""
+        -- Preserva self._dateLeft, self._lastRank e self._timesLeft como registro histórico da última saída
     end
 end
 
@@ -568,6 +568,13 @@ end
 function Member:setRecruiter(recruiter)
     self._recruiter = tostring(recruiter or "")
 end
+
+--- Verifica se este membro é um ex-membro que já esteve fora da guilda ou possui registro de saídas.
+---@return boolean
+function Member:isExMember()
+    return not self._isInGuild or (self._timesLeft and self._timesLeft > 0) or (self._dateLeft and self._dateLeft ~= "") or (self._lastRank and self._lastRank ~= "")
+end
+
 
 
 

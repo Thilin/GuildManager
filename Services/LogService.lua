@@ -100,6 +100,104 @@ function LogService:logRecruitment(recruitName, recruiterName, guid, timestamp, 
     return newLog, true
 end
 
+--- Formata a mensagem padrão para o evento MEMBERRETURN.
+--- Padrão: "Ex-membro Player X RETORNOU à guilda (Último cargo: Y | Saída: Z | Saídas: N vezes)"
+---@param memberName string
+---@param lastRank string|nil
+---@param dateLeft string|nil
+---@param timesLeft number|nil
+---@param recruiterName string|nil
+---@param memberClass string|nil
+---@param recClass string|nil
+---@return string
+function LogService:formatMemberReturnMessage(memberName, lastRank, dateLeft, timesLeft, recruiterName, memberClass, recClass)
+    local coloredMember = self:formatColoredMemberName(memberName, memberClass)
+    local rankStr = (lastRank and lastRank ~= "") and lastRank or "Não registrado"
+    local dateStr = (dateLeft and dateLeft ~= "") and dateLeft or "Não informada"
+    local timesNum = tonumber(timesLeft) or 1
+    if timesNum < 1 then timesNum = 1 end
+    local timesStr = (timesNum == 1) and "1 vez" or string.format("%d vezes", timesNum)
+
+    local msg = string.format("Ex-membro %s |cffffaa00RETORNOU|r |cffffd980à guilda|r |cffa8f0a8(Último cargo:|r |cffffff00%s|r|cffa8f0a8, Saída:|r |cffffff00%s|r|cffa8f0a8, Saídas:|r |cffff5555%s|r|cffa8f0a8)|r",
+        coloredMember, rankStr, dateStr, timesStr)
+
+    if recruiterName and recruiterName ~= "" and recruiterName ~= "Desconhecido" then
+        local coloredRecruiter = self:formatColoredMemberName(recruiterName, recClass)
+        msg = msg .. string.format(" |cffa8f0a8recrutado por|r %s", coloredRecruiter)
+    end
+
+    return msg
+end
+
+--- Registra o evento de retorno de um ex-membro à guilda (MEMBERRETURN).
+--- Evita duplicidade se o retorno já tiver sido registrado recentemente (nos últimos 600 segundos).
+---@param memberName string
+---@param lastRank string|nil
+---@param dateLeft string|nil
+---@param timesLeft number|nil
+---@param recruiterName string|nil
+---@param guid string|nil
+---@param timestamp number|nil
+---@param dateStr string|nil
+---@return Log|nil, boolean
+function LogService:logMemberReturn(memberName, lastRank, dateLeft, timesLeft, recruiterName, guid, timestamp, dateStr)
+    if not memberName or memberName == "" then
+        return nil, false
+    end
+
+    -- Evita duplicidade se o retorno já foi registrado recentemente
+    if self._repository and self._repository.findRecentReturnLog then
+        local existingReturn = self._repository:findRecentReturnLog(memberName, 600)
+        if existingReturn then
+            return existingReturn, false
+        end
+    end
+
+    local memberClass = ""
+    local recClass = ""
+    local mService = self._memberService or (_G.GM and _G.GM.memberService)
+    if mService then
+        local m = mService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if not guid or guid == "" then guid = m:getGuid() or "" end
+            if not lastRank or lastRank == "" then lastRank = m:getLastRank() or "" end
+            if not dateLeft or dateLeft == "" then dateLeft = m:getDateLeft() or "" end
+            if not timesLeft or timesLeft == 0 then timesLeft = m:getTimesLeft() or 1 end
+        end
+        if recruiterName and recruiterName ~= "" then
+            local r = mService:getMember(recruiterName)
+            if r then recClass = r:getClass() or "" end
+        end
+    end
+
+    if (not dateLeft or dateLeft == "") and self._repository and self._repository.getLastExitDate then
+        dateLeft = self._repository:getLastExitDate(memberName) or ""
+    end
+
+    if memberClass == "" and guid and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    local message = self:formatMemberReturnMessage(memberName, lastRank, dateLeft, timesLeft, recruiterName, memberClass, recClass)
+
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid or "",
+        message = message,
+        event = LogEvent.MEMBERRETURN or "MEMBERRETURN",
+        recruiter = recruiterName or "",
+        recruiterClass = recClass,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
 --- Atualiza o recrutador de um registro JOINED já gravado (ou cria caso não exista).
 ---@param recruitName string
 ---@param recruiterName string

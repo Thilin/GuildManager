@@ -166,6 +166,88 @@ function LogRepository:findRecentKickLog(name, withinSeconds)
     return nil, nil
 end
 
+--- Busca um log recente de retorno de ex-membro (MEMBERRETURN) para evitar registros duplicados.
+---@param name string
+---@param withinSeconds number|nil
+---@return Log|nil
+function LogRepository:findRecentReturnLog(name, withinSeconds)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil
+    end
+
+    local lowerName = name:lower()
+    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    local threshold = withinSeconds or 600
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and rawData.event == "MEMBERRETURN" then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local logTime = rawData.timestamp or 0
+                if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                    rawData.id = rawData.id or i
+                    return Log:new(rawData)
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Busca a data da última saída registrada nos logs para o personagem.
+---@param name string
+---@return string|nil
+function LogRepository:getLastExitDate(name)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil
+    end
+
+    local lowerName = name:lower()
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED" or rawData.event == "KICK") then
+            if rawData.name and rawData.name:lower() == lowerName then
+                if rawData.date and rawData.date ~= "" then
+                    local d = rawData.date:match("^(%d%d%d%d%-%d%d%-%d%d)") or rawData.date
+                    return d
+                elseif rawData.timestamp and rawData.timestamp > 0 then
+                    if date then
+                        return date("%Y-%m-%d", rawData.timestamp)
+                    elseif os and os.date then
+                        return os.date("%Y-%m-%d", rawData.timestamp)
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Conta a quantidade de registros de saída (LEFT ou KICK) para o personagem nos logs.
+---@param name string
+---@return number
+function LogRepository:countExitLogs(name)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return 0
+    end
+
+    local lowerName = name:lower()
+    local count = 0
+    for _, rawData in ipairs(self._db.logs) do
+        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED" or rawData.event == "KICK") then
+            if rawData.name and rawData.name:lower() == lowerName then
+                count = count + 1
+            end
+        end
+    end
+
+    return count
+end
+
+
+
 --- Verifica se existe algum log de saída (LEFT) registrado para o personagem.
 --- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
 ---@param name string
