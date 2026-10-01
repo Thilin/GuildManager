@@ -868,7 +868,7 @@ function LogView:formatColoredMessage(log)
             local rawMsg = log:getMessage() or ""
             lvl = rawMsg:match("n[íi]vel%s+(%d+)") or "?"
         end
-        return string.format("Membro %s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
+        return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
     end
 
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then

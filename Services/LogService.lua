@@ -504,7 +504,7 @@ function LogService:formatLeveledMessage(memberName, newLevel, memberClass)
     end
 
     local coloredName = self:formatColoredMemberName(name, classToken)
-    return string.format("Membro %s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%d|r", coloredName, tonumber(newLevel) or 1)
+    return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%d|r", coloredName, tonumber(newLevel) or 1)
 end
 
 --- Registra o evento de evolução de nível (LEVELED) de um membro da guilda.
