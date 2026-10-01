@@ -105,6 +105,10 @@ function Log:new(data)
         instance._event = event or ""
     end
 
+    if instance._event == LogEvent.LEVELED or instance._event == "LEVELED" then
+        instance._message = instance._message:gsub("^%s*[Mm]embro%s+", "")
+    end
+
 
     -- Metadados de data e hora para ordenação e histórico:
     local currentUnix = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0

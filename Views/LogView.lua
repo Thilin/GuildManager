@@ -865,7 +865,7 @@ function LogView:formatColoredMessage(log)
             local rawMsg = log:getMessage() or ""
             lvl = rawMsg:match("n[íi]vel%s+(%d+)") or "?"
         end
-        return string.format("Membro %s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
+        return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
     end
 
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then
@@ -906,6 +906,9 @@ function LogView:formatColoredMessage(log)
     end
 
     -- Realça palavras-chave em logs genéricos ou legados
+    if rawMsg:find("SUBIU", 1, true) then
+        rawMsg = rawMsg:gsub("^%s*[Mm]embro%s+", "")
+    end
     rawMsg = rawMsg:gsub("SUBIU", "|cffffd91aSUBIU|r")
     rawMsg = rawMsg:gsub("RECRUTADO", "|cff40ff40RECRUTADO|r")
     rawMsg = rawMsg:gsub("SAIU", "|cffff9926SAIU|r")

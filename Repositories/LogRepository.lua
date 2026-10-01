@@ -58,6 +58,9 @@ function LogRepository:findAll()
 
     for idx, rawData in ipairs(self._db.logs) do
         rawData.id = rawData.id or idx
+        if (rawData.event == "LEVELED" or rawData.event == LogEvent.LEVELED) and rawData.message then
+            rawData.message = rawData.message:gsub("^%s*[Mm]embro%s+", "")
+        end
         table.insert(result, Log:new(rawData))
     end
 
@@ -77,6 +80,9 @@ function LogRepository:findByName(name)
     for idx, rawData in ipairs(self._db.logs) do
         if rawData.name and rawData.name:lower() == lowerName then
             rawData.id = rawData.id or idx
+            if (rawData.event == "LEVELED" or rawData.event == LogEvent.LEVELED) and rawData.message then
+                rawData.message = rawData.message:gsub("^%s*[Mm]embro%s+", "")
+            end
             table.insert(result, Log:new(rawData))
         end
     end
