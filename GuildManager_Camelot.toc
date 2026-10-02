@@ -1,4 +1,4 @@
-## Interface: 16001, 11506
+## Interface: 16001
 ## Title: Guild Manager
 ## Notes: Gerenciador de guilda com rastreamento avançado de membros, notas e histórico.
 ## Author: Thilin
