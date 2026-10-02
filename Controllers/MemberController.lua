@@ -830,7 +830,14 @@ function MemberController:handleSystemChatMessage(message)
         return
     end
 
-    -- 3. Verifica se o jogador local convidou alguém (confirmação do sistema)
+    -- 4. Verifica se um membro foi promovido para um cargo maior
+    local promotedName, promoterName, newRank = self:matchGuildPromote(message)
+    if promotedName and newRank then
+        self:handleGuildPromote(promotedName, promoterName, newRank)
+        return
+    end
+
+    -- 5. Verifica se o jogador local convidou alguém (confirmação do sistema)
     local invitedTarget = self:matchGuildInvite(message)
     if invitedTarget then
         local myName = UnitName and UnitName("player") or ""
@@ -1115,6 +1122,104 @@ function MemberController:matchGuildLeave(message)
     end
 
     return nil
+end
+
+--- Extrai o nome do membro promovido, de quem o promoveu e o novo cargo a partir das mensagens do sistema da Blizzard.
+---@param message string
+---@return string|nil, string|nil, string|nil @promotedName, promoterName, newRank
+function MemberController:matchGuildPromote(message)
+    if not message or type(message) ~= "string" or message == "" then
+        return nil, nil, nil
+    end
+
+    local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
+    clean = clean:match("^%s*(.-)%s*$")
+
+    -- 1. Variável global oficial da Blizzard ERR_GUILD_PROMOTE_SSS
+    -- No WoW: "%s has promoted %s to %s." / "%s promoveu %s a %s." / "%s promoveu %s ao cargo de %s."
+    -- %1$s = Promoter (quem promoveu)
+    -- %2$s = Promoted (membro promovido)
+    -- %3$s = New Rank (novo cargo)
+    if _G.ERR_GUILD_PROMOTE_SSS then
+        local tpl = _G.ERR_GUILD_PROMOTE_SSS
+        local s = tpl
+        local hasPositional = s:find("%%1%$s") or s:find("%%2%$s") or s:find("%%3%$s")
+        if hasPositional then
+            s = s:gsub("%%1%$s", "___GM_PROMOTER___"):gsub("%%2%$s", "___GM_PROMOTED___"):gsub("%%3%$s", "___GM_RANK___")
+        else
+            s = s:gsub("%%s", "___GM_PROMOTER___", 1):gsub("%%s", "___GM_PROMOTED___", 1):gsub("%%s", "___GM_RANK___", 1)
+        end
+        s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+
+        local pPromoter = s:find("___GM_PROMOTER___")
+        local pPromoted = s:find("___GM_PROMOTED___")
+        local pRank = s:find("___GM_RANK___")
+
+        if pPromoter and pPromoted and pRank then
+            s = s:gsub("___GM_PROMOTER___", "(.-)"):gsub("___GM_PROMOTED___", "(.-)"):gsub("___GM_RANK___", "(.+)")
+            local v1, v2, v3 = clean:match("^" .. s .. "$")
+            if not v1 then v1, v2, v3 = clean:match(s) end
+            if not v1 then
+                local sNoDot = s:gsub("%%%.$", "")
+                v1, v2, v3 = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+            end
+            if v1 and v2 and v3 and v1 ~= "" and v2 ~= "" and v3 ~= "" then
+                local promoter, promoted, rank
+                if pPromoter < pPromoted and pPromoted < pRank then
+                    promoter, promoted, rank = v1, v2, v3
+                elseif pPromoted < pPromoter and pPromoter < pRank then
+                    promoted, promoter, rank = v1, v2, v3
+                else
+                    promoter, promoted, rank = v1, v2, v3
+                end
+                rank = rank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$")
+                return self:sanitizeCharacterName(promoted), self:sanitizeCharacterName(promoter), rank
+            end
+        end
+    end
+
+    -- 2. Fallbacks diretos em Português e Inglês (terceira e primeira pessoa)
+    local promoPatterns = {
+        -- Terceira pessoa PT:
+        { pattern = "^(.-) promoveu (.+) ao cargo de (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) promoveu (.+) a (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) promoveu (.+) para (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+
+        -- Primeira pessoa PT:
+        { pattern = "^Você promoveu (.+) ao cargo de (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
+        { pattern = "^Você promoveu (.+) a (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
+        { pattern = "^Você promoveu (.+) para (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
+
+        -- Terceira pessoa EN:
+        { pattern = "^(.-) has promoted (.+) to the rank of (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) has promoted (.+) to (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+
+        -- Primeira pessoa EN:
+        { pattern = "^You have promoted (.+) to the rank of (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
+        { pattern = "^You have promoted (.+) to (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
+    }
+
+    for _, item in ipairs(promoPatterns) do
+        local m1, m2, m3 = clean:match(item.pattern)
+        if m1 and m2 then
+            local promoter, promoted, rank
+            if item.isSelf then
+                promoter = self:resolvePlayerFullName() or (UnitName and UnitName("player")) or ""
+                promoted = m1
+                rank = m2
+            else
+                promoter = (item.promoterIdx == 1) and m1 or ((item.promoterIdx == 2) and m2 or m3)
+                promoted = (item.promotedIdx == 1) and m1 or ((item.promotedIdx == 2) and m2 or m3)
+                rank = (item.rankIdx == 1) and m1 or ((item.rankIdx == 2) and m2 or m3)
+            end
+            if promoted and promoted ~= "" and rank and rank ~= "" then
+                rank = rank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$")
+                return self:sanitizeCharacterName(promoted), self:sanitizeCharacterName(promoter), rank
+            end
+        end
+    end
+
+    return nil, nil, nil
 end
 
 --- Manipula a detecção da entrada de um novo membro na guilda, associando o recrutador correspondente.
@@ -1434,6 +1539,92 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
     end
 end
 
+--- Manipula a detecção de promoção de um membro na guilda.
+--- Obtém o cargo anterior do membro, persiste a alteração e grava o log de PROMOTION.
+---@param promotedName string @Nome do personagem promovido
+---@param promoterName string|nil @Nome de quem o promoveu
+---@param newRank string @Nome do novo cargo
+---@param eventTimestamp number|nil @Timestamp Unix do evento (opcional)
+function MemberController:handleGuildPromote(promotedName, promoterName, newRank, eventTimestamp)
+    local cleanPromoted = self:sanitizeCharacterName(promotedName)
+    local cleanPromoter = self:sanitizeCharacterName(promoterName)
+    local cleanRank = newRank and newRank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$") or ""
+
+    if not cleanPromoted or cleanPromoted == "" or not cleanRank or cleanRank == "" then
+        return
+    end
+
+    local member = self._memberService:getMember(cleanPromoted)
+    local oldRank = ""
+    local oldRankIndex = nil
+    local newRankIndex = nil
+
+    if member then
+        oldRank = member:getRankName() or ""
+        oldRankIndex = member:getRankIndex()
+    end
+
+    -- Se o membro já possui log de promoção para este cargo e mesmo período, evita reprocessamento
+    if self._logService and self._logService.hasPromotionLog and self._logService:hasPromotionLog(cleanPromoted, cleanRank, eventTimestamp) then
+        return
+    end
+
+    -- Registra o log através do LogService
+    if self._logService then
+        local dateStr = nil
+        if eventTimestamp and eventTimestamp > 0 then
+            if date then
+                dateStr = date("%Y-%m-%d %H:%M:%S", eventTimestamp)
+            elseif os and os.date then
+                dateStr = os.date("%Y-%m-%d %H:%M:%S", eventTimestamp)
+            end
+        end
+        self._logService:logMemberPromotion(member or cleanPromoted, cleanPromoter, oldRank, cleanRank, oldRankIndex, newRankIndex, eventTimestamp, dateStr)
+    end
+
+    -- Atualiza o cargo na entidade Member se o membro já existe no banco
+    if member and cleanRank ~= "" and cleanRank ~= oldRank then
+        member:setRankName(cleanRank)
+        self._memberService:saveMember(member)
+    end
+
+    -- Notificação no chat com destaque visual
+    if cleanPromoter ~= "" and cleanPromoter ~= "Desconhecido" then
+        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
+            cleanPromoted, cleanRank, cleanPromoter,
+            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+    else
+        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r!%s",
+            cleanPromoted, cleanRank,
+            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+    end
+
+    -- Se a janela estiver aberta exibindo o membro promovido, atualiza a interface
+    if self._memberView and self._memberView._frame and self._memberView._frame:IsShown() and self._memberView._currentMember then
+        local currentName = self._memberView._currentMember:getName()
+        if currentName and currentName:lower() == cleanPromoted:lower() then
+            local refreshed = self._memberService:getMember(currentName)
+            if refreshed then
+                self._memberView._currentMember = refreshed
+                if self._memberView.showMember then
+                    self._memberView:showMember(refreshed)
+                end
+            end
+        end
+    end
+
+    -- Solicita atualização do roster
+    if C_Timer and C_Timer.After then
+        C_Timer.After(1.0, function()
+            if IsInGuild and IsInGuild() then
+                self._guildRosterService:requestRosterUpdate()
+            end
+        end)
+    else
+        self._guildRosterService:requestRosterUpdate()
+    end
+end
+
 --- Trata mensagens recebidas de outros clientes do GuildManager via CHAT_MSG_ADDON.
 ---@param prefix string
 ---@param msg string
@@ -1539,6 +1730,13 @@ function MemberController:checkGuildEventLog()
                         if quitter and quitter ~= "" then
                             self:handleGuildLeave(quitter, entry.time)
                         end
+                    elseif entry.type == "promote" or entry.type == 3 or entry.type == "promoted" then
+                        local promoter = entry.player1 or entry.sourceName or ""
+                        local promoted = entry.player2 or entry.name or ""
+                        local newRank = entry.rank or entry.rankName or ""
+                        if promoted and promoted ~= "" then
+                            self:handleGuildPromote(promoted, promoter, newRank, entry.time)
+                        end
                     end
                 end
             end
@@ -1553,7 +1751,7 @@ function MemberController:checkGuildEventLog()
         if success and type(count) == "number" and count > 0 then
             local limit = math.min(count, 100)
             for i = 1, limit do
-                local s, eventType, p1, p2, _, years, months, days, hours = pcall(getInfo, i)
+                local s, eventType, p1, p2, rank, years, months, days, hours = pcall(getInfo, i)
                 if s and eventType then
                     local evtLower = tostring(eventType):lower()
                     local eventTimestamp = nil
@@ -1588,6 +1786,13 @@ function MemberController:checkGuildEventLog()
                         local quitter = p1
                         if quitter and quitter ~= "" then
                             self:handleGuildLeave(quitter, eventTimestamp)
+                        end
+                    elseif evtLower == "promote" or evtLower == "promoted" or evtLower:find("promote") or evtLower:find("promov") then
+                        local promoter = p1
+                        local promoted = p2
+                        local newRank = rank or ""
+                        if promoted and promoted ~= "" then
+                            self:handleGuildPromote(promoted, promoter, newRank, eventTimestamp)
                         end
                     end
                 end

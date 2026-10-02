@@ -3,6 +3,7 @@
 ---| "LEFT"
 ---| "KICK"
 ---| "LEVELED"
+---| "PROMOTION"
 ---| "OFFICERNOTE"
 ---| "PUBLICNOTE"
 ---| "NAMECHANGE"
@@ -14,6 +15,7 @@ local RAW_EVENTS = {
     LEFT = "LEFT",
     KICK = "KICK",
     LEVELED = "LEVELED",
+    PROMOTION = "PROMOTION",
     OFFICERNOTE = "OFFICERNOTE",
     PUBLICNOTE = "PUBLICNOTE",
     NAMECHANGE = "NAMECHANGE",
@@ -42,6 +44,7 @@ local enumMeta = {
 ---@field LEFT "LEFT" @Membro saiu da guilda
 ---@field KICK "KICK" @Membro foi expulso da guilda
 ---@field LEVELED "LEVELED" @Membro subiu de nível
+---@field PROMOTION "PROMOTION" @Membro foi promovido para um cargo maior
 ---@field OFFICERNOTE "OFFICERNOTE" @Nota de oficial foi alterada
 ---@field PUBLICNOTE "PUBLICNOTE" @Nota pública foi alterada
 ---@field NAMECHANGE "NAMECHANGE" @Membro alterou o nome do personagem
@@ -59,6 +62,12 @@ LogEvent = setmetatable({}, enumMeta)
 ---@field _recruiterClass string @Token da classe do recrutador (caso aplicável)
 ---@field _kicker string @Nome de quem expulsou o membro (caso KICK)
 ---@field _kickerClass string @Token da classe de quem expulsou o membro (caso KICK)
+---@field _promoter string @Nome de quem promoveu o membro (caso PROMOTION)
+---@field _promoterClass string @Token da classe de quem promoveu o membro (caso PROMOTION)
+---@field _oldRank string @Cargo anterior antes da promoção (caso PROMOTION)
+---@field _newRank string @Novo cargo alcançado (caso PROMOTION)
+---@field _oldRankIndex number|nil @Índice do cargo anterior
+---@field _newRankIndex number|nil @Índice do novo cargo
 ---@field _timestamp number @Timestamp Unix de quando o evento ocorreu
 ---@field _date string @Data legível formatada (AAAA-MM-DD HH:MM:SS)
 Log = {}
@@ -93,6 +102,12 @@ function Log:new(data)
     instance._recruiterClass = data.recruiterClass or ""
     instance._kicker = data.kicker or ""
     instance._kickerClass = data.kickerClass or ""
+    instance._promoter = data.promoter or ""
+    instance._promoterClass = data.promoterClass or ""
+    instance._oldRank = data.oldRank or ""
+    instance._newRank = data.newRank or ""
+    instance._oldRankIndex = tonumber(data.oldRankIndex)
+    instance._newRankIndex = tonumber(data.newRankIndex)
     instance._level = tonumber(data.level or data.newLevel)
 
     local event = data.event
@@ -313,6 +328,78 @@ function Log:setLevel(level)
     self._level = tonumber(level)
 end
 
+--- Obtém o nome de quem promoveu o membro (PROMOTION).
+---@return string
+function Log:getPromoter()
+    return self._promoter or ""
+end
+
+--- Define quem promoveu o membro (PROMOTION).
+---@param promoter string
+function Log:setPromoter(promoter)
+    self._promoter = tostring(promoter or "")
+end
+
+--- Obtém a classe de quem promoveu o membro (PROMOTION).
+---@return string
+function Log:getPromoterClass()
+    return self._promoterClass or ""
+end
+
+--- Define a classe de quem promoveu o membro (PROMOTION).
+---@param class string
+function Log:setPromoterClass(class)
+    self._promoterClass = tostring(class or "")
+end
+
+--- Obtém o cargo anterior do membro promovido.
+---@return string
+function Log:getOldRank()
+    return self._oldRank or ""
+end
+
+--- Define o cargo anterior do membro promovido.
+---@param oldRank string
+function Log:setOldRank(oldRank)
+    self._oldRank = tostring(oldRank or "")
+end
+
+--- Obtém o novo cargo do membro promovido.
+---@return string
+function Log:getNewRank()
+    return self._newRank or ""
+end
+
+--- Define o novo cargo do membro promovido.
+---@param newRank string
+function Log:setNewRank(newRank)
+    self._newRank = tostring(newRank or "")
+end
+
+--- Obtém o índice do cargo anterior.
+---@return number|nil
+function Log:getOldRankIndex()
+    return self._oldRankIndex
+end
+
+--- Define o índice do cargo anterior.
+---@param idx number
+function Log:setOldRankIndex(idx)
+    self._oldRankIndex = tonumber(idx)
+end
+
+--- Obtém o índice do novo cargo.
+---@return number|nil
+function Log:getNewRankIndex()
+    return self._newRankIndex
+end
+
+--- Define o índice do novo cargo.
+---@param idx number
+function Log:setNewRankIndex(idx)
+    self._newRankIndex = tonumber(idx)
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
@@ -328,6 +415,12 @@ function Log:serialize()
         recruiterClass = self._recruiterClass,
         kicker = self._kicker,
         kickerClass = self._kickerClass,
+        promoter = self._promoter,
+        promoterClass = self._promoterClass,
+        oldRank = self._oldRank,
+        newRank = self._newRank,
+        oldRankIndex = self._oldRankIndex,
+        newRankIndex = self._newRankIndex,
         timestamp = self._timestamp,
         date = self._date,
     }

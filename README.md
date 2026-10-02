@@ -12,7 +12,7 @@
 
 [X] log de recrutado
 
-[] log de promoçao quando o cargo de um membro for alterado para um cargo maior. Deve armazenar o nome de quem foi que promoveu e quem foi promovido.
+[X] log de promoçao quando o cargo de um membro for alterado para um cargo maior. Deve armazenar o nome de quem foi que promoveu e quem foi promovido, o cargo anterior e o cargo novo.
 
 [] log de rebaixamento quando o cargo de um membro for alterado para um cargo menor. Deve armazenar o nome de quem foi que rebaixou e quem foi rebaixado.
 

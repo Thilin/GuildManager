@@ -477,6 +477,165 @@ function LogService:logMemberLeveled(member, newLevel, oldLevel, timestamp, date
     return newLog, true
 end
 
+--- Formata a mensagem padrão obrigatória para o evento PROMOTION.
+--- Padrão: "Player X foi PROMOVIDO a CargoNovo por Player Y (anterior: CargoAntigo)" com cores temáticas.
+---@param promotedName string @Nome do personagem promovido
+---@param promoterName string|nil @Nome de quem o promoveu
+---@param oldRank string|nil @Cargo anterior
+---@param newRank string @Novo cargo alcançado
+---@param promotedClass string|nil @Classe do promovido
+---@param promoterClass string|nil @Classe do autor da promoção
+---@return string
+function LogService:formatPromotionMessage(promotedName, promoterName, oldRank, newRank, promotedClass, promoterClass)
+    local promoter = (promoterName and promoterName ~= "") and promoterName or "Desconhecido"
+    local coloredPromoted = self:formatColoredMemberName(promotedName, promotedClass)
+    local coloredPromoter
+    if promoter ~= "Desconhecido" then
+        coloredPromoter = self:formatColoredMemberName(promoter, promoterClass)
+    else
+        coloredPromoter = "|cff888888Desconhecido|r"
+    end
+    local rankStr = (newRank and newRank ~= "") and newRank or "Novo Cargo"
+    local rankChangeStr = ""
+    if oldRank and oldRank ~= "" and oldRank ~= newRank then
+        rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
+    end
+    return string.format("%s |cffa8f0a8foi|r |cff00e5ffPROMOVIDO|r |cffa8f0a8a|r |cffffff00%s|r |cffa8f0a8por|r %s%s", coloredPromoted, rankStr, coloredPromoter, rankChangeStr)
+end
+
+--- Verifica se existe algum log de promoção (PROMOTION) para o personagem.
+---@param name string
+---@param newRank string|nil
+---@param timestamp number|nil
+---@return boolean
+function LogService:hasPromotionLog(name, newRank, timestamp)
+    if self._repository and self._repository.hasPromotionLog then
+        return self._repository:hasPromotionLog(name, newRank, timestamp)
+    end
+    return false
+end
+
+--- Registra o evento de promoção (PROMOTION) de um membro para um cargo maior.
+--- Armazena quem promoveu, quem foi promovido, o cargo anterior e o cargo novo.
+--- Evita duplicidade se a promoção já tiver sido registrada recentemente.
+---@param member Member|string @Instância do membro promovido ou nome
+---@param promoterName string|nil @Nome de quem promoveu
+---@param oldRank string|nil @Cargo anterior
+---@param newRank string @Novo cargo alcançado
+---@param oldRankIndex number|nil @Índice do cargo anterior
+---@param newRankIndex number|nil @Índice do novo cargo
+---@param timestamp number|nil @Timestamp Unix do evento (opcional)
+---@param dateStr string|nil @Data legível formatada (opcional)
+---@param promoterClass string|nil @Token da classe do promotor (opcional)
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
+function LogService:logMemberPromotion(member, promoterName, oldRank, newRank, oldRankIndex, newRankIndex, timestamp, dateStr, promoterClass)
+    if not member or not newRank or newRank == "" then
+        return nil, false
+    end
+
+    local memberName = ""
+    local memberClass = ""
+    local guid = ""
+    if type(member) == "table" and member.getName then
+        memberName = member:getName()
+        memberClass = member:getClass() or ""
+        guid = member:getGuid() or ""
+        if not oldRank or oldRank == "" then
+            oldRank = member:getRankName() or ""
+        end
+        if not oldRankIndex then
+            oldRankIndex = member:getRankIndex()
+        end
+    else
+        memberName = tostring(member)
+    end
+
+    if memberName == "" then
+        return nil, false
+    end
+
+    -- 1. Verifica se já existe um log recente de promoção para este personagem e cargo
+    if self._repository and self._repository.findRecentPromotionLog then
+        local existingLog = self._repository:findRecentPromotionLog(memberName, newRank, 600)
+        if existingLog then
+            local modified = false
+            -- Se o log existente não possuía o promotor e agora temos o promotor, atualiza
+            local curPromoter = existingLog:getPromoter()
+            if (curPromoter == "" or curPromoter == "Desconhecido") and promoterName and promoterName ~= "" and promoterName ~= "Desconhecido" then
+                existingLog:setPromoter(promoterName)
+                if promoterClass and promoterClass ~= "" then
+                    existingLog:setPromoterClass(promoterClass)
+                end
+                modified = true
+            end
+            -- Se o log existente não possuía o cargo anterior e agora temos, atualiza
+            local curOldRank = existingLog:getOldRank()
+            if (curOldRank == "" or curOldRank == newRank) and oldRank and oldRank ~= "" and oldRank ~= newRank then
+                existingLog:setOldRank(oldRank)
+                if oldRankIndex then
+                    existingLog:setOldRankIndex(oldRankIndex)
+                end
+                modified = true
+            end
+
+            if modified then
+                local pName = existingLog:getPromoter()
+                local pClass = existingLog:getPromoterClass()
+                local oRank = existingLog:getOldRank()
+                existingLog:setMessage(self:formatPromotionMessage(memberName, pName, oRank, newRank, existingLog:getClass(), pClass))
+                self._repository:save(existingLog)
+            end
+            return existingLog, false
+        end
+    end
+
+    -- 2. Resolve classes se não informadas
+    if memberClass == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if guid == "" then guid = m:getGuid() or "" end
+            if (not oldRank or oldRank == "") and m:getRankName() ~= "" and m:getRankName() ~= newRank then
+                oldRank = m:getRankName()
+            end
+            if not oldRankIndex then
+                oldRankIndex = m:getRankIndex()
+            end
+        end
+    end
+    if memberClass == "" and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    promoterClass = promoterClass or ""
+    if promoterName and promoterName ~= "" and promoterName ~= "Desconhecido" and promoterClass == "" and _G.GM and _G.GM.memberService then
+        local p = _G.GM.memberService:getMember(promoterName)
+        if p then promoterClass = p:getClass() or "" end
+    end
+
+    local message = self:formatPromotionMessage(memberName, promoterName, oldRank, newRank, memberClass, promoterClass)
+
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid,
+        message = message,
+        event = LogEvent.PROMOTION,
+        promoter = promoterName or "",
+        promoterClass = promoterClass or "",
+        oldRank = oldRank or "",
+        newRank = newRank or "",
+        oldRankIndex = oldRankIndex,
+        newRankIndex = newRankIndex,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
 --- Remove do banco de dados registros de JOINED de personagens que nunca entraram na guilda (foram apenas convidados).
 ---@param memberService table|nil
 ---@return number @Quantidade de registros removidos

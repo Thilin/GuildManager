@@ -267,6 +267,87 @@ function LogRepository:findLeveledLog(name, level)
     return nil
 end
 
+--- Busca um log recente de promoção (PROMOTION) para evitar registros duplicados.
+---@param name string @Nome do membro promovido
+---@param newRank string|nil @Nome do novo cargo (opcional)
+---@param withinSeconds number|nil @Janela de tolerância em segundos (padrão: 600s)
+---@return Log|nil, number|nil
+function LogRepository:findRecentPromotionLog(name, newRank, withinSeconds)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil, nil
+    end
+
+    local lowerName = name:lower()
+    local lowerRank = (newRank and newRank ~= "") and newRank:lower() or nil
+    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    local threshold = withinSeconds or 600
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "PROMOTION" or rawData.event == LogEvent.PROMOTION) then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local matchRank = true
+                if lowerRank then
+                    local rawRank = (rawData.newRank or ""):lower()
+                    if rawRank ~= "" and rawRank ~= lowerRank then
+                        matchRank = false
+                    end
+                end
+                if matchRank then
+                    local logTime = rawData.timestamp or 0
+                    if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                        rawData.id = rawData.id or i
+                        return Log:new(rawData), i
+                    end
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--- Verifica se existe algum log de promoção (PROMOTION) registrado para o personagem.
+--- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+---@param name string
+---@param newRank string|nil
+---@param eventTimestamp number|nil
+---@return boolean
+function LogRepository:hasPromotionLog(name, newRank, eventTimestamp)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    local lowerName = name:lower()
+    local lowerRank = (newRank and newRank ~= "") and newRank:lower() or nil
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "PROMOTION" or rawData.event == LogEvent.PROMOTION) then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local matchRank = true
+                if lowerRank then
+                    local rawRank = (rawData.newRank or ""):lower()
+                    if rawRank ~= "" and rawRank ~= lowerRank then
+                        matchRank = false
+                    end
+                end
+                if matchRank then
+                    if not eventTimestamp or eventTimestamp == 0 then
+                        return true
+                    end
+                    local logTime = rawData.timestamp or 0
+                    if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 --- Retorna a quantidade total de logs registrados.
 ---@return number
 function LogRepository:count()

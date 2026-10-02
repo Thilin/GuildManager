@@ -62,6 +62,7 @@ local EVENT_COLORS = {
     LEFT = { r = 1.00, g = 0.60, b = 0.15, hex = "|cffff9926" },
     KICK = { r = 1.00, g = 0.25, b = 0.25, hex = "|cffff4040" },
     LEVELED = { r = 1.00, g = 0.85, b = 0.10, hex = "|cffffd91a" },
+    PROMOTION = { r = 0.00, g = 0.90, b = 1.00, hex = "|cff00e5ff" },
     OFFICERNOTE = { r = 0.25, g = 0.75, b = 1.00, hex = "|cff40bfff" },
     PUBLICNOTE = { r = 0.45, g = 0.90, b = 1.00, hex = "|cff73e6ff" },
     NAMECHANGE = { r = 0.85, g = 0.55, b = 1.00, hex = "|cffd98cff" },
@@ -209,7 +210,7 @@ function LogView:createUI()
     -- =========================================================================
     local searchEB = CreateFrame("EditBox", nil, frame, template)
     searchEB:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", 0, -8)
-    searchEB:SetSize(230, 22)
+    searchEB:SetSize(205, 22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
     searchEB:SetTextInsets(6, 6, 1, 1)
@@ -237,7 +238,7 @@ function LogView:createUI()
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("|cff888888Buscar personagem, recrutador ou texto...|r")
+    searchHint:SetText("|cff888888Buscar personagem, cargo...|r")
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -261,6 +262,7 @@ function LogView:createUI()
         { id = "ALL", label = "Todos" },
         { id = "JOINED", label = "Recrutamentos" },
         { id = "LEVELED", label = "Níveis" },
+        { id = "PROMOTION", label = "Promoções" },
         { id = "LEFT_KICK", label = "Saídas / Kicks" },
         { id = "NOTES", label = "Notas" },
         { id = "OTHER", label = "Outros" },
@@ -424,6 +426,21 @@ function LogView:createUI()
                 if recruiter and recruiter ~= "" then
                     local coloredRecruiter = (recruiter ~= "Desconhecido") and self:formatColoredName(recruiter, nil, log:getRecruiterClass()) or "|cff888888Desconhecido|r"
                     GameTooltip:AddLine("Recrutado por: " .. coloredRecruiter, 0.9, 0.8, 0.5)
+                end
+
+                local promoter = (log.getPromoter and log:getPromoter()) or ""
+                if promoter and promoter ~= "" then
+                    local coloredPromoter = (promoter ~= "Desconhecido") and self:formatColoredName(promoter, nil, log:getPromoterClass()) or "|cff888888Desconhecido|r"
+                    GameTooltip:AddLine("Promovido por: " .. coloredPromoter, 0.9, 0.8, 0.5)
+                end
+
+                local oldRank = (log.getOldRank and log:getOldRank()) or ""
+                local newRank = (log.getNewRank and log:getNewRank()) or ""
+                if oldRank and oldRank ~= "" then
+                    GameTooltip:AddLine("Cargo anterior: |cffffffff" .. oldRank .. "|r", 0.9, 0.8, 0.5)
+                end
+                if newRank and newRank ~= "" then
+                    GameTooltip:AddLine("Novo cargo: |cffffff00" .. newRank .. "|r", 0.9, 0.8, 0.5)
                 end
 
                 local guid = log:getGuid()
@@ -659,12 +676,14 @@ function LogView:applyFilters()
             matchEvent = (evt == LogEvent.JOINED or evt == "JOINED")
         elseif eventFilter == "LEVELED" then
             matchEvent = (evt == LogEvent.LEVELED or evt == "LEVELED")
+        elseif eventFilter == "PROMOTION" then
+            matchEvent = (evt == LogEvent.PROMOTION or evt == "PROMOTION")
         elseif eventFilter == "LEFT_KICK" then
             matchEvent = (evt == LogEvent.LEFT or evt == "LEFT" or evt == LogEvent.KICK or evt == "KICK")
         elseif eventFilter == "NOTES" then
             matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE or evt == "OFFICERNOTE" or evt == "PUBLICNOTE")
         elseif eventFilter == "OTHER" then
-            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
+            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.PROMOTION and evt ~= "PROMOTION" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
         end
 
         if matchEvent then
@@ -672,6 +691,9 @@ function LogView:applyFilters()
             if search ~= "" then
                 local name = (log:getName() or ""):lower()
                 local recruiter = (log:getRecruiter() or ""):lower()
+                local promoter = (log.getPromoter and log:getPromoter() or ""):lower()
+                local oldRank = (log.getOldRank and log:getOldRank() or ""):lower()
+                local newRank = (log.getNewRank and log:getNewRank() or ""):lower()
                 local msg = (log:getMessage() or ""):lower()
                 local dateStr = (log:getDate() or ""):lower()
                 local evtStr = (evt or ""):lower()
@@ -681,13 +703,15 @@ function LogView:applyFilters()
                     matchKeyword = true
                 elseif (evt == "JOINED" or evt == LogEvent.JOINED) and ("recrutado"):find(search, 1, true) then
                     matchKeyword = true
+                elseif (evt == "PROMOTION" or evt == LogEvent.PROMOTION) and ("promovido promocao promoção cargo"):find(search, 1, true) then
+                    matchKeyword = true
                 elseif (evt == "LEFT" or evt == LogEvent.LEFT) and ("saiu"):find(search, 1, true) then
                     matchKeyword = true
                 elseif (evt == "KICK" or evt == LogEvent.KICK) and ("removido expulso kick"):find(search, 1, true) then
                     matchKeyword = true
                 end
 
-                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
+                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
                     matchSearch = false
                 end
             end
@@ -868,6 +892,25 @@ function LogView:formatColoredMessage(log)
         return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
     end
 
+    if evt == LogEvent.PROMOTION or evt == "PROMOTION" then
+        local promotedColored = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local promoter = (log.getPromoter and log:getPromoter()) or ""
+        local promoterClass = (log.getPromoterClass and log:getPromoterClass()) or ""
+        local promoterColored
+        if promoter ~= "" and promoter ~= "Desconhecido" then
+            promoterColored = self:formatColoredName(promoter, nil, promoterClass)
+        else
+            promoterColored = "|cff888888Desconhecido|r"
+        end
+        local newRank = (log.getNewRank and log:getNewRank()) or ""
+        local oldRank = (log.getOldRank and log:getOldRank()) or ""
+        local rankChangeStr = ""
+        if oldRank ~= "" and oldRank ~= newRank then
+            rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
+        end
+        return string.format("%s |cffa8f0a8foi|r |cff00e5ffPROMOVIDO|r |cffa8f0a8a|r |cffffff00%s|r |cffa8f0a8por|r %s%s", promotedColored, newRank ~= "" and newRank or "Novo Cargo", promoterColored, rankChangeStr)
+    end
+
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
         local rawMsg = log:getMessage() or ""
@@ -911,6 +954,7 @@ function LogView:formatColoredMessage(log)
     end
     rawMsg = rawMsg:gsub("SUBIU", "|cffffd91aSUBIU|r")
     rawMsg = rawMsg:gsub("RECRUTADO", "|cff40ff40RECRUTADO|r")
+    rawMsg = rawMsg:gsub("PROMOVIDO", "|cff00e5ffPROMOVIDO|r")
     rawMsg = rawMsg:gsub("SAIU", "|cffff9926SAIU|r")
     rawMsg = rawMsg:gsub("REMOVIDO", "|cffff4040REMOVIDO|r")
     rawMsg = rawMsg:gsub("EXPULSO", "|cffff4040EXPULSO|r")

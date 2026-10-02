@@ -185,6 +185,23 @@ function MemberService:processRosterMember(rosterData)
             end
         end
 
+        -- Detecta se o membro foi promovido para um cargo maior
+        -- No WoW, 0 = Guild Master, e índices menores representam cargos de maior autoridade (ex: 1 = Oficial, 3 = Membro)
+        -- Portanto, newRankIndex < oldRankIndex indica promoção para um cargo maior!
+        local oldRankIndex = member:getRankIndex()
+        local newRankIndex = tonumber(rosterData.rankIndex)
+        local oldRankName = member:getRankName()
+        local newRankName = rosterData.rankName
+
+        if oldRankIndex and newRankIndex and newRankIndex < oldRankIndex and (oldRankName ~= "" and oldRankName ~= newRankName) then
+            if self._logService then
+                local promoInfo = self:findPromotionInGuildEventLog(member:getName(), newRankName)
+                local promoter = promoInfo and promoInfo.promoter or ""
+                local promoTime = promoInfo and promoInfo.time or nil
+                self._logService:logMemberPromotion(member, promoter, oldRankName, newRankName, oldRankIndex, newRankIndex, promoTime)
+            end
+        end
+
         -- Membro já existente: atualiza dados dinâmicos da API
         member:updateFromRoster(rosterData)
 
@@ -446,6 +463,75 @@ function MemberService:findQuitInGuildEventLog(memberName)
                                 if now > secAgo then eventTimestamp = now - secAgo end
                             end
                             return { time = eventTimestamp }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Procura se há registro de promoção (promote) para o membro no log de eventos da guilda da Blizzard.
+---@param memberName string
+---@param targetRank string|nil
+---@return table|nil @{ promoter = string, time = number|nil, newRank = string }
+function MemberService:findPromotionInGuildEventLog(memberName, targetRank)
+    if not memberName or memberName == "" then return nil end
+    local lowerName = memberName:lower()
+    local lowerTarget = (targetRank and targetRank ~= "") and targetRank:lower() or nil
+
+    if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
+        local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
+        if success and type(logEntries) == "table" then
+            for _, entry in ipairs(logEntries) do
+                if entry and (entry.type == "promote" or entry.type == 3 or entry.type == "promoted") then
+                    local promoted = entry.player2 or entry.name or ""
+                    local cleanPromoted = tostring(promoted):match("^[^-]+") or promoted
+                    cleanPromoted = cleanPromoted:match("^%s*(.-)%s*$")
+                    if cleanPromoted:lower() == lowerName then
+                        local rank = entry.rank or entry.rankName or ""
+                        if not lowerTarget or rank:lower() == lowerTarget or rank == "" then
+                            local promoter = entry.player1 or entry.sourceName or ""
+                            local cleanPromoter = tostring(promoter):match("^[^-]+") or promoter
+                            cleanPromoter = cleanPromoter:match("^%s*(.-)%s*$")
+                            return { promoter = cleanPromoter, time = entry.time, newRank = rank }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local getNum = GetNumGuildEvents or GetNumGuildEventLogEntries
+    local getInfo = GetGuildEventInfo or GetGuildEventLogEntry
+    if getNum and getInfo then
+        local success, count = pcall(getNum)
+        if success and type(count) == "number" and count > 0 then
+            local limit = math.min(count, 100)
+            for i = 1, limit do
+                local s, eventType, p1, p2, rank, years, months, days, hours = pcall(getInfo, i)
+                if s and eventType then
+                    local evtLower = tostring(eventType):lower()
+                    if evtLower == "promote" or evtLower == "promoted" or evtLower:find("promote") or evtLower:find("promov") then
+                        local promoted = p2 or ""
+                        local cleanPromoted = tostring(promoted):match("^[^-]+") or promoted
+                        cleanPromoted = cleanPromoted:match("^%s*(.-)%s*$")
+                        if cleanPromoted:lower() == lowerName then
+                            local rankStr = tostring(rank or "")
+                            if not lowerTarget or rankStr:lower() == lowerTarget or rankStr == "" then
+                                local promoter = p1 or ""
+                                local cleanPromoter = tostring(promoter):match("^[^-]+") or promoter
+                                cleanPromoter = cleanPromoter:match("^%s*(.-)%s*$")
+                                local eventTimestamp = nil
+                                if days or hours or months or years then
+                                    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                                    local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                                    if now > secAgo then eventTimestamp = now - secAgo end
+                                end
+                                return { promoter = cleanPromoter, time = eventTimestamp, newRank = rankStr }
+                            end
                         end
                     end
                 end
