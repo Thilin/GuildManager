@@ -202,6 +202,18 @@ function MemberService:processRosterMember(rosterData)
             end
         end
 
+        -- Detecta se o membro foi rebaixado para um cargo menor
+        -- No WoW, 0 = Guild Master, e índices maiores representam cargos de menor autoridade (ex: 1 = Oficial, 3 = Membro)
+        -- Portanto, newRankIndex > oldRankIndex indica rebaixamento para um cargo menor!
+        if oldRankIndex and newRankIndex and newRankIndex > oldRankIndex and (oldRankName ~= "" and oldRankName ~= newRankName) then
+            if self._logService then
+                local demoInfo = self:findDemotionInGuildEventLog(member:getName(), newRankName)
+                local demoter = demoInfo and demoInfo.demoter or ""
+                local demoTime = demoInfo and demoInfo.time or nil
+                self._logService:logMemberDemotion(member, demoter, oldRankName, newRankName, oldRankIndex, newRankIndex, demoTime)
+            end
+        end
+
         -- Membro já existente: atualiza dados dinâmicos da API
         member:updateFromRoster(rosterData)
 
@@ -531,6 +543,75 @@ function MemberService:findPromotionInGuildEventLog(memberName, targetRank)
                                     if now > secAgo then eventTimestamp = now - secAgo end
                                 end
                                 return { promoter = cleanPromoter, time = eventTimestamp, newRank = rankStr }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Procura se há registro de rebaixamento (demote) para o membro no log de eventos da guilda da Blizzard.
+---@param memberName string
+---@param targetRank string|nil
+---@return table|nil @{ demoter = string, time = number|nil, newRank = string }
+function MemberService:findDemotionInGuildEventLog(memberName, targetRank)
+    if not memberName or memberName == "" then return nil end
+    local lowerName = memberName:lower()
+    local lowerTarget = (targetRank and targetRank ~= "") and targetRank:lower() or nil
+
+    if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
+        local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
+        if success and type(logEntries) == "table" then
+            for _, entry in ipairs(logEntries) do
+                if entry and (entry.type == "demote" or entry.type == "demoted") then
+                    local demoted = entry.player2 or entry.name or ""
+                    local cleanDemoted = tostring(demoted):match("^[^-]+") or demoted
+                    cleanDemoted = cleanDemoted:match("^%s*(.-)%s*$")
+                    if cleanDemoted:lower() == lowerName then
+                        local rank = entry.rank or entry.rankName or ""
+                        if not lowerTarget or rank:lower() == lowerTarget or rank == "" then
+                            local demoter = entry.player1 or entry.sourceName or ""
+                            local cleanDemoter = tostring(demoter):match("^[^-]+") or demoter
+                            cleanDemoter = cleanDemoter:match("^%s*(.-)%s*$")
+                            return { demoter = cleanDemoter, time = entry.time, newRank = rank }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local getNum = GetNumGuildEvents or GetNumGuildEventLogEntries
+    local getInfo = GetGuildEventInfo or GetGuildEventLogEntry
+    if getNum and getInfo then
+        local success, count = pcall(getNum)
+        if success and type(count) == "number" and count > 0 then
+            local limit = math.min(count, 100)
+            for i = 1, limit do
+                local s, eventType, p1, p2, rank, years, months, days, hours = pcall(getInfo, i)
+                if s and eventType then
+                    local evtLower = tostring(eventType):lower()
+                    if evtLower == "demote" or evtLower == "demoted" or evtLower:find("demote") or evtLower:find("rebaix") then
+                        local demoted = p2 or ""
+                        local cleanDemoted = tostring(demoted):match("^[^-]+") or demoted
+                        cleanDemoted = cleanDemoted:match("^%s*(.-)%s*$")
+                        if cleanDemoted:lower() == lowerName then
+                            local rankStr = tostring(rank or "")
+                            if not lowerTarget or rankStr:lower() == lowerTarget or rankStr == "" then
+                                local demoter = p1 or ""
+                                local cleanDemoter = tostring(demoter):match("^[^-]+") or demoter
+                                cleanDemoter = cleanDemoter:match("^%s*(.-)%s*$")
+                                local eventTimestamp = nil
+                                if days or hours or months or years then
+                                    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                                    local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                                    if now > secAgo then eventTimestamp = now - secAgo end
+                                end
+                                return { demoter = cleanDemoter, time = eventTimestamp, newRank = rankStr }
                             end
                         end
                     end

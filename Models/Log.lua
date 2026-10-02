@@ -4,6 +4,7 @@
 ---| "KICK"
 ---| "LEVELED"
 ---| "PROMOTION"
+---| "DEMOTION"
 ---| "OFFICERNOTE"
 ---| "PUBLICNOTE"
 ---| "NAMECHANGE"
@@ -16,6 +17,7 @@ local RAW_EVENTS = {
     KICK = "KICK",
     LEVELED = "LEVELED",
     PROMOTION = "PROMOTION",
+    DEMOTION = "DEMOTION",
     OFFICERNOTE = "OFFICERNOTE",
     PUBLICNOTE = "PUBLICNOTE",
     NAMECHANGE = "NAMECHANGE",
@@ -45,6 +47,7 @@ local enumMeta = {
 ---@field KICK "KICK" @Membro foi expulso da guilda
 ---@field LEVELED "LEVELED" @Membro subiu de nível
 ---@field PROMOTION "PROMOTION" @Membro foi promovido para um cargo maior
+---@field DEMOTION "DEMOTION" @Membro foi rebaixado para um cargo menor
 ---@field OFFICERNOTE "OFFICERNOTE" @Nota de oficial foi alterada
 ---@field PUBLICNOTE "PUBLICNOTE" @Nota pública foi alterada
 ---@field NAMECHANGE "NAMECHANGE" @Membro alterou o nome do personagem
@@ -64,8 +67,10 @@ LogEvent = setmetatable({}, enumMeta)
 ---@field _kickerClass string @Token da classe de quem expulsou o membro (caso KICK)
 ---@field _promoter string @Nome de quem promoveu o membro (caso PROMOTION)
 ---@field _promoterClass string @Token da classe de quem promoveu o membro (caso PROMOTION)
----@field _oldRank string @Cargo anterior antes da promoção (caso PROMOTION)
----@field _newRank string @Novo cargo alcançado (caso PROMOTION)
+---@field _demoter string @Nome de quem rebaixou o membro (caso DEMOTION)
+---@field _demoterClass string @Token da classe de quem rebaixou o membro (caso DEMOTION)
+---@field _oldRank string @Cargo anterior antes da alteração
+---@field _newRank string @Novo cargo alcançado
 ---@field _oldRankIndex number|nil @Índice do cargo anterior
 ---@field _newRankIndex number|nil @Índice do novo cargo
 ---@field _timestamp number @Timestamp Unix de quando o evento ocorreu
@@ -104,6 +109,8 @@ function Log:new(data)
     instance._kickerClass = data.kickerClass or ""
     instance._promoter = data.promoter or ""
     instance._promoterClass = data.promoterClass or ""
+    instance._demoter = data.demoter or ""
+    instance._demoterClass = data.demoterClass or ""
     instance._oldRank = data.oldRank or ""
     instance._newRank = data.newRank or ""
     instance._oldRankIndex = tonumber(data.oldRankIndex)
@@ -400,6 +407,30 @@ function Log:setNewRankIndex(idx)
     self._newRankIndex = tonumber(idx)
 end
 
+--- Obtém o nome de quem rebaixou o membro (DEMOTION).
+---@return string
+function Log:getDemoter()
+    return self._demoter or ""
+end
+
+--- Define quem rebaixou o membro (DEMOTION).
+---@param demoter string
+function Log:setDemoter(demoter)
+    self._demoter = tostring(demoter or "")
+end
+
+--- Obtém a classe de quem rebaixou o membro (DEMOTION).
+---@return string
+function Log:getDemoterClass()
+    return self._demoterClass or ""
+end
+
+--- Define a classe de quem rebaixou o membro (DEMOTION).
+---@param class string
+function Log:setDemoterClass(class)
+    self._demoterClass = tostring(class or "")
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
@@ -417,6 +448,8 @@ function Log:serialize()
         kickerClass = self._kickerClass,
         promoter = self._promoter,
         promoterClass = self._promoterClass,
+        demoter = self._demoter,
+        demoterClass = self._demoterClass,
         oldRank = self._oldRank,
         newRank = self._newRank,
         oldRankIndex = self._oldRankIndex,

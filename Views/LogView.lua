@@ -63,6 +63,7 @@ local EVENT_COLORS = {
     KICK = { r = 1.00, g = 0.25, b = 0.25, hex = "|cffff4040" },
     LEVELED = { r = 1.00, g = 0.85, b = 0.10, hex = "|cffffd91a" },
     PROMOTION = { r = 0.00, g = 0.90, b = 1.00, hex = "|cff00e5ff" },
+    DEMOTION = { r = 1.00, g = 0.45, b = 0.25, hex = "|cffff7043" },
     OFFICERNOTE = { r = 0.25, g = 0.75, b = 1.00, hex = "|cff40bfff" },
     PUBLICNOTE = { r = 0.45, g = 0.90, b = 1.00, hex = "|cff73e6ff" },
     NAMECHANGE = { r = 0.85, g = 0.55, b = 1.00, hex = "|cffd98cff" },
@@ -210,7 +211,7 @@ function LogView:createUI()
     -- =========================================================================
     local searchEB = CreateFrame("EditBox", nil, frame, template)
     searchEB:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", 0, -8)
-    searchEB:SetSize(205, 22)
+    searchEB:SetSize(185, 22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
     searchEB:SetTextInsets(6, 6, 1, 1)
@@ -263,6 +264,7 @@ function LogView:createUI()
         { id = "JOINED", label = "Recrutamentos" },
         { id = "LEVELED", label = "Níveis" },
         { id = "PROMOTION", label = "Promoções" },
+        { id = "DEMOTION", label = "Rebaixamentos" },
         { id = "LEFT_KICK", label = "Saídas / Kicks" },
         { id = "NOTES", label = "Notas" },
         { id = "OTHER", label = "Outros" },
@@ -432,6 +434,12 @@ function LogView:createUI()
                 if promoter and promoter ~= "" then
                     local coloredPromoter = (promoter ~= "Desconhecido") and self:formatColoredName(promoter, nil, log:getPromoterClass()) or "|cff888888Desconhecido|r"
                     GameTooltip:AddLine("Promovido por: " .. coloredPromoter, 0.9, 0.8, 0.5)
+                end
+
+                local demoter = (log.getDemoter and log:getDemoter()) or ""
+                if demoter and demoter ~= "" then
+                    local coloredDemoter = (demoter ~= "Desconhecido") and self:formatColoredName(demoter, nil, log:getDemoterClass()) or "|cff888888Desconhecido|r"
+                    GameTooltip:AddLine("Rebaixado por: " .. coloredDemoter, 0.9, 0.8, 0.5)
                 end
 
                 local oldRank = (log.getOldRank and log:getOldRank()) or ""
@@ -678,12 +686,14 @@ function LogView:applyFilters()
             matchEvent = (evt == LogEvent.LEVELED or evt == "LEVELED")
         elseif eventFilter == "PROMOTION" then
             matchEvent = (evt == LogEvent.PROMOTION or evt == "PROMOTION")
+        elseif eventFilter == "DEMOTION" then
+            matchEvent = (evt == LogEvent.DEMOTION or evt == "DEMOTION")
         elseif eventFilter == "LEFT_KICK" then
             matchEvent = (evt == LogEvent.LEFT or evt == "LEFT" or evt == LogEvent.KICK or evt == "KICK")
         elseif eventFilter == "NOTES" then
             matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE or evt == "OFFICERNOTE" or evt == "PUBLICNOTE")
         elseif eventFilter == "OTHER" then
-            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.PROMOTION and evt ~= "PROMOTION" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
+            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.PROMOTION and evt ~= "PROMOTION" and evt ~= LogEvent.DEMOTION and evt ~= "DEMOTION" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
         end
 
         if matchEvent then
@@ -692,6 +702,7 @@ function LogView:applyFilters()
                 local name = (log:getName() or ""):lower()
                 local recruiter = (log:getRecruiter() or ""):lower()
                 local promoter = (log.getPromoter and log:getPromoter() or ""):lower()
+                local demoter = (log.getDemoter and log:getDemoter() or ""):lower()
                 local oldRank = (log.getOldRank and log:getOldRank() or ""):lower()
                 local newRank = (log.getNewRank and log:getNewRank() or ""):lower()
                 local msg = (log:getMessage() or ""):lower()
@@ -705,13 +716,15 @@ function LogView:applyFilters()
                     matchKeyword = true
                 elseif (evt == "PROMOTION" or evt == LogEvent.PROMOTION) and ("promovido promocao promoção cargo"):find(search, 1, true) then
                     matchKeyword = true
+                elseif (evt == "DEMOTION" or evt == LogEvent.DEMOTION) and ("rebaixado rebaixamento cargo demote"):find(search, 1, true) then
+                    matchKeyword = true
                 elseif (evt == "LEFT" or evt == LogEvent.LEFT) and ("saiu"):find(search, 1, true) then
                     matchKeyword = true
                 elseif (evt == "KICK" or evt == LogEvent.KICK) and ("removido expulso kick"):find(search, 1, true) then
                     matchKeyword = true
                 end
 
-                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
+                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or demoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
                     matchSearch = false
                 end
             end
@@ -909,6 +922,25 @@ function LogView:formatColoredMessage(log)
             rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
         end
         return string.format("%s |cffa8f0a8foi|r |cff00e5ffPROMOVIDO|r |cffa8f0a8a|r |cffffff00%s|r |cffa8f0a8por|r %s%s", promotedColored, newRank ~= "" and newRank or "Novo Cargo", promoterColored, rankChangeStr)
+    end
+
+    if evt == LogEvent.DEMOTION or evt == "DEMOTION" then
+        local demotedColored = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local demoter = (log.getDemoter and log:getDemoter()) or ""
+        local demoterClass = (log.getDemoterClass and log:getDemoterClass()) or ""
+        local demoterColored
+        if demoter ~= "" and demoter ~= "Desconhecido" then
+            demoterColored = self:formatColoredName(demoter, nil, demoterClass)
+        else
+            demoterColored = "|cff888888Desconhecido|r"
+        end
+        local newRank = (log.getNewRank and log:getNewRank()) or ""
+        local oldRank = (log.getOldRank and log:getOldRank()) or ""
+        local rankChangeStr = ""
+        if oldRank ~= "" and oldRank ~= newRank then
+            rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
+        end
+        return string.format("%s |cffffc0a0foi|r |cffff7043REBAIXADO|r |cffffc0a0a|r |cffffff00%s|r |cffffc0a0por|r %s%s", demotedColored, newRank ~= "" and newRank or "Novo Cargo", demoterColored, rankChangeStr)
     end
 
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then

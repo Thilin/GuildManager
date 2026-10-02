@@ -837,7 +837,14 @@ function MemberController:handleSystemChatMessage(message)
         return
     end
 
-    -- 5. Verifica se o jogador local convidou alguém (confirmação do sistema)
+    -- 5. Verifica se um membro foi rebaixado para um cargo menor
+    local demotedName, demoterName, newDemoRank = self:matchGuildDemote(message)
+    if demotedName and newDemoRank then
+        self:handleGuildDemote(demotedName, demoterName, newDemoRank)
+        return
+    end
+
+    -- 6. Verifica se o jogador local convidou alguém (confirmação do sistema)
     local invitedTarget = self:matchGuildInvite(message)
     if invitedTarget then
         local myName = UnitName and UnitName("player") or ""
@@ -1178,25 +1185,25 @@ function MemberController:matchGuildPromote(message)
         end
     end
 
-    -- 2. Fallbacks diretos em Português e Inglês (terceira e primeira pessoa)
+    -- 2. Fallbacks diretos em Português e Inglês (primeira e terceira pessoa)
     local promoPatterns = {
-        -- Terceira pessoa PT:
-        { pattern = "^(.-) promoveu (.+) ao cargo de (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
-        { pattern = "^(.-) promoveu (.+) a (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
-        { pattern = "^(.-) promoveu (.+) para (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
-
         -- Primeira pessoa PT:
         { pattern = "^Você promoveu (.+) ao cargo de (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
         { pattern = "^Você promoveu (.+) a (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
         { pattern = "^Você promoveu (.+) para (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
 
-        -- Terceira pessoa EN:
-        { pattern = "^(.-) has promoted (.+) to the rank of (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
-        { pattern = "^(.-) has promoted (.+) to (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
-
         -- Primeira pessoa EN:
         { pattern = "^You have promoted (.+) to the rank of (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
         { pattern = "^You have promoted (.+) to (.+)", isSelf = true, promotedIdx = 1, rankIdx = 2 },
+
+        -- Terceira pessoa PT:
+        { pattern = "^(.-) promoveu (.+) ao cargo de (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) promoveu (.+) a (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) promoveu (.+) para (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+
+        -- Terceira pessoa EN:
+        { pattern = "^(.-) has promoted (.+) to the rank of (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) has promoted (.+) to (.+)", promoterIdx = 1, promotedIdx = 2, rankIdx = 3 },
     }
 
     for _, item in ipairs(promoPatterns) do
@@ -1215,6 +1222,105 @@ function MemberController:matchGuildPromote(message)
             if promoted and promoted ~= "" and rank and rank ~= "" then
                 rank = rank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$")
                 return self:sanitizeCharacterName(promoted), self:sanitizeCharacterName(promoter), rank
+            end
+        end
+    end
+
+    return nil, nil, nil
+end
+
+--- Extrai os nomes do membro rebaixado, de quem o rebaixou e do novo cargo a partir de mensagens de sistema do WoW.
+--- Retorna demotedName, demoterName, newRank caso compatível, ou nil, nil, nil caso contrário.
+---@param message string
+---@return string|nil, string|nil, string|nil
+function MemberController:matchGuildDemote(message)
+    if not message or type(message) ~= "string" or message == "" then
+        return nil, nil, nil
+    end
+
+    local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
+    clean = clean:match("^%s*(.-)%s*$")
+
+    -- 1. Variável global oficial da Blizzard ERR_GUILD_DEMOTE_SSS
+    -- No WoW: "%s has demoted %s to %s." / "%s rebaixou %s a %s." / "%s rebaixou %s ao cargo de %s."
+    -- %1$s = Demoter (quem rebaixou)
+    -- %2$s = Demoted (membro rebaixado)
+    -- %3$s = New Rank (novo cargo)
+    if _G.ERR_GUILD_DEMOTE_SSS then
+        local tpl = _G.ERR_GUILD_DEMOTE_SSS
+        local s = tpl
+        local hasPositional = s:find("%%1%$s") or s:find("%%2%$s") or s:find("%%3%$s")
+        if hasPositional then
+            s = s:gsub("%%1%$s", "___GM_DEMOTER___"):gsub("%%2%$s", "___GM_DEMOTED___"):gsub("%%3%$s", "___GM_RANK___")
+        else
+            s = s:gsub("%%s", "___GM_DEMOTER___", 1):gsub("%%s", "___GM_DEMOTED___", 1):gsub("%%s", "___GM_RANK___", 1)
+        end
+        s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+
+        local pDemoter = s:find("___GM_DEMOTER___")
+        local pDemoted = s:find("___GM_DEMOTED___")
+        local pRank = s:find("___GM_RANK___")
+
+        if pDemoter and pDemoted and pRank then
+            s = s:gsub("___GM_DEMOTER___", "(.-)"):gsub("___GM_DEMOTED___", "(.-)"):gsub("___GM_RANK___", "(.+)")
+            local v1, v2, v3 = clean:match("^" .. s .. "$")
+            if not v1 then v1, v2, v3 = clean:match(s) end
+            if not v1 then
+                local sNoDot = s:gsub("%%%.$", "")
+                v1, v2, v3 = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+            end
+            if v1 and v2 and v3 and v1 ~= "" and v2 ~= "" and v3 ~= "" then
+                local demoter, demoted, rank
+                if pDemoter < pDemoted and pDemoted < pRank then
+                    demoter, demoted, rank = v1, v2, v3
+                elseif pDemoted < pDemoter and pDemoter < pRank then
+                    demoted, demoter, rank = v1, v2, v3
+                else
+                    demoter, demoted, rank = v1, v2, v3
+                end
+                rank = rank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$")
+                return self:sanitizeCharacterName(demoted), self:sanitizeCharacterName(demoter), rank
+            end
+        end
+    end
+
+    -- 2. Fallbacks diretos em Português e Inglês (primeira e terceira pessoa)
+    local demoPatterns = {
+        -- Primeira pessoa PT:
+        { pattern = "^Você rebaixou (.+) ao cargo de (.+)", isSelf = true, demotedIdx = 1, rankIdx = 2 },
+        { pattern = "^Você rebaixou (.+) a (.+)", isSelf = true, demotedIdx = 1, rankIdx = 2 },
+        { pattern = "^Você rebaixou (.+) para (.+)", isSelf = true, demotedIdx = 1, rankIdx = 2 },
+
+        -- Primeira pessoa EN:
+        { pattern = "^You have demoted (.+) to the rank of (.+)", isSelf = true, demotedIdx = 1, rankIdx = 2 },
+        { pattern = "^You have demoted (.+) to (.+)", isSelf = true, demotedIdx = 1, rankIdx = 2 },
+
+        -- Terceira pessoa PT:
+        { pattern = "^(.-) rebaixou (.+) ao cargo de (.+)", demoterIdx = 1, demotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) rebaixou (.+) a (.+)", demoterIdx = 1, demotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) rebaixou (.+) para (.+)", demoterIdx = 1, demotedIdx = 2, rankIdx = 3 },
+
+        -- Terceira pessoa EN:
+        { pattern = "^(.-) has demoted (.+) to the rank of (.+)", demoterIdx = 1, demotedIdx = 2, rankIdx = 3 },
+        { pattern = "^(.-) has demoted (.+) to (.+)", demoterIdx = 1, demotedIdx = 2, rankIdx = 3 },
+    }
+
+    for _, item in ipairs(demoPatterns) do
+        local m1, m2, m3 = clean:match(item.pattern)
+        if m1 and m2 then
+            local demoter, demoted, rank
+            if item.isSelf then
+                demoter = self:resolvePlayerFullName() or (UnitName and UnitName("player")) or ""
+                demoted = m1
+                rank = m2
+            else
+                demoter = (item.demoterIdx == 1) and m1 or ((item.demoterIdx == 2) and m2 or m3)
+                demoted = (item.demotedIdx == 1) and m1 or ((item.demotedIdx == 2) and m2 or m3)
+                rank = (item.rankIdx == 1) and m1 or ((item.rankIdx == 2) and m2 or m3)
+            end
+            if demoted and demoted ~= "" and rank and rank ~= "" then
+                rank = rank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$")
+                return self:sanitizeCharacterName(demoted), self:sanitizeCharacterName(demoter), rank
             end
         end
     end
@@ -1625,6 +1731,92 @@ function MemberController:handleGuildPromote(promotedName, promoterName, newRank
     end
 end
 
+--- Manipula a detecção de rebaixamento de um membro na guilda.
+--- Obtém o cargo anterior do membro, persiste a alteração e grava o log de DEMOTION.
+---@param demotedName string @Nome do personagem rebaixado
+---@param demoterName string|nil @Nome de quem o rebaixou
+---@param newRank string @Nome do novo cargo
+---@param eventTimestamp number|nil @Timestamp Unix do evento (opcional)
+function MemberController:handleGuildDemote(demotedName, demoterName, newRank, eventTimestamp)
+    local cleanDemoted = self:sanitizeCharacterName(demotedName)
+    local cleanDemoter = self:sanitizeCharacterName(demoterName)
+    local cleanRank = newRank and newRank:gsub("[%.,!]+$", ""):match("^%s*(.-)%s*$") or ""
+
+    if not cleanDemoted or cleanDemoted == "" or not cleanRank or cleanRank == "" then
+        return
+    end
+
+    local member = self._memberService:getMember(cleanDemoted)
+    local oldRank = ""
+    local oldRankIndex = nil
+    local newRankIndex = nil
+
+    if member then
+        oldRank = member:getRankName() or ""
+        oldRankIndex = member:getRankIndex()
+    end
+
+    -- Se o membro já possui log de rebaixamento para este cargo e mesmo período, evita reprocessamento
+    if self._logService and self._logService.hasDemotionLog and self._logService:hasDemotionLog(cleanDemoted, cleanRank, eventTimestamp) then
+        return
+    end
+
+    -- Registra o log através do LogService
+    if self._logService then
+        local dateStr = nil
+        if eventTimestamp and eventTimestamp > 0 then
+            if date then
+                dateStr = date("%Y-%m-%d %H:%M:%S", eventTimestamp)
+            elseif os and os.date then
+                dateStr = os.date("%Y-%m-%d %H:%M:%S", eventTimestamp)
+            end
+        end
+        self._logService:logMemberDemotion(member or cleanDemoted, cleanDemoter, oldRank, cleanRank, oldRankIndex, newRankIndex, eventTimestamp, dateStr)
+    end
+
+    -- Atualiza o cargo na entidade Member se o membro já existe no banco
+    if member and cleanRank ~= "" and cleanRank ~= oldRank then
+        member:setRankName(cleanRank)
+        self._memberService:saveMember(member)
+    end
+
+    -- Notificação no chat com destaque visual
+    if cleanDemoter ~= "" and cleanDemoter ~= "Desconhecido" then
+        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
+            cleanDemoted, cleanRank, cleanDemoter,
+            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+    else
+        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r!%s",
+            cleanDemoted, cleanRank,
+            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+    end
+
+    -- Se a janela estiver aberta exibindo o membro rebaixado, atualiza a interface
+    if self._memberView and self._memberView._frame and self._memberView._frame:IsShown() and self._memberView._currentMember then
+        local currentName = self._memberView._currentMember:getName()
+        if currentName and currentName:lower() == cleanDemoted:lower() then
+            local refreshed = self._memberService:getMember(currentName)
+            if refreshed then
+                self._memberView._currentMember = refreshed
+                if self._memberView.showMember then
+                    self._memberView:showMember(refreshed)
+                end
+            end
+        end
+    end
+
+    -- Solicita atualização do roster
+    if C_Timer and C_Timer.After then
+        C_Timer.After(1.0, function()
+            if IsInGuild and IsInGuild() then
+                self._guildRosterService:requestRosterUpdate()
+            end
+        end)
+    else
+        self._guildRosterService:requestRosterUpdate()
+    end
+end
+
 --- Trata mensagens recebidas de outros clientes do GuildManager via CHAT_MSG_ADDON.
 ---@param prefix string
 ---@param msg string
@@ -1737,6 +1929,13 @@ function MemberController:checkGuildEventLog()
                         if promoted and promoted ~= "" then
                             self:handleGuildPromote(promoted, promoter, newRank, entry.time)
                         end
+                    elseif entry.type == "demote" or entry.type == "demoted" then
+                        local demoter = entry.player1 or entry.sourceName or ""
+                        local demoted = entry.player2 or entry.name or ""
+                        local newRank = entry.rank or entry.rankName or ""
+                        if demoted and demoted ~= "" then
+                            self:handleGuildDemote(demoted, demoter, newRank, entry.time)
+                        end
                     end
                 end
             end
@@ -1793,6 +1992,13 @@ function MemberController:checkGuildEventLog()
                         local newRank = rank or ""
                         if promoted and promoted ~= "" then
                             self:handleGuildPromote(promoted, promoter, newRank, eventTimestamp)
+                        end
+                    elseif evtLower == "demote" or evtLower == "demoted" or evtLower:find("demote") or evtLower:find("rebaix") then
+                        local demoter = p1
+                        local demoted = p2
+                        local newRank = rank or ""
+                        if demoted and demoted ~= "" then
+                            self:handleGuildDemote(demoted, demoter, newRank, eventTimestamp)
                         end
                     end
                 end

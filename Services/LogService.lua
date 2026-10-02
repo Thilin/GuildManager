@@ -636,6 +636,165 @@ function LogService:logMemberPromotion(member, promoterName, oldRank, newRank, o
     return newLog, true
 end
 
+--- Formata a mensagem padrão obrigatória para o evento DEMOTION.
+--- Padrão: "Player X foi REBAIXADO a CargoNovo por Player Y (anterior: CargoAntigo)" com cores temáticas.
+---@param demotedName string @Nome do personagem rebaixado
+---@param demoterName string|nil @Nome de quem o rebaixou
+---@param oldRank string|nil @Cargo anterior
+---@param newRank string @Novo cargo alcançado
+---@param demotedClass string|nil @Classe do rebaixado
+---@param demoterClass string|nil @Classe do autor do rebaixamento
+---@return string
+function LogService:formatDemotionMessage(demotedName, demoterName, oldRank, newRank, demotedClass, demoterClass)
+    local demoter = (demoterName and demoterName ~= "") and demoterName or "Desconhecido"
+    local coloredDemoted = self:formatColoredMemberName(demotedName, demotedClass)
+    local coloredDemoter
+    if demoter ~= "Desconhecido" then
+        coloredDemoter = self:formatColoredMemberName(demoter, demoterClass)
+    else
+        coloredDemoter = "|cff888888Desconhecido|r"
+    end
+    local rankStr = (newRank and newRank ~= "") and newRank or "Novo Cargo"
+    local rankChangeStr = ""
+    if oldRank and oldRank ~= "" and oldRank ~= newRank then
+        rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
+    end
+    return string.format("%s |cffffa6a6foi|r |cffff7043REBAIXADO|r |cffffa6a6a|r |cffffff00%s|r |cffffa6a6por|r %s%s", coloredDemoted, rankStr, coloredDemoter, rankChangeStr)
+end
+
+--- Verifica se existe algum log de rebaixamento (DEMOTION) para o personagem.
+---@param name string
+---@param newRank string|nil
+---@param timestamp number|nil
+---@return boolean
+function LogService:hasDemotionLog(name, newRank, timestamp)
+    if self._repository and self._repository.hasDemotionLog then
+        return self._repository:hasDemotionLog(name, newRank, timestamp)
+    end
+    return false
+end
+
+--- Registra o evento de rebaixamento (DEMOTION) de um membro para um cargo menor.
+--- Armazena quem rebaixou, quem foi rebaixado, o cargo anterior e o cargo novo.
+--- Evita duplicidade se o rebaixamento já tiver sido registrado recentemente.
+---@param member Member|string @Instância do membro rebaixado ou nome
+---@param demoterName string|nil @Nome de quem rebaixou
+---@param oldRank string|nil @Cargo anterior
+---@param newRank string @Novo cargo alcançado
+---@param oldRankIndex number|nil @Índice do cargo anterior
+---@param newRankIndex number|nil @Índice do novo cargo
+---@param timestamp number|nil @Timestamp Unix do evento (opcional)
+---@param dateStr string|nil @Data legível formatada (opcional)
+---@param demoterClass string|nil @Token da classe de quem rebaixou (opcional)
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
+function LogService:logMemberDemotion(member, demoterName, oldRank, newRank, oldRankIndex, newRankIndex, timestamp, dateStr, demoterClass)
+    if not member or not newRank or newRank == "" then
+        return nil, false
+    end
+
+    local memberName = ""
+    local memberClass = ""
+    local guid = ""
+    if type(member) == "table" and member.getName then
+        memberName = member:getName()
+        memberClass = member:getClass() or ""
+        guid = member:getGuid() or ""
+        if not oldRank or oldRank == "" then
+            oldRank = member:getRankName() or ""
+        end
+        if not oldRankIndex then
+            oldRankIndex = member:getRankIndex()
+        end
+    else
+        memberName = tostring(member)
+    end
+
+    if memberName == "" then
+        return nil, false
+    end
+
+    -- 1. Verifica se já existe um log recente de rebaixamento para este personagem e cargo
+    if self._repository and self._repository.findRecentDemotionLog then
+        local existingLog = self._repository:findRecentDemotionLog(memberName, newRank, 600)
+        if existingLog then
+            local modified = false
+            local curDemoter = existingLog:getDemoter()
+            if (curDemoter == "" or curDemoter == "Desconhecido") and demoterName and demoterName ~= "" and demoterName ~= "Desconhecido" then
+                existingLog:setDemoter(demoterName)
+                if demoterClass and demoterClass ~= "" then
+                    existingLog:setDemoterClass(demoterClass)
+                end
+                modified = true
+            end
+            local curOldRank = existingLog:getOldRank()
+            if (curOldRank == "" or curOldRank == newRank) and oldRank and oldRank ~= "" and oldRank ~= newRank then
+                existingLog:setOldRank(oldRank)
+                if oldRankIndex then
+                    existingLog:setOldRankIndex(oldRankIndex)
+                end
+                modified = true
+            end
+
+            if modified then
+                local dName = existingLog:getDemoter()
+                local dClass = existingLog:getDemoterClass()
+                local oRank = existingLog:getOldRank()
+                existingLog:setMessage(self:formatDemotionMessage(memberName, dName, oRank, newRank, existingLog:getClass(), dClass))
+                self._repository:save(existingLog)
+            end
+            return existingLog, false
+        end
+    end
+
+    -- 2. Resolve classes se não informadas
+    if memberClass == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if guid == "" then guid = m:getGuid() or "" end
+            if (not oldRank or oldRank == "") and m:getRankName() ~= "" and m:getRankName() ~= newRank then
+                oldRank = m:getRankName()
+            end
+            if not oldRankIndex then
+                oldRankIndex = m:getRankIndex()
+            end
+        end
+    end
+    if memberClass == "" and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    demoterClass = demoterClass or ""
+    if demoterName and demoterName ~= "" and demoterName ~= "Desconhecido" and demoterClass == "" and _G.GM and _G.GM.memberService then
+        local p = _G.GM.memberService:getMember(demoterName)
+        if p then demoterClass = p:getClass() or "" end
+    end
+
+    local message = self:formatDemotionMessage(memberName, demoterName, oldRank, newRank, memberClass, demoterClass)
+
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid,
+        message = message,
+        event = LogEvent.DEMOTION,
+        demoter = demoterName or "",
+        demoterClass = demoterClass or "",
+        promoter = demoterName or "",
+        promoterClass = demoterClass or "",
+        oldRank = oldRank or "",
+        newRank = newRank or "",
+        oldRankIndex = oldRankIndex,
+        newRankIndex = newRankIndex,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
 --- Remove do banco de dados registros de JOINED de personagens que nunca entraram na guilda (foram apenas convidados).
 ---@param memberService table|nil
 ---@return number @Quantidade de registros removidos

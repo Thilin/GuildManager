@@ -14,7 +14,7 @@
 
 [X] log de promoçao quando o cargo de um membro for alterado para um cargo maior. Deve armazenar o nome de quem foi que promoveu e quem foi promovido, o cargo anterior e o cargo novo.
 
-[] log de rebaixamento quando o cargo de um membro for alterado para um cargo menor. Deve armazenar o nome de quem foi que rebaixou e quem foi rebaixado.
+[X] log de rebaixamento quando o cargo de um membro for alterado para um cargo menor. Deve armazenar o nome de quem foi que rebaixou e quem foi rebaixado, o cargo anterior e o cargo novo.
 
 [] log de RETORNAR para a guilda. Quando um membro retorna pra guilda, tem que mostrar no Log quem o recrutou, que dia ele saiu, qual foi o ultimo cargo dele e quantas vezes o membro saiu da guilda.
 
