@@ -31,6 +31,7 @@ function MemberController:new(memberService, guildRosterService, memberView, log
     instance._guildInviteHooked = false
     instance._cGuildInviteHooked = false
     instance._rosterTicker = nil
+    instance._processedEventLogKeys = {}
 
     return instance
 end
@@ -886,6 +887,11 @@ function MemberController:sanitizeCharacterName(rawName)
     name = name:gsub("[%.,!]+$", "") -- remove pontuação residual no final
     name = name:match("^%s*(.-)%s*$") or name -- trim
 
+    -- Remove prefixos comuns de mensagens de sistema em PT-BR como "O personagem ", "A personagem "
+    name = name:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
+    name = name:gsub("[%.,!]+$", "")
+    name = name:match("^%s*(.-)%s*$") or name
+
     if Ambiguate then
         local amb = Ambiguate(name, "none")
         if amb and amb ~= "" then
@@ -907,6 +913,7 @@ function MemberController:matchGuildJoin(message)
 
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
+    clean = clean:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
 
     -- 1. Melhor prática oficial: variável global ERR_GUILD_JOIN_S da Blizzard
     local blizzardPattern = self:buildPatternFromTemplate(_G.ERR_GUILD_JOIN_S)
@@ -949,6 +956,7 @@ function MemberController:matchGuildInvite(message)
 
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
+    clean = clean:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
 
     -- 1. Variável global ERR_GUILD_INVITE_S da Blizzard
     local blizzardPattern = self:buildPatternFromTemplate(_G.ERR_GUILD_INVITE_S)
@@ -988,62 +996,60 @@ function MemberController:matchGuildKick(message)
 
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
+    clean = clean:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
 
     -- 1. Variável global oficial da Blizzard ERR_GUILD_REMOVE_SS
-    -- No WoW, ERR_GUILD_REMOVE_SS = "%s has been kicked out of the guild by %s." / "%s foi expulso da guilda por %s."
-    -- Padrão oficial da Blizzard:
-    -- O 1º argumento (%1$s) é o membro expulso (TARGET).
-    -- O 2º argumento (%2$s) é quem realizou a expulsão (KICKER).
+    -- No WoW, ERR_GUILD_REMOVE_SS = "%s has been kicked out of the guild by %s." / "%s foi expulso da guilda por %s." / "O personagem %s foi expulso da guilda  %s."
     if _G.ERR_GUILD_REMOVE_SS then
         local removeTpl = _G.ERR_GUILD_REMOVE_SS
-        local tplLower = removeTpl:lower()
-        -- Detecta se o template está em voz passiva ("foi expulso por", "has been kicked by")
-        -- ou voz ativa ("removeu", "expulsou", "has kicked")
-        local isPassive = tplLower:find(" foi ") or tplLower:find(" has been ") or tplLower:find(" was ")
-            or tplLower:find(" por ") or tplLower:find(" by ")
+        local cleanTpl = removeTpl:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
+        for _, tplToTry in ipairs({ cleanTpl, removeTpl }) do
+            local tplLower = tplToTry:lower()
+            local isPassive = tplLower:find(" foi ") or tplLower:find(" has been ") or tplLower:find(" was ")
+                or tplLower:find(" por ") or tplLower:find(" by ")
 
-        local s = removeTpl
-        local hasPositional = s:find("%%1%$s") or s:find("%%2%$s")
-        if hasPositional then
-            if isPassive then
-                s = s:gsub("%%1%$s", "___GM_TARGET___"):gsub("%%2%$s", "___GM_KICKER___")
+            local s = tplToTry
+            local hasPositional = s:find("%%1%$s") or s:find("%%2%$s")
+            if hasPositional then
+                if isPassive then
+                    s = s:gsub("%%1%$s", "___GM_TARGET___"):gsub("%%2%$s", "___GM_KICKER___")
+                else
+                    s = s:gsub("%%1%$s", "___GM_KICKER___"):gsub("%%2%$s", "___GM_TARGET___")
+                end
             else
-                s = s:gsub("%%1%$s", "___GM_KICKER___"):gsub("%%2%$s", "___GM_TARGET___")
+                if isPassive then
+                    s = s:gsub("%%s", "___GM_TARGET___", 1):gsub("%%s", "___GM_KICKER___", 1)
+                else
+                    s = s:gsub("%%s", "___GM_KICKER___", 1):gsub("%%s", "___GM_TARGET___", 1)
+                end
             end
-        else
-            if isPassive then
-                s = s:gsub("%%s", "___GM_TARGET___", 1):gsub("%%s", "___GM_KICKER___", 1)
-            else
-                s = s:gsub("%%s", "___GM_KICKER___", 1):gsub("%%s", "___GM_TARGET___", 1)
-            end
-        end
-        s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+            s = s:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+            s = s:gsub("%s+", "%%s+")
 
-        local targetPos = s:find("___GM_TARGET___")
-        local kickerPos = s:find("___GM_KICKER___")
+            local targetPos = s:find("___GM_TARGET___")
+            local kickerPos = s:find("___GM_KICKER___")
 
-        if targetPos and kickerPos then
-            if targetPos < kickerPos then
-                s = s:gsub("___GM_TARGET___", "(.-)"):gsub("___GM_KICKER___", "(.+)")
-                local kicked, kicker = clean:match("^" .. s .. "$")
-                if not kicked then kicked, kicker = clean:match(s) end
-                if not kicked then
-                    local sNoDot = s:gsub("%%%.$", "")
-                    kicked, kicker = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
-                end
-                if kicked and kicker and kicked ~= "" and kicker ~= "" then
-                    return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
-                end
-            else
-                s = s:gsub("___GM_KICKER___", "(.-)"):gsub("___GM_TARGET___", "(.+)")
-                local kicker, kicked = clean:match("^" .. s .. "$")
-                if not kicker then kicker, kicked = clean:match(s) end
-                if not kicker then
-                    local sNoDot = s:gsub("%%%.$", "")
-                    kicker, kicked = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
-                end
-                if kicked and kicker and kicked ~= "" and kicker ~= "" then
-                    return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+            if targetPos and kickerPos then
+                if targetPos < kickerPos then
+                    s = s:gsub("___GM_TARGET___", "(.-)"):gsub("___GM_KICKER___", "(.+)")
+                    local kicked, kicker = clean:match("^" .. s .. "$") or clean:match(s)
+                    if not kicked then
+                        local sNoDot = s:gsub("%%%.$", "")
+                        kicked, kicker = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+                    end
+                    if kicked and kicker and kicked ~= "" and kicker ~= "" then
+                        return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+                    end
+                else
+                    s = s:gsub("___GM_KICKER___", "(.-)"):gsub("___GM_TARGET___", "(.+)")
+                    local kicker, kicked = clean:match("^" .. s .. "$") or clean:match(s)
+                    if not kicker then
+                        local sNoDot = s:gsub("%%%.$", "")
+                        kicker, kicked = clean:match("^" .. sNoDot .. "$") or clean:match(sNoDot)
+                    end
+                    if kicked and kicker and kicked ~= "" and kicker ~= "" then
+                        return self:sanitizeCharacterName(kicked), self:sanitizeCharacterName(kicker)
+                    end
                 end
             end
         end
@@ -1051,26 +1057,33 @@ function MemberController:matchGuildKick(message)
 
     -- 2. Fallbacks diretos em Português e Inglês (Priorizando voz passiva oficial da Blizzard)
     local kickPatterns = {
-        -- Voz passiva oficial (ex: "X foi expulso da guilda por Y" / "X has been kicked out of the guild by Y"):
-        { pattern = "^(.-) foi expulso da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
-        { pattern = "^(.-) foi expulsa da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
-        { pattern = "^(.-) foi removido da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
-        { pattern = "^(.-) foi removida da guilda por (.+)", kickedIdx = 1, kickerIdx = 2 },
-        { pattern = "^(.-) has been kicked out of the guild by (.+)", kickedIdx = 1, kickerIdx = 2 },
-        { pattern = "^(.-) has been kicked from the guild by (.+)", kickedIdx = 1, kickerIdx = 2 },
-        { pattern = "^(.-) has been removed from the guild by (.+)", kickedIdx = 1, kickerIdx = 2 },
+        -- Voz passiva com "por" (ex: "X foi expulso da guilda por Y" / "X has been kicked out of the guild by Y"):
+        { pattern = "^(.-)%s+foi%s+expulso%s+da%s+guilda%s+por%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+foi%s+expulsa%s+da%s+guilda%s+por%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+foi%s+removido%s+da%s+guilda%s+por%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+foi%s+removida%s+da%s+guilda%s+por%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+
+        -- Voz passiva sem "por" (ex: "X foi expulso da guilda  Y" no cliente PT-BR Classic):
+        { pattern = "^(.-)%s+foi%s+expulso%s+da%s+guilda%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+foi%s+expulsa%s+da%s+guilda%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+foi%s+removido%s+da%s+guilda%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+foi%s+removida%s+da%s+guilda%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+
+        { pattern = "^(.-)%s+has%s+been%s+kicked%s+out%s+of%s+the%s+guild%s+by%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+has%s+been%s+kicked%s+from%s+the%s+guild%s+by%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
+        { pattern = "^(.-)%s+has%s+been%s+removed%s+from%s+the%s+guild%s+by%s+(.+)", kickedIdx = 1, kickerIdx = 2 },
 
         -- Mensagens em primeira pessoa quando o próprio jogador expulsa alguém:
-        { pattern = "^Você removeu (.+) da guilda", kickedIdx = 1, isSelfKicker = true },
-        { pattern = "^Você expulsou (.+) da guilda", kickedIdx = 1, isSelfKicker = true },
-        { pattern = "^You have kicked (.+) from the guild", kickedIdx = 1, isSelfKicker = true },
-        { pattern = "^You have removed (.+) from the guild", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^Você%s+removeu%s+(.+)%s+da%s+guilda", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^Você%s+expulsou%s+(.+)%s+da%s+guilda", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^You%s+have%s+kicked%s+(.+)%s+from%s+the%s+guild", kickedIdx = 1, isSelfKicker = true },
+        { pattern = "^You%s+have%s+removed%s+(.+)%s+from%s+the%s+guild", kickedIdx = 1, isSelfKicker = true },
 
         -- Voz ativa (ex: "Y removeu X da guilda"):
-        { pattern = "^(.-) removeu (.+) da guilda", kickerIdx = 1, kickedIdx = 2 },
-        { pattern = "^(.-) expulsou (.+) da guilda", kickerIdx = 1, kickedIdx = 2 },
-        { pattern = "^(.-) has kicked (.+) from the guild", kickerIdx = 1, kickedIdx = 2 },
-        { pattern = "^(.-) removed (.+) from the guild", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-)%s+removeu%s+(.+)%s+da%s+guilda", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-)%s+expulsou%s+(.+)%s+da%s+guilda", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-)%s+has%s+kicked%s+(.+)%s+from%s+the%s+guild", kickerIdx = 1, kickedIdx = 2 },
+        { pattern = "^(.-)%s+removed%s+(.+)%s+from%s+the%s+guild", kickerIdx = 1, kickedIdx = 2 },
     }
     for _, item in ipairs(kickPatterns) do
         local m1, m2 = clean:match(item.pattern)
@@ -1102,6 +1115,7 @@ function MemberController:matchGuildLeave(message)
 
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
+    clean = clean:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
 
     -- 1. Variável global ERR_GUILD_LEAVE_S ("%s has left the guild." / "%s saiu da guilda.")
     local leavePattern = self:buildPatternFromTemplate(_G.ERR_GUILD_LEAVE_S)
@@ -1141,6 +1155,7 @@ function MemberController:matchGuildPromote(message)
 
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
+    clean = clean:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
 
     -- 1. Variável global oficial da Blizzard ERR_GUILD_PROMOTE_SSS
     -- No WoW: "%s has promoted %s to %s." / "%s promoveu %s a %s." / "%s promoveu %s ao cargo de %s."
@@ -1240,6 +1255,7 @@ function MemberController:matchGuildDemote(message)
 
     local clean = message:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
     clean = clean:match("^%s*(.-)%s*$")
+    clean = clean:gsub("^[OoAa]%s+[Pp]ersonagem%s+", "")
 
     -- 1. Variável global oficial da Blizzard ERR_GUILD_DEMOTE_SSS
     -- No WoW: "%s has demoted %s to %s." / "%s rebaixou %s a %s." / "%s rebaixou %s ao cargo de %s."
@@ -1366,11 +1382,37 @@ function MemberController:handleGuildJoin(newMemberName)
         end
     end
 
+    -- Se havia registro de saída recente (ex: desconvidado e re-convidado), limpa a restrição
+    if self._memberService and self._memberService.clearRecentLeave then
+        self._memberService:clearRecentLeave(cleanName)
+    end
+
     -- 3. Atualiza ou cria a entidade no banco de dados imediatamente
     local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
     local member = self._memberService:getMember(cleanName)
 
+    local wasInGuild = true
+    local previousDateLeft = ""
+    local previousLastRank = ""
+    local timesLeft = 0
+    local isReturning = false
+
     if member then
+        wasInGuild = member:isInGuild()
+        previousDateLeft = member:getDateLeft() or ""
+        previousLastRank = member:getLastRank() or ""
+        if previousLastRank == "" then
+            previousLastRank = member:getRankName() or ""
+        end
+        timesLeft = member:getTimesLeft() or 0
+        if (not wasInGuild) or (timesLeft > 0) then
+            isReturning = true
+            if timesLeft == 0 then
+                timesLeft = 1
+                member:setTimesLeft(1)
+            end
+        end
+
         if recruiter ~= "" then
             member:setRecruiter(recruiter)
         end
@@ -1391,15 +1433,46 @@ function MemberController:handleGuildJoin(newMemberName)
         member = newMember
     end
 
-    -- Registra o log de recrutamento do novo membro
+    if not isReturning and self._logService and self._logService.getRecentLeaveOrKickDate then
+        local lDate = self._logService:getRecentLeaveOrKickDate(cleanName)
+        if lDate and lDate ~= "" then
+            isReturning = true
+            previousDateLeft = lDate
+            if self._logService.getRecentRankBeforeLeave then
+                previousLastRank = self._logService:getRecentRankBeforeLeave(cleanName)
+            end
+            timesLeft = 1
+            if member then
+                member:setTimesLeft(1)
+            end
+        end
+    end
+
+    -- Registra o log correspondente (REJOINED se for retorno de ex-membro, ou JOINED se for novo)
     if self._logService then
         local m = member or self._memberService:getMember(cleanName)
         local memberGuid = m and m:getGuid() or ""
-        self._logService:logRecruitment(cleanName, recruiter, memberGuid)
+        if isReturning then
+            if previousDateLeft == "" and self._logService.getRecentLeaveOrKickDate then
+                previousDateLeft = self._logService:getRecentLeaveOrKickDate(cleanName)
+            end
+            if previousLastRank == "" and self._logService.getRecentRankBeforeLeave then
+                previousLastRank = self._logService:getRecentRankBeforeLeave(cleanName)
+            end
+            self._logService:logMemberRejoin(cleanName, recruiter, previousDateLeft, previousLastRank, timesLeft, memberGuid)
+        else
+            self._logService:logRecruitment(cleanName, recruiter, memberGuid)
+        end
     end
 
     -- 4. Notificação no chat com destaque visual
-    if recruiter ~= "" then
+    if isReturning then
+        if recruiter ~= "" then
+            print(string.format("|cff00ff00[GuildManager]|r Ex-membro retornou à guilda: |cffffff00%s|r (Recrutador: |cff00bfff%s|r)", cleanName, recruiter))
+        else
+            print(string.format("|cff00ff00[GuildManager]|r Ex-membro retornou à guilda: |cffffff00%s|r", cleanName))
+        end
+    elseif recruiter ~= "" then
         print(string.format("|cff00ff00[GuildManager]|r Novo membro recrutado: |cffffff00%s|r (Recrutador: |cff00bfff%s|r)", cleanName, recruiter))
     else
         print(string.format("|cff00ff00[GuildManager]|r Novo membro entrou na guilda: |cffffff00%s|r", cleanName))
@@ -1452,18 +1525,19 @@ function MemberController:handleGuildLeave(memberName, eventTimestamp)
 
     local member = self._memberService:getMember(cleanName)
 
-    -- Se o membro já está fora da guilda e já possui log de LEFT registrado para este evento, evita reprocessamento
-    if member and not member:isInGuild() and self._logService and self._logService.hasLeaveLog and self._logService:hasLeaveLog(cleanName, eventTimestamp) then
+    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente)
+    -- e o membro já está fora da guilda, evita reprocessar eventos históricos
+    if eventTimestamp and eventTimestamp > 0 and member and not member:isInGuild() then
         return
     end
 
-    local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+    local today = (date and date("%Y-%m-%d %H:%M:%S")) or (os and os.date and os.date("%Y-%m-%d %H:%M:%S")) or ""
     local dateStr = today
     if eventTimestamp and eventTimestamp > 0 then
         if date then
-            dateStr = date("%Y-%m-%d", eventTimestamp)
+            dateStr = date("%Y-%m-%d %H:%M:%S", eventTimestamp)
         elseif os and os.date then
-            dateStr = os.date("%Y-%m-%d", eventTimestamp)
+            dateStr = os.date("%Y-%m-%d %H:%M:%S", eventTimestamp)
         end
     end
 
@@ -1473,9 +1547,7 @@ function MemberController:handleGuildLeave(memberName, eventTimestamp)
         if member:getRankName() and member:getRankName() ~= "" then
             member:setLastRank(member:getRankName())
         end
-        if member:getDateLeft() == "" or (eventTimestamp and eventTimestamp > 0) then
-            member:setDateLeft(dateStr)
-        end
+        member:setDateLeft(dateStr)
         if wasInGuild or member:getTimesLeft() == 0 then
             member:setTimesLeft((member:getTimesLeft() or 0) + 1)
         end
@@ -1494,10 +1566,16 @@ function MemberController:handleGuildLeave(memberName, eventTimestamp)
 
     -- Desvincula imediatamente da lista de alts
     local unlinked = self._memberService:unlinkMemberOnGuildLeave(cleanName)
-    if unlinked then
-        print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda e foi desvinculado da lista de alts.", cleanName))
-    else
-        print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda.", cleanName))
+    if self._memberService and self._memberService.recordRecentLeave then
+        self._memberService:recordRecentLeave(cleanName)
+    end
+    -- Notificação no chat do jogo apenas para eventos em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if unlinked then
+            print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda e foi desvinculado da lista de alts.", cleanName))
+        else
+            print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda.", cleanName))
+        end
     end
 
     -- Registra o log de saída da guilda (LEFT)
@@ -1525,15 +1603,17 @@ function MemberController:handleGuildLeave(memberName, eventTimestamp)
         end
     end
 
-    -- Solicita atualização do roster
-    if C_Timer and C_Timer.After then
-        C_Timer.After(1.0, function()
-            if IsInGuild and IsInGuild() then
-                self._guildRosterService:requestRosterUpdate()
-            end
-        end)
-    else
-        self._guildRosterService:requestRosterUpdate()
+    -- Solicita atualização do roster apenas se for evento em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1.0, function()
+                if IsInGuild and IsInGuild() then
+                    self._guildRosterService:requestRosterUpdate()
+                end
+            end)
+        else
+            self._guildRosterService:requestRosterUpdate()
+        end
     end
 end
 
@@ -1563,18 +1643,18 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
 
     local member = self._memberService:getMember(cleanKicked)
 
-    -- Se o membro já está fora da guilda e já possui log de KICK registrado para este evento, evita reprocessamento
-    if member and not member:isInGuild() and self._logService and self._logService.hasKickLog and self._logService:hasKickLog(cleanKicked, eventTimestamp) then
+    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente)
+    -- e o membro já está fora da guilda, evita reprocessar eventos históricos
+    if eventTimestamp and eventTimestamp > 0 and member and not member:isInGuild() then
         return
     end
-
-    local today = (date and date("%Y-%m-%d")) or (os and os.date and os.date("%Y-%m-%d")) or ""
+    local today = (date and date("%Y-%m-%d %H:%M:%S")) or (os and os.date and os.date("%Y-%m-%d %H:%M:%S")) or ""
     local dateStr = today
     if eventTimestamp and eventTimestamp > 0 then
         if date then
-            dateStr = date("%Y-%m-%d", eventTimestamp)
+            dateStr = date("%Y-%m-%d %H:%M:%S", eventTimestamp)
         elseif os and os.date then
-            dateStr = os.date("%Y-%m-%d", eventTimestamp)
+            dateStr = os.date("%Y-%m-%d %H:%M:%S", eventTimestamp)
         end
     end
 
@@ -1584,10 +1664,8 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
         if member:getRankName() and member:getRankName() ~= "" then
             member:setLastRank(member:getRankName())
         end
-        if member:getDateLeft() == "" or (eventTimestamp and eventTimestamp > 0) then
-            member:setDateLeft(dateStr)
-        end
-        if wasInGuild then
+        member:setDateLeft(dateStr)
+        if wasInGuild or (member:getTimesLeft() or 0) == 0 then
             member:setTimesLeft((member:getTimesLeft() or 0) + 1)
         end
         self._memberService:saveMember(member)
@@ -1605,6 +1683,9 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
 
     -- Desvincula imediatamente da lista de alts
     self._memberService:unlinkMemberOnGuildLeave(cleanKicked)
+    if self._memberService and self._memberService.recordRecentLeave then
+        self._memberService:recordRecentLeave(cleanKicked)
+    end
 
     -- Registra o log de expulsão (KICK)
     if self._logService then
@@ -1633,15 +1714,17 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
         end
     end
 
-    -- Solicita atualização do roster
-    if C_Timer and C_Timer.After then
-        C_Timer.After(1.0, function()
-            if IsInGuild and IsInGuild() then
-                self._guildRosterService:requestRosterUpdate()
-            end
-        end)
-    else
-        self._guildRosterService:requestRosterUpdate()
+    -- Solicita atualização do roster apenas se for evento em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1.0, function()
+                if IsInGuild and IsInGuild() then
+                    self._guildRosterService:requestRosterUpdate()
+                end
+            end)
+        else
+            self._guildRosterService:requestRosterUpdate()
+        end
     end
 end
 
@@ -1670,6 +1753,12 @@ function MemberController:handleGuildPromote(promotedName, promoterName, newRank
         oldRankIndex = member:getRankIndex()
     end
 
+    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente)
+    -- e o membro já possui este cargo, evita reprocessamento
+    if eventTimestamp and eventTimestamp > 0 and member and member:getRankName() == cleanRank then
+        return
+    end
+
     -- Se o membro já possui log de promoção para este cargo e mesmo período, evita reprocessamento
     if self._logService and self._logService.hasPromotionLog and self._logService:hasPromotionLog(cleanPromoted, cleanRank, eventTimestamp) then
         return
@@ -1694,15 +1783,17 @@ function MemberController:handleGuildPromote(promotedName, promoterName, newRank
         self._memberService:saveMember(member)
     end
 
-    -- Notificação no chat com destaque visual
-    if cleanPromoter ~= "" and cleanPromoter ~= "Desconhecido" then
-        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
-            cleanPromoted, cleanRank, cleanPromoter,
-            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
-    else
-        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r!%s",
-            cleanPromoted, cleanRank,
-            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+    -- Notificação no chat com destaque visual apenas para eventos em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if cleanPromoter ~= "" and cleanPromoter ~= "Desconhecido" then
+            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
+                cleanPromoted, cleanRank, cleanPromoter,
+                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+        else
+            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r!%s",
+                cleanPromoted, cleanRank,
+                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+        end
     end
 
     -- Se a janela estiver aberta exibindo o membro promovido, atualiza a interface
@@ -1719,15 +1810,17 @@ function MemberController:handleGuildPromote(promotedName, promoterName, newRank
         end
     end
 
-    -- Solicita atualização do roster
-    if C_Timer and C_Timer.After then
-        C_Timer.After(1.0, function()
-            if IsInGuild and IsInGuild() then
-                self._guildRosterService:requestRosterUpdate()
-            end
-        end)
-    else
-        self._guildRosterService:requestRosterUpdate()
+    -- Solicita atualização do roster apenas para eventos em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1.0, function()
+                if IsInGuild and IsInGuild() then
+                    self._guildRosterService:requestRosterUpdate()
+                end
+            end)
+        else
+            self._guildRosterService:requestRosterUpdate()
+        end
     end
 end
 
@@ -1756,6 +1849,12 @@ function MemberController:handleGuildDemote(demotedName, demoterName, newRank, e
         oldRankIndex = member:getRankIndex()
     end
 
+    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente)
+    -- e o membro já possui este cargo, evita reprocessamento
+    if eventTimestamp and eventTimestamp > 0 and member and member:getRankName() == cleanRank then
+        return
+    end
+
     -- Se o membro já possui log de rebaixamento para este cargo e mesmo período, evita reprocessamento
     if self._logService and self._logService.hasDemotionLog and self._logService:hasDemotionLog(cleanDemoted, cleanRank, eventTimestamp) then
         return
@@ -1780,15 +1879,17 @@ function MemberController:handleGuildDemote(demotedName, demoterName, newRank, e
         self._memberService:saveMember(member)
     end
 
-    -- Notificação no chat com destaque visual
-    if cleanDemoter ~= "" and cleanDemoter ~= "Desconhecido" then
-        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
-            cleanDemoted, cleanRank, cleanDemoter,
-            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
-    else
-        print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r!%s",
-            cleanDemoted, cleanRank,
-            (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+    -- Notificação no chat com destaque visual apenas para eventos em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if cleanDemoter ~= "" and cleanDemoter ~= "Desconhecido" then
+            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
+                cleanDemoted, cleanRank, cleanDemoter,
+                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+        else
+            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r!%s",
+                cleanDemoted, cleanRank,
+                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+        end
     end
 
     -- Se a janela estiver aberta exibindo o membro rebaixado, atualiza a interface
@@ -1805,15 +1906,17 @@ function MemberController:handleGuildDemote(demotedName, demoterName, newRank, e
         end
     end
 
-    -- Solicita atualização do roster
-    if C_Timer and C_Timer.After then
-        C_Timer.After(1.0, function()
-            if IsInGuild and IsInGuild() then
-                self._guildRosterService:requestRosterUpdate()
-            end
-        end)
-    else
-        self._guildRosterService:requestRosterUpdate()
+    -- Solicita atualização do roster apenas para eventos em tempo real
+    if not eventTimestamp or eventTimestamp <= 0 then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1.0, function()
+                if IsInGuild and IsInGuild() then
+                    self._guildRosterService:requestRosterUpdate()
+                end
+            end)
+        else
+            self._guildRosterService:requestRosterUpdate()
+        end
     end
 end
 
@@ -1872,9 +1975,6 @@ function MemberController:requestGuildEventLog(force)
 
     local now = (GetTime and GetTime()) or (time and time()) or (os and os.time and os.time()) or 0
     if not force and self._lastEventLogQuery and (now - self._lastEventLogQuery < 10) then
-        if self:hasGuildEventLogEntries() then
-            self:checkGuildEventLog()
-        end
         return
     end
 
@@ -1892,49 +1992,59 @@ end
 --- registrar expulsões (KICK) e registrar saídas voluntárias do passado (LEFT).
 function MemberController:checkGuildEventLog()
     self._guildEventLogLoaded = true
+    self._processedEventLogKeys = self._processedEventLogKeys or {}
 
     if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
         local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
         if success and type(logEntries) == "table" then
             for _, entry in ipairs(logEntries) do
                 if entry then
-                    if entry.type == "invite" or entry.type == 1 then
-                        -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
-                        local recruit = entry.player2 or entry.name
-                        local recruiter = entry.player1 or entry.sourceName
-                        if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
-                            self:applyRecruiterIfEmpty(recruit, recruiter, entry.time)
-                        end
-                    elseif entry.type == "join" or entry.type == "joined" then
-                        -- Membro de fato entrou na guilda!
-                        local joinedName = entry.player1 or entry.name or entry.player2 or ""
-                        if joinedName and joinedName ~= "" then
-                            self:handleOfflineGuildJoin(joinedName, entry.time)
-                        end
-                    elseif entry.type == "remove" or entry.type == 4 or entry.type == "kick" then
-                        local kicker = entry.player1 or entry.sourceName or ""
-                        local kicked = entry.player2 or entry.name or ""
-                        if kicked and kicked ~= "" then
-                            self:handleGuildKick(kicked, kicker, entry.time)
-                        end
-                    elseif entry.type == "quit" or entry.type == 5 or entry.type == "leave" then
-                        local quitter = entry.player1 or entry.name or ""
-                        if quitter and quitter ~= "" then
-                            self:handleGuildLeave(quitter, entry.time)
-                        end
-                    elseif entry.type == "promote" or entry.type == 3 or entry.type == "promoted" then
-                        local promoter = entry.player1 or entry.sourceName or ""
-                        local promoted = entry.player2 or entry.name or ""
-                        local newRank = entry.rank or entry.rankName or ""
-                        if promoted and promoted ~= "" then
-                            self:handleGuildPromote(promoted, promoter, newRank, entry.time)
-                        end
-                    elseif entry.type == "demote" or entry.type == "demoted" then
-                        local demoter = entry.player1 or entry.sourceName or ""
-                        local demoted = entry.player2 or entry.name or ""
-                        local newRank = entry.rank or entry.rankName or ""
-                        if demoted and demoted ~= "" then
-                            self:handleGuildDemote(demoted, demoter, newRank, entry.time)
+                    local entryKey = string.format("%s:%s:%s:%s:%s",
+                        tostring(entry.type),
+                        tostring(entry.player1 or entry.sourceName or ""),
+                        tostring(entry.player2 or entry.name or ""),
+                        tostring(entry.rank or entry.rankName or ""),
+                        tostring(entry.time or 0))
+                    if not self._processedEventLogKeys[entryKey] then
+                        self._processedEventLogKeys[entryKey] = true
+                        if entry.type == "invite" or entry.type == 1 then
+                            -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
+                            local recruit = entry.player2 or entry.name
+                            local recruiter = entry.player1 or entry.sourceName
+                            if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
+                                self:applyRecruiterIfEmpty(recruit, recruiter, entry.time)
+                            end
+                        elseif entry.type == "join" or entry.type == "joined" then
+                            -- Membro de fato entrou na guilda!
+                            local joinedName = entry.player1 or entry.name or entry.player2 or ""
+                            if joinedName and joinedName ~= "" then
+                                self:handleOfflineGuildJoin(joinedName, entry.time)
+                            end
+                        elseif entry.type == "remove" or entry.type == 4 or entry.type == "kick" then
+                            local kicker = entry.player1 or entry.sourceName or ""
+                            local kicked = entry.player2 or entry.name or ""
+                            if kicked and kicked ~= "" then
+                                self:handleGuildKick(kicked, kicker, entry.time)
+                            end
+                        elseif entry.type == "quit" or entry.type == 5 or entry.type == "leave" then
+                            local quitter = entry.player1 or entry.name or ""
+                            if quitter and quitter ~= "" then
+                                self:handleGuildLeave(quitter, entry.time)
+                            end
+                        elseif entry.type == "promote" or entry.type == 3 or entry.type == "promoted" then
+                            local promoter = entry.player1 or entry.sourceName or ""
+                            local promoted = entry.player2 or entry.name or ""
+                            local newRank = entry.rank or entry.rankName or ""
+                            if promoted and promoted ~= "" then
+                                self:handleGuildPromote(promoted, promoter, newRank, entry.time)
+                            end
+                        elseif entry.type == "demote" or entry.type == "demoted" then
+                            local demoter = entry.player1 or entry.sourceName or ""
+                            local demoted = entry.player2 or entry.name or ""
+                            local newRank = entry.rank or entry.rankName or ""
+                            if demoted and demoted ~= "" then
+                                self:handleGuildDemote(demoted, demoter, newRank, entry.time)
+                            end
                         end
                     end
                 end
@@ -1952,53 +2062,65 @@ function MemberController:checkGuildEventLog()
             for i = 1, limit do
                 local s, eventType, p1, p2, rank, years, months, days, hours = pcall(getInfo, i)
                 if s and eventType then
-                    local evtLower = tostring(eventType):lower()
-                    local eventTimestamp = nil
-                    if days or hours or months or years then
-                        local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-                        local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
-                        if now > secAgo then
-                            eventTimestamp = now - secAgo
+                    local entryKey = string.format("%s:%s:%s:%s:%s:%s:%s:%s",
+                        tostring(eventType),
+                        tostring(p1 or ""),
+                        tostring(p2 or ""),
+                        tostring(rank or ""),
+                        tostring(years or 0),
+                        tostring(months or 0),
+                        tostring(days or 0),
+                        tostring(hours or 0))
+                    if not self._processedEventLogKeys[entryKey] then
+                        self._processedEventLogKeys[entryKey] = true
+                        local evtLower = tostring(eventType):lower()
+                        local eventTimestamp = nil
+                        if days or hours or months or years then
+                            local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                            local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                            if now > secAgo then
+                                eventTimestamp = now - secAgo
+                            end
                         end
-                    end
 
-                    if evtLower == "invite" or evtLower:find("invite") or evtLower:find("convida") then
-                        -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
-                        local recruiter = p1
-                        local recruit = p2
-                        if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
-                            self:applyRecruiterIfEmpty(recruit, recruiter, eventTimestamp)
-                        end
-                    elseif evtLower == "join" or evtLower == "joined" or evtLower:find("join") or evtLower:find("entra") then
-                        -- Membro de fato entrou na guilda!
-                        local joinedName = p1 or p2 or ""
-                        if joinedName and joinedName ~= "" then
-                            self:handleOfflineGuildJoin(joinedName, eventTimestamp)
-                        end
-                    elseif evtLower == "remove" or evtLower == "kick" or evtLower:find("remove") or evtLower:find("kick") then
-                        local kicker = p1
-                        local kicked = p2
-                        if kicked and kicked ~= "" then
-                            self:handleGuildKick(kicked, kicker, eventTimestamp)
-                        end
-                    elseif evtLower == "quit" or evtLower == "leave" or evtLower:find("quit") or evtLower:find("leave") or evtLower:find("saiu") then
-                        local quitter = p1
-                        if quitter and quitter ~= "" then
-                            self:handleGuildLeave(quitter, eventTimestamp)
-                        end
-                    elseif evtLower == "promote" or evtLower == "promoted" or evtLower:find("promote") or evtLower:find("promov") then
-                        local promoter = p1
-                        local promoted = p2
-                        local newRank = rank or ""
-                        if promoted and promoted ~= "" then
-                            self:handleGuildPromote(promoted, promoter, newRank, eventTimestamp)
-                        end
-                    elseif evtLower == "demote" or evtLower == "demoted" or evtLower:find("demote") or evtLower:find("rebaix") then
-                        local demoter = p1
-                        local demoted = p2
-                        local newRank = rank or ""
-                        if demoted and demoted ~= "" then
-                            self:handleGuildDemote(demoted, demoter, newRank, eventTimestamp)
+                        if evtLower == "invite" or evtLower:find("invite") or evtLower:find("convida") then
+                            -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
+                            local recruiter = p1
+                            local recruit = p2
+                            if recruit and recruiter and recruit ~= "" and recruiter ~= "" then
+                                self:applyRecruiterIfEmpty(recruit, recruiter, eventTimestamp)
+                            end
+                        elseif evtLower == "join" or evtLower == "joined" or evtLower:find("join") or evtLower:find("entra") then
+                            -- Membro de fato entrou na guilda!
+                            local joinedName = p1 or p2 or ""
+                            if joinedName and joinedName ~= "" then
+                                self:handleOfflineGuildJoin(joinedName, eventTimestamp)
+                            end
+                        elseif evtLower == "remove" or evtLower == "kick" or evtLower:find("remove") or evtLower:find("kick") then
+                            local kicker = p1
+                            local kicked = p2
+                            if kicked and kicked ~= "" then
+                                self:handleGuildKick(kicked, kicker, eventTimestamp)
+                            end
+                        elseif evtLower == "quit" or evtLower == "leave" or evtLower:find("quit") or evtLower:find("leave") or evtLower:find("saiu") then
+                            local quitter = p1
+                            if quitter and quitter ~= "" then
+                                self:handleGuildLeave(quitter, eventTimestamp)
+                            end
+                        elseif evtLower == "promote" or evtLower == "promoted" or evtLower:find("promote") or evtLower:find("promov") then
+                            local promoter = p1
+                            local promoted = p2
+                            local newRank = rank or ""
+                            if promoted and promoted ~= "" then
+                                self:handleGuildPromote(promoted, promoter, newRank, eventTimestamp)
+                            end
+                        elseif evtLower == "demote" or evtLower == "demoted" or evtLower:find("demote") or evtLower:find("rebaix") then
+                            local demoter = p1
+                            local demoted = p2
+                            local newRank = rank or ""
+                            if demoted and demoted ~= "" then
+                                self:handleGuildDemote(demoted, demoter, newRank, eventTimestamp)
+                            end
                         end
                     end
                 end
@@ -2040,6 +2162,25 @@ function MemberController:applyRecruiterIfEmpty(recruitName, recruiterName, even
             print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r atualizado pelo log: |cff00bfff%s|r", cleanRecruit, cleanRecruiter))
         end
 
+        -- Se o membro possui log recente de REJOINED, apenas atualiza o nome do recrutador no log existente
+        if self._logService and self._logService._repository and self._logService._repository.findRecentRejoinLog then
+            local rejoinLog = self._logService._repository:findRecentRejoinLog(cleanRecruit, 3600)
+            if rejoinLog then
+                local curRecruiter = rejoinLog:getRecruiter()
+                if curRecruiter == "" or curRecruiter == "Desconhecido" then
+                    rejoinLog:setRecruiter(cleanRecruiter)
+                    local recClass = ""
+                    local r = self._memberService:getMember(cleanRecruiter)
+                    if r then recClass = r:getClass() or "" end
+                    if recClass ~= "" then
+                        rejoinLog:setRecruiterClass(recClass)
+                    end
+                    rejoinLog:setMessage(self._logService:formatRejoinedMessage(cleanRecruit, cleanRecruiter, rejoinLog:getDateLeft(), rejoinLog:getLastRank(), rejoinLog:getTimesLeft(), rejoinLog:getClass(), rejoinLog:getRecruiterClass()))
+                    self._logService._repository:save(rejoinLog)
+                end
+            end
+        end
+
         -- Se o membro já possui um log de JOINED, apenas atualiza o nome do recrutador no log existente
         if self._logService and self._logService._repository and self._logService._repository.findJoinedLog then
             local existingLog = self._logService._repository:findJoinedLog(cleanRecruit, member:getGuid())
@@ -2072,11 +2213,18 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
         return
     end
 
-    if self._memberService and self._memberService.recordRecentJoin then
-        self._memberService:recordRecentJoin(cleanName)
+    -- Se o membro acabou de sair ou ser expulso (carência de 60s), rejeita!
+    if self._memberService and self._memberService.isRecentlyLeft and self._memberService:isRecentlyLeft(cleanName) then
+        return
     end
 
     local member = self._memberService:getMember(cleanName)
+
+    -- Se o membro não está na guilda (está marcado como fora / removido),
+    -- ele NÃO está ingressando agora: esta entrada no log da Blizzard é histórica (anterior à saída)!
+    if member and not member:isInGuild() then
+        return
+    end
 
     -- Verifica se já possui log de JOINED para evitar duplicatas
     if self._logService and self._logService._repository and self._logService._repository.findJoinedLog then
@@ -2085,6 +2233,15 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
         if existingLog then
             return
         end
+    end
+
+    -- Se já possui log de REJOINED recente para este evento, evita duplicatas
+    if self._logService and self._logService.hasRejoinLog and self._logService:hasRejoinLog(cleanName, eventTimestamp) then
+        return
+    end
+
+    if self._memberService and self._memberService.recordRecentJoin then
+        self._memberService:recordRecentJoin(cleanName)
     end
 
     -- Busca o recrutador correspondente (caso tenha havido um convite prévio registrado)
@@ -2099,7 +2256,24 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
         recruiter = member:getRecruiter()
     end
 
-    -- Registra o log de JOINED somente agora que a entrada de fato ocorreu
+    local isReturning = false
+    local previousDateLeft = ""
+    local previousLastRank = ""
+    local timesLeft = 0
+
+    if member then
+        previousDateLeft = member:getDateLeft() or ""
+        previousLastRank = member:getLastRank() or ""
+        if previousLastRank == "" then
+            previousLastRank = member:getRankName() or ""
+        end
+        timesLeft = member:getTimesLeft() or 0
+        if timesLeft > 0 then
+            isReturning = true
+        end
+    end
+
+    -- Registra o log correspondente (REJOINED ou JOINED)
     if self._logService then
         local guid = member and member:getGuid() or ""
         local dateStr = nil
@@ -2110,7 +2284,18 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
                 dateStr = os.date("%Y-%m-%d %H:%M:%S", eventTimestamp)
             end
         end
-        self._logService:logRecruitment(cleanName, recruiter, guid, eventTimestamp, dateStr)
+
+        if isReturning then
+            if previousDateLeft == "" and self._logService.getRecentLeaveOrKickDate then
+                previousDateLeft = self._logService:getRecentLeaveOrKickDate(cleanName)
+            end
+            if previousLastRank == "" and self._logService.getRecentRankBeforeLeave then
+                previousLastRank = self._logService:getRecentRankBeforeLeave(cleanName)
+            end
+            self._logService:logMemberRejoin(cleanName, recruiter, previousDateLeft, previousLastRank, timesLeft, guid, eventTimestamp, dateStr)
+        else
+            self._logService:logRecruitment(cleanName, recruiter, guid, eventTimestamp, dateStr)
+        end
     end
 end
 

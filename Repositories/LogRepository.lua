@@ -125,14 +125,14 @@ function LogRepository:findRecentLeaveLog(name, withinSeconds)
 
     local lowerName = name:lower()
     local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-    local threshold = withinSeconds or 600
+    local threshold = withinSeconds or 15
 
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
         if rawData and (rawData.event == "LEAVED" or rawData.event == "LEFT") then
             if rawData.name and rawData.name:lower() == lowerName then
                 local logTime = rawData.timestamp or 0
-                if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                if logTime > 0 and now > 0 and (now - logTime) >= 0 and (now - logTime) <= threshold then
                     rawData.id = rawData.id or i
                     return Log:new(rawData)
                 end
@@ -143,7 +143,7 @@ function LogRepository:findRecentLeaveLog(name, withinSeconds)
     return nil
 end
 
---- Busca um log recente de expulsão (KICK) para evitar registros duplicados.
+--- Busca um log recente de expulsão (KICK) para evitar registros duplicados imediatos.
 ---@param name string
 ---@param withinSeconds number|nil
 ---@return Log|nil, number|nil
@@ -154,14 +154,14 @@ function LogRepository:findRecentKickLog(name, withinSeconds)
 
     local lowerName = name:lower()
     local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-    local threshold = withinSeconds or 600
+    local threshold = withinSeconds or 15
 
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
         if rawData and rawData.event == "KICK" then
             if rawData.name and rawData.name:lower() == lowerName then
                 local logTime = rawData.timestamp or 0
-                if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                if logTime > 0 and now > 0 and (now - logTime) >= 0 and (now - logTime) <= threshold then
                     rawData.id = rawData.id or i
                     return Log:new(rawData), i
                 end
@@ -172,8 +172,7 @@ function LogRepository:findRecentKickLog(name, withinSeconds)
     return nil, nil
 end
 
---- Verifica se existe algum log de saída (LEFT) registrado para o personagem.
---- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+--- Verifica se existe algum log de saída (LEFT) registrado para o personagem no mesmo momento.
 ---@param name string
 ---@param eventTimestamp number|nil
 ---@return boolean
@@ -182,16 +181,17 @@ function LogRepository:hasLeaveLog(name, eventTimestamp)
         return false
     end
 
+    if not eventTimestamp or eventTimestamp <= 0 then
+        return false
+    end
+
     local lowerName = name:lower()
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
         if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED") then
             if rawData.name and rawData.name:lower() == lowerName then
-                if not eventTimestamp or eventTimestamp == 0 then
-                    return true
-                end
                 local logTime = rawData.timestamp or 0
-                if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                if logTime > 0 and math.abs(logTime - eventTimestamp) <= 15 then
                     return true
                 end
             end
@@ -201,8 +201,7 @@ function LogRepository:hasLeaveLog(name, eventTimestamp)
     return false
 end
 
---- Verifica se existe algum log de expulsão (KICK) registrado para o personagem.
---- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+--- Verifica se existe algum log de expulsão (KICK) registrado para o personagem no mesmo momento.
 ---@param name string
 ---@param eventTimestamp number|nil
 ---@return boolean
@@ -212,15 +211,74 @@ function LogRepository:hasKickLog(name, eventTimestamp)
     end
 
     local lowerName = name:lower()
+    if eventTimestamp and eventTimestamp > 0 then
+        for i = #self._db.logs, 1, -1 do
+            local rawData = self._db.logs[i]
+            if rawData and rawData.event == "KICK" then
+                if rawData.name and rawData.name:lower() == lowerName then
+                    local logTime = rawData.timestamp or 0
+                    if logTime > 0 and math.abs(logTime - eventTimestamp) <= 15 then
+                        return true
+                    end
+                end
+            end
+        end
+    else
+        return self:findRecentKickLog(name, 15) ~= nil
+    end
+
+    return false
+end
+
+--- Busca um log recente de retorno (REJOINED) para evitar registros duplicados imediatos.
+---@param name string
+---@param withinSeconds number|nil
+---@return Log|nil, number|nil
+function LogRepository:findRecentRejoinLog(name, withinSeconds)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil, nil
+    end
+
+    local lowerName = name:lower()
+    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    local threshold = withinSeconds or 15
+
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
-        if rawData and rawData.event == "KICK" then
+        if rawData and (rawData.event == "REJOINED" or rawData.event == (LogEvent and LogEvent.REJOINED)) then
             if rawData.name and rawData.name:lower() == lowerName then
-                if not eventTimestamp or eventTimestamp == 0 then
-                    return true
-                end
                 local logTime = rawData.timestamp or 0
-                if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                if logTime > 0 and now > 0 and (now - logTime) >= 0 and (now - logTime) <= threshold then
+                    rawData.id = rawData.id or i
+                    return Log:new(rawData), i
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--- Verifica se existe algum log de retorno (REJOINED) registrado para o personagem no mesmo momento.
+---@param name string
+---@param eventTimestamp number|nil
+---@return boolean
+function LogRepository:hasRejoinLog(name, eventTimestamp)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    if not eventTimestamp or eventTimestamp <= 0 then
+        return false
+    end
+
+    local lowerName = name:lower()
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "REJOINED" or rawData.event == (LogEvent and LogEvent.REJOINED)) then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local logTime = rawData.timestamp or 0
+                if logTime > 0 and math.abs(logTime - eventTimestamp) <= 15 then
                     return true
                 end
             end
@@ -228,6 +286,55 @@ function LogRepository:hasKickLog(name, eventTimestamp)
     end
 
     return false
+end
+
+--- Busca o último registro de saída ou expulsão (LEFT ou KICK) de um determinado personagem.
+---@param name string
+---@return Log|nil
+function LogRepository:findLastLeaveLog(name)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil
+    end
+
+    local lowerName = name:lower()
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED" or rawData.event == "KICK" or rawData.event == LogEvent.LEFT or rawData.event == LogEvent.KICK) then
+            if rawData.name and rawData.name:lower() == lowerName then
+                rawData.id = rawData.id or i
+                return Log:new(rawData)
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Busca o último cargo registrado em logs para o personagem.
+---@param name string
+---@return string
+function LogRepository:findLastRankLog(name)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return ""
+    end
+
+    local lowerName = name:lower()
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and rawData.name and rawData.name:lower() == lowerName then
+            if rawData.lastRank and rawData.lastRank ~= "" then
+                return rawData.lastRank
+            end
+            if rawData.newRank and rawData.newRank ~= "" then
+                return rawData.newRank
+            end
+            if rawData.oldRank and rawData.oldRank ~= "" then
+                return rawData.oldRank
+            end
+        end
+    end
+
+    return ""
 end
 
 --- Busca um log existente de evolução de nível (LEVELED) para o personagem e nível especificados.
@@ -280,7 +387,7 @@ function LogRepository:findRecentPromotionLog(name, newRank, withinSeconds)
     local lowerName = name:lower()
     local lowerRank = (newRank and newRank ~= "") and newRank:lower() or nil
     local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-    local threshold = withinSeconds or 600
+    local threshold = withinSeconds or 15
 
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
@@ -295,7 +402,7 @@ function LogRepository:findRecentPromotionLog(name, newRank, withinSeconds)
                 end
                 if matchRank then
                     local logTime = rawData.timestamp or 0
-                    if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                    if logTime > 0 and now > 0 and (now - logTime) >= 0 and (now - logTime) <= threshold then
                         rawData.id = rawData.id or i
                         return Log:new(rawData), i
                     end
@@ -307,14 +414,17 @@ function LogRepository:findRecentPromotionLog(name, newRank, withinSeconds)
     return nil, nil
 end
 
---- Verifica se existe algum log de promoção (PROMOTION) registrado para o personagem.
---- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+--- Verifica se existe algum log de promoção (PROMOTION) registrado para o personagem no mesmo momento.
 ---@param name string
 ---@param newRank string|nil
 ---@param eventTimestamp number|nil
 ---@return boolean
 function LogRepository:hasPromotionLog(name, newRank, eventTimestamp)
     if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    if not eventTimestamp or eventTimestamp <= 0 then
         return false
     end
 
@@ -333,11 +443,8 @@ function LogRepository:hasPromotionLog(name, newRank, eventTimestamp)
                     end
                 end
                 if matchRank then
-                    if not eventTimestamp or eventTimestamp == 0 then
-                        return true
-                    end
                     local logTime = rawData.timestamp or 0
-                    if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                    if logTime > 0 and math.abs(logTime - eventTimestamp) <= 15 then
                         return true
                     end
                 end
@@ -361,7 +468,7 @@ function LogRepository:findRecentDemotionLog(name, newRank, withinSeconds)
     local lowerName = name:lower()
     local lowerRank = (newRank and newRank ~= "") and newRank:lower() or nil
     local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-    local threshold = withinSeconds or 600
+    local threshold = withinSeconds or 15
 
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
@@ -376,7 +483,7 @@ function LogRepository:findRecentDemotionLog(name, newRank, withinSeconds)
                 end
                 if matchRank then
                     local logTime = rawData.timestamp or 0
-                    if now == 0 or logTime == 0 or (now - logTime) <= threshold then
+                    if logTime > 0 and now > 0 and (now - logTime) >= 0 and (now - logTime) <= threshold then
                         rawData.id = rawData.id or i
                         return Log:new(rawData), i
                     end
@@ -388,14 +495,17 @@ function LogRepository:findRecentDemotionLog(name, newRank, withinSeconds)
     return nil, nil
 end
 
---- Verifica se existe algum log de rebaixamento (DEMOTION) registrado para o personagem.
---- Se eventTimestamp for informado, verifica se existe log no mesmo período (diferença <= 2 horas).
+--- Verifica se existe algum log de rebaixamento (DEMOTION) registrado para o personagem no mesmo momento.
 ---@param name string
 ---@param newRank string|nil
 ---@param eventTimestamp number|nil
 ---@return boolean
 function LogRepository:hasDemotionLog(name, newRank, eventTimestamp)
     if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    if not eventTimestamp or eventTimestamp <= 0 then
         return false
     end
 
@@ -414,11 +524,8 @@ function LogRepository:hasDemotionLog(name, newRank, eventTimestamp)
                     end
                 end
                 if matchRank then
-                    if not eventTimestamp or eventTimestamp == 0 then
-                        return true
-                    end
                     local logTime = rawData.timestamp or 0
-                    if logTime == 0 or math.abs(logTime - eventTimestamp) <= 7200 then
+                    if logTime > 0 and math.abs(logTime - eventTimestamp) <= 15 then
                         return true
                     end
                 end
@@ -605,6 +712,88 @@ function LogRepository:cleanInvertedKickLogs(memberService)
     if removedCount > 0 then
         for idx, rawData in ipairs(self._db.logs) do
             rawData.id = idx
+        end
+    end
+
+    return removedCount
+end
+
+--- Remove logs duplicados de KICK ou LEFT gerados repetidamente em sequência sem interrupção de entrada.
+--- Corrige também o contador timesLeft dos membros afetados pelas duplicatas.
+---@param memberService table|nil
+---@return number @Quantidade de registros duplicados removidos
+function LogRepository:cleanDuplicateKickAndLeaveLogs(memberService)
+    if type(self._db.logs) ~= "table" or #self._db.logs <= 1 then
+        return 0
+    end
+
+    local removedCount = 0
+    local toRemove = {}
+    local affectedMembers = {}
+    local lastExit = {}
+
+    for i = 1, #self._db.logs do
+        local rawData = self._db.logs[i]
+        if rawData then
+            local evt = rawData.event or ""
+            local name = (rawData.name or ""):lower()
+            if name ~= "" then
+                if evt == "JOINED" or evt == "REJOINED" or evt == "join" then
+                    lastExit[name] = nil
+                elseif evt == "KICK" or evt == "LEFT" or evt == "LEAVED" then
+                    local prev = lastExit[name]
+                    if prev then
+                        local curTime = rawData.timestamp or 0
+                        local prevTime = prev.timestamp or 0
+                        local isDuplicate = false
+
+                        if curTime > 0 and prevTime > 0 then
+                            if math.abs(curTime - prevTime) <= 120 then
+                                isDuplicate = true
+                            end
+                        elseif (rawData.message or "") == (prev.message or "") then
+                            if curTime == 0 and prevTime == 0 and (rawData.date or "") == (prev.date or "") then
+                                isDuplicate = true
+                            end
+                        end
+
+                        if isDuplicate then
+                            toRemove[i] = true
+                            removedCount = removedCount + 1
+                            affectedMembers[name] = (affectedMembers[name] or 0) + 1
+                        else
+                            lastExit[name] = { idx = i, timestamp = curTime, date = rawData.date, message = rawData.message }
+                        end
+                    else
+                        lastExit[name] = { idx = i, timestamp = rawData.timestamp or 0, date = rawData.date, message = rawData.message }
+                    end
+                end
+            end
+        end
+    end
+
+    if removedCount > 0 then
+        for i = #self._db.logs, 1, -1 do
+            if toRemove[i] then
+                table.remove(self._db.logs, i)
+            end
+        end
+        for idx, rawData in ipairs(self._db.logs) do
+            rawData.id = idx
+        end
+
+        -- Ajusta o timesLeft dos membros caso tenham sido inflacionados pelas duplicatas removidas
+        if memberService then
+            for cleanLower, excessCount in pairs(affectedMembers) do
+                local m = memberService:getMember(cleanLower)
+                if m then
+                    local curTimes = m:getTimesLeft() or 0
+                    if curTimes > 0 then
+                        m:setTimesLeft(math.max(1, curTimes - excessCount))
+                        memberService:saveMember(m)
+                    end
+                end
+            end
         end
     end
 

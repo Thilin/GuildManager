@@ -157,6 +157,17 @@ end
 ---@param memberName string @Nome do membro que saiu
 ---@param guid string|nil @GUID do personagem
 ---@param timestamp number|nil @Timestamp Unix do evento
+--- Verifica se há log de expulsão para o membro no timestamp indicado ou recente.
+---@param name string
+---@param timestamp number|nil
+---@return boolean
+function LogService:hasKickLog(name, timestamp)
+    if self._repository and self._repository.hasKickLog then
+        return self._repository:hasKickLog(name, timestamp)
+    end
+    return false
+end
+
 ---@param dateStr string|nil @Data legível formatada
 ---@param memberClass string|nil @Token da classe do personagem (opcional)
 ---@return Log|nil, boolean @Retorna a entidade Log e se foi criada
@@ -165,8 +176,8 @@ function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberCl
         return nil, false
     end
 
-    -- Se o membro foi removido (KICK), é um erro de lógica registrar que ele saiu (LEFT)
-    if self:hasKickLog(memberName) then
+    -- Se o membro foi removido (KICK) neste mesmo momento, evita registrar LEFT duplicado
+    if (timestamp and timestamp > 0 and self:hasKickLog(memberName, timestamp)) or (self._repository and self._repository.findRecentKickLog and self._repository:findRecentKickLog(memberName, 15)) then
         return nil, false
     end
 
@@ -186,7 +197,7 @@ function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberCl
         end
     end
     if self._repository and self._repository.findRecentLeaveLog then
-        local existingLog = self._repository:findRecentLeaveLog(memberName, 600)
+        local existingLog = self._repository:findRecentLeaveLog(memberName, 15)
         if existingLog then
             return existingLog, false
         end
@@ -220,6 +231,227 @@ function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberCl
 
     self._repository:save(newLog)
     return newLog, true
+end
+
+--- Formata a mensagem padrão obrigatória para o evento REJOINED.
+--- Padrão: "Player X RETORNOU à guilda (Recrutado por: Player Y | Saiu em: Data | Último cargo: Cargo | Saídas: N)" com cores temáticas.
+---@param memberName string @Nome do personagem que retornou
+---@param recruiterName string|nil @Nome do recrutador
+---@param dateLeft string|nil @Data em que o membro saiu da guilda
+---@param lastRank string|nil @Último cargo ocupado pelo membro
+---@param timesLeft number|nil @Quantidade de vezes que o membro saiu da guilda
+---@param memberClass string|nil @Classe do membro que retornou
+---@param recruiterClass string|nil @Classe do recrutador
+---@return string
+function LogService:formatRejoinedMessage(memberName, recruiterName, dateLeft, lastRank, timesLeft, memberClass, recruiterClass)
+    local recruiter = (recruiterName and recruiterName ~= "" and recruiterName ~= "Desconhecido") and recruiterName or "Desconhecido"
+    local coloredMember = self:formatColoredMemberName(memberName, memberClass)
+    local coloredRecruiter
+    if recruiter ~= "Desconhecido" then
+        coloredRecruiter = self:formatColoredMemberName(recruiter, recruiterClass)
+    else
+        coloredRecruiter = "|cff888888Desconhecido|r"
+    end
+
+    local dateStr = (dateLeft and dateLeft ~= "") and dateLeft or "N/A"
+    local rankStr = (lastRank and lastRank ~= "") and lastRank or "N/A"
+    local timesNum = tonumber(timesLeft) or 1
+    if timesNum <= 0 then timesNum = 1 end
+
+    return string.format("%s |cff26ffbfRETORNOU|r |cffa8f0a8à guilda|r |cff888888(Recrutado por: |r%s|cff888888 | Saiu em: |cffffffff%s|r|cff888888 | Último cargo: |cffffff00%s|r|cff888888 | Saídas: |cffff9926%d|r)|r",
+        coloredMember, coloredRecruiter, dateStr, rankStr, timesNum)
+end
+
+LogService.formatReturnedMessage = LogService.formatRejoinedMessage
+
+--- Registra o evento de retorno/reingresso (REJOINED) de um ex-membro à guilda.
+--- Toda vez que um membro retornar, gera um novo registro de log de REJOINED.
+---@param memberName string @Nome do membro que retornou
+---@param recruiterName string|nil @Nome de quem o recrutou
+---@param dateLeft string|nil @Data em que ele saiu da guilda
+---@param lastRank string|nil @Último cargo antes de sair
+---@param timesLeft number|nil @Quantidade de vezes que o membro saiu da guilda
+---@param guid string|nil @GUID do personagem
+---@param timestamp number|nil @Timestamp Unix do evento
+---@param dateStr string|nil @Data legível formatada
+---@param memberClass string|nil @Classe do membro
+---@param recruiterClass string|nil @Classe do recrutador
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada (false)
+function LogService:logMemberRejoin(memberName, recruiterName, dateLeft, lastRank, timesLeft, guid, timestamp, dateStr, memberClass, recruiterClass)
+    if not memberName or memberName == "" then
+        return nil, false
+    end
+
+    local mService = self._memberService or (_G.GM and _G.GM.memberService)
+
+    -- Trava 1: Se o membro acabou de sair ou ser expulso (janela de carência de 60s),
+    -- NUNCA permite a criação de log de REJOINED!
+    if mService and mService.isRecentlyLeft and mService:isRecentlyLeft(memberName) then
+        return nil, false
+    end
+
+    local member = mService and mService:getMember(memberName)
+
+    -- Trava 2: Se o membro existe e está fora da guilda (isInGuild == false)
+    -- e não está dentro de um evento real recente de entrada (isRecentlyJoined),
+    -- ele não está na guilda e não pode receber log de REJOINED!
+    if member and not member:isInGuild() then
+        local isRecentJoin = mService and mService.isRecentlyJoined and mService:isRecentlyJoined(memberName)
+        if not isRecentJoin then
+            return nil, false
+        end
+    end
+
+    if not memberClass or memberClass == "" then
+        if member then memberClass = member:getClass() or "" end
+    end
+    if memberClass == "" and guid and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    local rec = recruiterName or ""
+    if rec == "" and member then
+        rec = member:getRecruiter() or ""
+    end
+    if not recruiterClass or recruiterClass == "" then
+        if rec ~= "" and mService then
+            local r = mService:getMember(rec)
+            if r then recruiterClass = r:getClass() or "" end
+        end
+    end
+
+    local dLeft = dateLeft or ""
+    if dLeft == "" and member then
+        dLeft = member:getDateLeft() or ""
+    end
+    if dLeft == "" and self.getRecentLeaveOrKickDate then
+        dLeft = self:getRecentLeaveOrKickDate(memberName)
+    end
+
+    local lRank = lastRank or ""
+    if lRank == "" and member then
+        lRank = member:getLastRank() or ""
+        if lRank == "" then
+            lRank = member:getRankName() or ""
+        end
+    end
+    if lRank == "" and self.getRecentRankBeforeLeave then
+        lRank = self:getRecentRankBeforeLeave(memberName)
+    end
+
+    local tLeft = tonumber(timesLeft)
+    if not tLeft or tLeft <= 0 then
+        if member then
+            tLeft = member:getTimesLeft() or 0
+        end
+    end
+    if not tLeft or tLeft <= 0 then
+        tLeft = 1
+    end
+
+    -- Evita duplicidade se já houver log registrado para este retorno recente (janela de 15s)
+    if self._repository and self._repository.findRecentRejoinLog then
+        local existingLog = self._repository:findRecentRejoinLog(memberName, 15)
+        if existingLog then
+            local modified = false
+            if (existingLog:getRecruiter() == "" or existingLog:getRecruiter() == "Desconhecido") and rec ~= "" then
+                existingLog:setRecruiter(rec)
+                if recruiterClass and recruiterClass ~= "" then
+                    existingLog:setRecruiterClass(recruiterClass)
+                end
+                modified = true
+            end
+            if existingLog:getDateLeft() == "" and dLeft ~= "" then
+                existingLog:setDateLeft(dLeft)
+                modified = true
+            end
+            if existingLog:getLastRank() == "" and lRank ~= "" then
+                existingLog:setLastRank(lRank)
+                modified = true
+            end
+            if (existingLog:getTimesLeft() or 0) <= 0 and tLeft > 0 then
+                existingLog:setTimesLeft(tLeft)
+                modified = true
+            end
+            if modified then
+                existingLog:setMessage(self:formatRejoinedMessage(memberName, existingLog:getRecruiter(), existingLog:getDateLeft(), existingLog:getLastRank(), existingLog:getTimesLeft(), existingLog:getClass(), existingLog:getRecruiterClass()))
+                self._repository:save(existingLog)
+            end
+            return existingLog, false
+        end
+    end
+
+    local message = self:formatRejoinedMessage(memberName, rec, dLeft, lRank, tLeft, memberClass, recruiterClass)
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid or (member and member:getGuid()) or "",
+        message = message,
+        event = LogEvent.REJOINED,
+        recruiter = rec,
+        recruiterClass = recruiterClass or "",
+        dateLeft = dLeft,
+        lastRank = lRank,
+        timesLeft = tLeft,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
+LogService.logMemberReturn = LogService.logMemberRejoin
+
+--- Busca um log recente de retorno para evitar duplicatas.
+---@param name string
+---@param withinSeconds number|nil
+---@return Log|nil
+function LogService:findRecentRejoinLog(name, withinSeconds)
+    if self._repository and self._repository.findRecentRejoinLog then
+        return self._repository:findRecentRejoinLog(name, withinSeconds)
+    end
+    return nil
+end
+
+LogService.findRecentReturnLog = LogService.findRecentRejoinLog
+
+--- Verifica se há registro de retorno para o personagem.
+---@param name string
+---@param timestamp number|nil
+---@return boolean
+function LogService:hasRejoinLog(name, timestamp)
+    if self._repository and self._repository.hasRejoinLog then
+        return self._repository:hasRejoinLog(name, timestamp)
+    end
+    return false
+end
+
+LogService.hasReturnLog = LogService.hasRejoinLog
+
+--- Obtém a data da saída ou expulsão mais recente a partir dos logs gravados.
+---@param name string
+---@return string
+function LogService:getRecentLeaveOrKickDate(name)
+    if self._repository and self._repository.findLastLeaveLog then
+        local leaveLog = self._repository:findLastLeaveLog(name)
+        if leaveLog then
+            local d = leaveLog:getDate() or ""
+            return d:match("^(%d%d%d%d%-%d%d%-%d%d)") or d
+        end
+    end
+    return ""
+end
+
+--- Obtém o último cargo conhecido do personagem antes de sair da guilda a partir dos logs.
+---@param name string
+---@return string
+function LogService:getRecentRankBeforeLeave(name)
+    if self._repository and self._repository.findLastRankLog then
+        return self._repository:findLastRankLog(name)
+    end
+    return ""
 end
 
 --- Formata a mensagem padrão obrigatória para o evento KICK.
@@ -288,7 +520,7 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
         end
     end
     if self._repository and self._repository.findRecentKickLog then
-        local existingKick = self._repository:findRecentKickLog(kickedName, 600)
+        local existingKick = self._repository:findRecentKickLog(kickedName, 15)
         if existingKick then
             -- Se já existe mas o autor era desconhecido e agora temos o autor, atualiza
             if (existingKick:getKicker() == "" or existingKick:getKicker() == "Desconhecido") and kicker ~= "" then
@@ -303,9 +535,9 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
         end
     end
 
-    -- 2. Se houver um log de LEFT gerado para este membro, converte-o para KICK
+    -- 2. Se houver um log de LEFT gerado para este membro no mesmo instante (15s), converte-o para KICK
     if self._repository and self._repository.findRecentLeaveLog then
-        local existingLeave = self._repository:findRecentLeaveLog(kickedName, 86400)
+        local existingLeave = self._repository:findRecentLeaveLog(kickedName, 15)
         if existingLeave then
             existingLeave:setEvent(LogEvent.KICK)
             existingLeave:setKicker(kicker)
@@ -556,7 +788,7 @@ function LogService:logMemberPromotion(member, promoterName, oldRank, newRank, o
 
     -- 1. Verifica se já existe um log recente de promoção para este personagem e cargo
     if self._repository and self._repository.findRecentPromotionLog then
-        local existingLog = self._repository:findRecentPromotionLog(memberName, newRank, 600)
+        local existingLog = self._repository:findRecentPromotionLog(memberName, newRank, 15)
         if existingLog then
             local modified = false
             -- Se o log existente não possuía o promotor e agora temos o promotor, atualiza
@@ -715,7 +947,7 @@ function LogService:logMemberDemotion(member, demoterName, oldRank, newRank, old
 
     -- 1. Verifica se já existe um log recente de rebaixamento para este personagem e cargo
     if self._repository and self._repository.findRecentDemotionLog then
-        local existingLog = self._repository:findRecentDemotionLog(memberName, newRank, 600)
+        local existingLog = self._repository:findRecentDemotionLog(memberName, newRank, 15)
         if existingLog then
             local modified = false
             local curDemoter = existingLog:getDemoter()
@@ -856,4 +1088,19 @@ function LogService:cleanInvertedKickLogs(memberService)
     return count
 end
 
+--- Remove do banco de dados registros duplicados de KICK ou LEFT gerados repetidamente.
+---@param memberService table|nil
+---@return number @Quantidade de registros removidos
+function LogService:cleanDuplicateKickAndLeaveLogs(memberService)
+    local mService = memberService or self._memberService or (_G.GM and _G.GM.memberService)
+    if not self._repository or not self._repository.cleanDuplicateKickAndLeaveLogs then
+        return 0
+    end
+
+    local count = self._repository:cleanDuplicateKickAndLeaveLogs(mService)
+    if count > 0 then
+        print(string.format("|cff00ff00[GuildManager]|r %d log(s) duplicados de saída/expulsão foram corrigidos e removidos.", count))
+    end
+    return count
+end
 

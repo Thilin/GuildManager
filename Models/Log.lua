@@ -9,6 +9,7 @@
 ---| "PUBLICNOTE"
 ---| "NAMECHANGE"
 ---| "INACTIVERETURN"
+---| "REJOINED"
 
 --- Enum de Eventos de Log suportados pelo GuildManager
 local RAW_EVENTS = {
@@ -22,6 +23,7 @@ local RAW_EVENTS = {
     PUBLICNOTE = "PUBLICNOTE",
     NAMECHANGE = "NAMECHANGE",
     INACTIVERETURN = "INACTIVERETURN",
+    REJOINED = "REJOINED",
 }
 
 -- Tabela para validação rápida O(1) de eventos válidos
@@ -52,6 +54,7 @@ local enumMeta = {
 ---@field PUBLICNOTE "PUBLICNOTE" @Nota pública foi alterada
 ---@field NAMECHANGE "NAMECHANGE" @Membro alterou o nome do personagem
 ---@field INACTIVERETURN "INACTIVERETURN" @Membro inativo retornou à atividade
+---@field REJOINED "REJOINED" @Ex-membro retornou à guilda
 LogEvent = setmetatable({}, enumMeta)
 
 ---@class Log
@@ -73,6 +76,9 @@ LogEvent = setmetatable({}, enumMeta)
 ---@field _newRank string @Novo cargo alcançado
 ---@field _oldRankIndex number|nil @Índice do cargo anterior
 ---@field _newRankIndex number|nil @Índice do novo cargo
+---@field _dateLeft string @Data em que o membro saiu da guilda antes de retornar
+---@field _lastRank string @Último cargo do membro antes de sair da guilda
+---@field _timesLeft number @Quantidade de vezes que o membro saiu da guilda
 ---@field _timestamp number @Timestamp Unix de quando o evento ocorreu
 ---@field _date string @Data legível formatada (AAAA-MM-DD HH:MM:SS)
 Log = {}
@@ -115,6 +121,9 @@ function Log:new(data)
     instance._newRank = data.newRank or ""
     instance._oldRankIndex = tonumber(data.oldRankIndex)
     instance._newRankIndex = tonumber(data.newRankIndex)
+    instance._dateLeft = data.dateLeft or ""
+    instance._lastRank = data.lastRank or data.oldRank or ""
+    instance._timesLeft = tonumber(data.timesLeft) or 0
     instance._level = tonumber(data.level or data.newLevel)
 
     local event = data.event
@@ -431,6 +440,48 @@ function Log:setDemoterClass(class)
     self._demoterClass = tostring(class or "")
 end
 
+--- Obtém a data em que o membro saiu da guilda antes de retornar (evento REJOINED).
+---@return string
+function Log:getDateLeft()
+    return self._dateLeft or ""
+end
+
+--- Define a data em que o membro saiu da guilda antes de retornar (evento REJOINED).
+---@param dateLeft string
+function Log:setDateLeft(dateLeft)
+    self._dateLeft = tostring(dateLeft or "")
+end
+
+--- Obtém o último cargo do membro antes de sair da guilda (evento REJOINED).
+---@return string
+function Log:getLastRank()
+    return self._lastRank or self._oldRank or ""
+end
+
+--- Define o último cargo do membro antes de sair da guilda (evento REJOINED).
+---@param lastRank string
+function Log:setLastRank(lastRank)
+    self._lastRank = tostring(lastRank or "")
+    if not self._oldRank or self._oldRank == "" then
+        self._oldRank = self._lastRank
+    end
+end
+
+--- Obtém a quantidade de vezes que o membro saiu da guilda (evento REJOINED).
+---@return number
+function Log:getTimesLeft()
+    return self._timesLeft or 0
+end
+
+--- Define a quantidade de vezes que o membro saiu da guilda (evento REJOINED).
+---@param timesLeft number
+function Log:setTimesLeft(timesLeft)
+    local n = tonumber(timesLeft)
+    if n then
+        self._timesLeft = n
+    end
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
@@ -454,6 +505,9 @@ function Log:serialize()
         newRank = self._newRank,
         oldRankIndex = self._oldRankIndex,
         newRankIndex = self._newRankIndex,
+        dateLeft = self._dateLeft,
+        lastRank = self._lastRank,
+        timesLeft = self._timesLeft,
         timestamp = self._timestamp,
         date = self._date,
     }

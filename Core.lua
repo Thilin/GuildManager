@@ -45,6 +45,10 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         logController:initHooks()
         auditController:initHooks()
 
+        if logRepository.cleanDuplicateKickAndLeaveLogs then
+            logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
+        end
+
         print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r ou |cffffff00/gmaudit|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído

@@ -85,6 +85,41 @@ function MemberService:isRecentlyJoined(memberName)
     return false
 end
 
+--- Registra que um membro acabou de sair ou ser expulso da guilda (para período de carência contra falsos retornos).
+---@param memberName string
+function MemberService:recordRecentLeave(memberName)
+    if not memberName or memberName == "" then return end
+    self._recentlyLeftMembers = self._recentlyLeftMembers or {}
+    local lower = memberName:lower()
+    local now = (GetTime and GetTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    self._recentlyLeftMembers[lower] = now
+end
+
+--- Verifica se o membro acabou de sair ou ser expulso da guilda (dentro da janela de carência de 60 segundos).
+---@param memberName string
+---@return boolean
+function MemberService:isRecentlyLeft(memberName)
+    if not memberName or memberName == "" or not self._recentlyLeftMembers then return false end
+    local lower = memberName:lower()
+    local leaveTime = self._recentlyLeftMembers[lower]
+    if not leaveTime then return false end
+
+    local now = (GetTime and GetTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    if (now - leaveTime) < 60 then
+        return true
+    end
+
+    self._recentlyLeftMembers[lower] = nil
+    return false
+end
+
+--- Limpa o registro de saída recente de um membro (por exemplo, quando ele de fato ingressa novamente).
+---@param memberName string
+function MemberService:clearRecentLeave(memberName)
+    if not memberName or not self._recentlyLeftMembers then return end
+    self._recentlyLeftMembers[memberName:lower()] = nil
+end
+
 --- Atualiza o status de saída da guilda na entidade Member e desvincula da lista de alts.
 ---@param member Member
 ---@param dateStr string|nil
@@ -109,6 +144,7 @@ function MemberService:_markMemberLeftGuild(member, dateStr, timestamp)
     member:setTimesLeft((member:getTimesLeft() or 0) + 1)
     self._repository:save(member)
 
+    self:recordRecentLeave(memberName)
     self:unlinkMemberOnGuildLeave(memberName)
 end
 
@@ -166,6 +202,12 @@ function MemberService:processRosterMember(rosterData)
     local pendingRecruiter = self:getPendingRecruiter(rosterData.name)
 
     if member then
+        if self:isRecentlyLeft(member:getName()) then
+            -- O membro acabou de ser expulso ou sair da guilda (delay de propagação do cache da Blizzard).
+            -- NÃO processa dados de nível, cargo, reativação ou log de retorno!
+            return member
+        end
+
         local oldLevel = member:getLevel()
         local newLevel = tonumber(rosterData.level)
 
@@ -214,7 +256,22 @@ function MemberService:processRosterMember(rosterData)
             end
         end
 
-        -- Membro já existente: atualiza dados dinâmicos da API
+        -- Membro já existente: verifica se estava fora da guilda e retornou
+        local wasInGuild = member:isInGuild()
+        local previousDateLeft = member:getDateLeft() or ""
+        local previousLastRank = member:getLastRank() or ""
+        if previousLastRank == "" then
+            previousLastRank = member:getRankName() or ""
+        end
+        local timesLeft = member:getTimesLeft() or 0
+        local isReturning = (not wasInGuild)
+
+        if isReturning and timesLeft == 0 then
+            timesLeft = 1
+            member:setTimesLeft(1)
+        end
+
+        -- Atualiza dados dinâmicos da API
         member:updateFromRoster(rosterData)
 
         -- Se o membro ainda não tiver recrutador registrado, associa o recrutador pendente ou vindo dos dados
@@ -233,6 +290,21 @@ function MemberService:processRosterMember(rosterData)
                     member:setRecruiter(full)
                 end
             end
+        end
+
+        -- Se o membro retornou para a guilda, registra o log de REJOINED
+        if isReturning and self._logService then
+            local recruiter = member:getRecruiter()
+            if recruiter == "" and pendingRecruiter and pendingRecruiter ~= "" then
+                recruiter = self:resolveRecruiterFullName(pendingRecruiter)
+            end
+            if previousDateLeft == "" and self._logService.getRecentLeaveOrKickDate then
+                previousDateLeft = self._logService:getRecentLeaveOrKickDate(member:getName())
+            end
+            if previousLastRank == "" and self._logService.getRecentRankBeforeLeave then
+                previousLastRank = self._logService:getRecentRankBeforeLeave(member:getName())
+            end
+            self._logService:logMemberRejoin(member:getName(), recruiter, previousDateLeft, previousLastRank, timesLeft, member:getGuid() or rosterData.guid)
         end
     else
         -- Novo membro detectado: define data de entrada atual caso não definida

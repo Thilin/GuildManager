@@ -59,6 +59,7 @@ local PALETTE = {
 
 local EVENT_COLORS = {
     JOINED = { r = 0.25, g = 1.00, b = 0.25, hex = "|cff40ff40" },
+    REJOINED = { r = 0.15, g = 1.00, b = 0.75, hex = "|cff26ffbf" },
     LEFT = { r = 1.00, g = 0.60, b = 0.15, hex = "|cffff9926" },
     KICK = { r = 1.00, g = 0.25, b = 0.25, hex = "|cffff4040" },
     LEVELED = { r = 1.00, g = 0.85, b = 0.10, hex = "|cffffd91a" },
@@ -211,7 +212,7 @@ function LogView:createUI()
     -- =========================================================================
     local searchEB = CreateFrame("EditBox", nil, frame, template)
     searchEB:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", 0, -8)
-    searchEB:SetSize(185, 22)
+    searchEB:SetSize(145, 22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
     searchEB:SetTextInsets(6, 6, 1, 1)
@@ -262,6 +263,7 @@ function LogView:createUI()
     local filterTabs = {
         { id = "ALL", label = "Todos" },
         { id = "JOINED", label = "Recrutamentos" },
+        { id = "REJOINED", label = "Retornos" },
         { id = "LEVELED", label = "Níveis" },
         { id = "PROMOTION", label = "Promoções" },
         { id = "DEMOTION", label = "Rebaixamentos" },
@@ -275,7 +277,7 @@ function LogView:createUI()
     for _, tabData in ipairs(filterTabs) do
         local tabBtn = CreateFrame("Button", nil, frame, template)
         tabBtn:SetHeight(22)
-        tabBtn:SetPoint("LEFT", prevTab, "RIGHT", 6, 0)
+        tabBtn:SetPoint("LEFT", prevTab, "RIGHT", 5, 0)
         tabBtn.tabId = tabData.id
 
         local btnText = tabBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -284,7 +286,7 @@ function LogView:createUI()
         tabBtn.text = btnText
 
         local textWidth = btnText:GetStringWidth() or 40
-        tabBtn:SetWidth(textWidth + 16)
+        tabBtn:SetWidth(textWidth + 12)
 
         tabBtn:SetScript("OnClick", function()
             self._activeEventFilter = tabData.id
@@ -449,6 +451,21 @@ function LogView:createUI()
                 end
                 if newRank and newRank ~= "" then
                     GameTooltip:AddLine("Novo cargo: |cffffff00" .. newRank .. "|r", 0.9, 0.8, 0.5)
+                end
+
+                local dateLeft = (log.getDateLeft and log:getDateLeft()) or ""
+                if dateLeft and dateLeft ~= "" then
+                    GameTooltip:AddLine("Data em que saiu: |cffffffff" .. dateLeft .. "|r", 0.9, 0.8, 0.5)
+                end
+
+                local lastRank = (log.getLastRank and log:getLastRank()) or ""
+                if lastRank and lastRank ~= "" then
+                    GameTooltip:AddLine("Último cargo anterior: |cffffff00" .. lastRank .. "|r", 0.9, 0.8, 0.5)
+                end
+
+                local timesLeft = (log.getTimesLeft and log:getTimesLeft()) or 0
+                if timesLeft and timesLeft > 0 then
+                    GameTooltip:AddLine("Vezes que saiu da guilda: |cffff9926" .. tostring(timesLeft) .. "|r", 0.9, 0.8, 0.5)
                 end
 
                 local guid = log:getGuid()
@@ -682,6 +699,8 @@ function LogView:applyFilters()
 
         if eventFilter == "JOINED" then
             matchEvent = (evt == LogEvent.JOINED or evt == "JOINED")
+        elseif eventFilter == "REJOINED" then
+            matchEvent = (evt == LogEvent.REJOINED or evt == "REJOINED")
         elseif eventFilter == "LEVELED" then
             matchEvent = (evt == LogEvent.LEVELED or evt == "LEVELED")
         elseif eventFilter == "PROMOTION" then
@@ -693,7 +712,7 @@ function LogView:applyFilters()
         elseif eventFilter == "NOTES" then
             matchEvent = (evt == LogEvent.OFFICERNOTE or evt == LogEvent.PUBLICNOTE or evt == "OFFICERNOTE" or evt == "PUBLICNOTE")
         elseif eventFilter == "OTHER" then
-            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.PROMOTION and evt ~= "PROMOTION" and evt ~= LogEvent.DEMOTION and evt ~= "DEMOTION" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
+            matchEvent = (evt ~= LogEvent.JOINED and evt ~= "JOINED" and evt ~= LogEvent.REJOINED and evt ~= "REJOINED" and evt ~= LogEvent.LEVELED and evt ~= "LEVELED" and evt ~= LogEvent.PROMOTION and evt ~= "PROMOTION" and evt ~= LogEvent.DEMOTION and evt ~= "DEMOTION" and evt ~= LogEvent.LEFT and evt ~= "LEFT" and evt ~= LogEvent.KICK and evt ~= "KICK" and evt ~= LogEvent.OFFICERNOTE and evt ~= "OFFICERNOTE" and evt ~= LogEvent.PUBLICNOTE and evt ~= "PUBLICNOTE")
         end
 
         if matchEvent then
@@ -705,6 +724,8 @@ function LogView:applyFilters()
                 local demoter = (log.getDemoter and log:getDemoter() or ""):lower()
                 local oldRank = (log.getOldRank and log:getOldRank() or ""):lower()
                 local newRank = (log.getNewRank and log:getNewRank() or ""):lower()
+                local dateLeft = (log.getDateLeft and log:getDateLeft() or ""):lower()
+                local lastRank = (log.getLastRank and log:getLastRank() or ""):lower()
                 local msg = (log:getMessage() or ""):lower()
                 local dateStr = (log:getDate() or ""):lower()
                 local evtStr = (evt or ""):lower()
@@ -713,6 +734,8 @@ function LogView:applyFilters()
                 if (evt == "LEVELED" or evt == LogEvent.LEVELED) and ("subiu"):find(search, 1, true) then
                     matchKeyword = true
                 elseif (evt == "JOINED" or evt == LogEvent.JOINED) and ("recrutado"):find(search, 1, true) then
+                    matchKeyword = true
+                elseif (evt == "REJOINED" or evt == LogEvent.REJOINED) and ("retornou retorno rejoin rejoined"):find(search, 1, true) then
                     matchKeyword = true
                 elseif (evt == "PROMOTION" or evt == LogEvent.PROMOTION) and ("promovido promocao promoção cargo"):find(search, 1, true) then
                     matchKeyword = true
@@ -724,7 +747,7 @@ function LogView:applyFilters()
                     matchKeyword = true
                 end
 
-                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or demoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
+                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or demoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or dateLeft:find(search, 1, true) or lastRank:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
                     matchSearch = false
                 end
             end
@@ -875,6 +898,26 @@ function LogView:formatColoredMessage(log)
             recruiterColored = "|cff888888Desconhecido|r"
         end
         return string.format("%s |cffa8f0a8foi|r |cff40ff40RECRUTADO|r |cffa8f0a8por|r %s", recruitColored, recruiterColored)
+    end
+
+    if evt == LogEvent.REJOINED or evt == "REJOINED" then
+        local memberColored = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local recruiterColored
+        if recruiter ~= "" and recruiter ~= "Desconhecido" then
+            recruiterColored = self:formatColoredName(recruiter, nil, log:getRecruiterClass())
+        else
+            recruiterColored = "|cff888888Desconhecido|r"
+        end
+        local dateLeft = (log.getDateLeft and log:getDateLeft()) or ""
+        local dateStr = (dateLeft ~= "") and dateLeft or "N/A"
+        local lastRank = (log.getLastRank and log:getLastRank()) or ""
+        local rankStr = (lastRank ~= "") and lastRank or "N/A"
+        local timesLeft = (log.getTimesLeft and log:getTimesLeft()) or 1
+        local timesNum = tonumber(timesLeft) or 1
+        if timesNum <= 0 then timesNum = 1 end
+
+        return string.format("%s |cff26ffbfRETORNOU|r |cffa8f0a8à guilda|r |cff888888(Recrutado por: |r%s|cff888888 | Saiu em: |cffffffff%s|r|cff888888 | Último cargo: |cffffff00%s|r|cff888888 | Saídas: |cffff9926%d|r)|r",
+            memberColored, recruiterColored, dateStr, rankStr, timesNum)
     end
 
     if evt == LogEvent.LEFT or evt == "LEFT" then
