@@ -800,5 +800,78 @@ function LogRepository:cleanDuplicateKickAndLeaveLogs(memberService)
     return removedCount
 end
 
+--- Busca um log recente de alteração de nota (OFFICERNOTE ou PUBLICNOTE) para evitar duplicatas.
+---@param name string @Nome do personagem
+---@param event string|LogEventType @LogEvent.OFFICERNOTE ou LogEvent.PUBLICNOTE
+---@param newNote string|nil @Novo valor da nota
+---@param withinSeconds number|nil @Janela de tolerância em segundos (padrão: 15s)
+---@return Log|nil, number|nil
+function LogRepository:findRecentNoteLog(name, event, newNote, withinSeconds)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return nil, nil
+    end
+
+    local lowerName = name:lower()
+    local targetNote = tostring(newNote or "")
+    local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+    local threshold = withinSeconds or 15
+    local evtStr = tostring(event or "")
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == evtStr or (LogEvent and rawData.event == LogEvent[evtStr])) then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local rawNewNote = tostring(rawData.newNote or "")
+                if rawNewNote == targetNote then
+                    local logTime = rawData.timestamp or 0
+                    if logTime > 0 and now > 0 and (now - logTime) >= 0 and (now - logTime) <= threshold then
+                        rawData.id = rawData.id or i
+                        return Log:new(rawData), i
+                    end
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--- Verifica se existe algum log de alteração de nota registrado para o personagem no mesmo momento.
+---@param name string
+---@param event string|LogEventType
+---@param newNote string|nil
+---@param eventTimestamp number|nil
+---@return boolean
+function LogRepository:hasNoteLog(name, event, newNote, eventTimestamp)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+
+    if not eventTimestamp or eventTimestamp <= 0 then
+        return false
+    end
+
+    local lowerName = name:lower()
+    local targetNote = tostring(newNote or "")
+    local evtStr = tostring(event or "")
+
+    for i = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[i]
+        if rawData and (rawData.event == evtStr or (LogEvent and rawData.event == LogEvent[evtStr])) then
+            if rawData.name and rawData.name:lower() == lowerName then
+                local rawNewNote = tostring(rawData.newNote or "")
+                if rawNewNote == targetNote then
+                    local logTime = rawData.timestamp or 0
+                    if logTime > 0 and math.abs(logTime - eventTimestamp) <= 15 then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 
 

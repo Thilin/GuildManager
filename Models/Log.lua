@@ -79,6 +79,8 @@ LogEvent = setmetatable({}, enumMeta)
 ---@field _dateLeft string @Data em que o membro saiu da guilda antes de retornar
 ---@field _lastRank string @Último cargo do membro antes de sair da guilda
 ---@field _timesLeft number @Quantidade de vezes que o membro saiu da guilda
+---@field _oldNote string @Nota anterior à alteração (OFFICERNOTE / PUBLICNOTE)
+---@field _newNote string @Nova nota após a alteração (OFFICERNOTE / PUBLICNOTE)
 ---@field _timestamp number @Timestamp Unix de quando o evento ocorreu
 ---@field _date string @Data legível formatada (AAAA-MM-DD HH:MM:SS)
 Log = {}
@@ -125,6 +127,8 @@ function Log:new(data)
     instance._lastRank = data.lastRank or data.oldRank or ""
     instance._timesLeft = tonumber(data.timesLeft) or 0
     instance._level = tonumber(data.level or data.newLevel)
+    instance._oldNote = data.oldNote or ""
+    instance._newNote = data.newNote or ""
 
     local event = data.event
     if event == "LEAVED" then
@@ -482,6 +486,30 @@ function Log:setTimesLeft(timesLeft)
     end
 end
 
+--- Obtém a nota anterior à alteração (eventos OFFICERNOTE / PUBLICNOTE).
+---@return string
+function Log:getOldNote()
+    return self._oldNote or ""
+end
+
+--- Define a nota anterior à alteração.
+---@param oldNote string
+function Log:setOldNote(oldNote)
+    self._oldNote = tostring(oldNote or "")
+end
+
+--- Obtém a nova nota após a alteração (eventos OFFICERNOTE / PUBLICNOTE).
+---@return string
+function Log:getNewNote()
+    return self._newNote or ""
+end
+
+--- Define a nova nota após a alteração.
+---@param newNote string
+function Log:setNewNote(newNote)
+    self._newNote = tostring(newNote or "")
+end
+
 --- Serializa a entidade Log em uma tabela Lua pura para persistência no banco de dados.
 ---@return table
 function Log:serialize()
@@ -508,6 +536,8 @@ function Log:serialize()
         dateLeft = self._dateLeft,
         lastRank = self._lastRank,
         timesLeft = self._timesLeft,
+        oldNote = self._oldNote,
+        newNote = self._newNote,
         timestamp = self._timestamp,
         date = self._date,
     }

@@ -468,6 +468,14 @@ function LogView:createUI()
                     GameTooltip:AddLine("Vezes que saiu da guilda: |cffff9926" .. tostring(timesLeft) .. "|r", 0.9, 0.8, 0.5)
                 end
 
+                local oldNote = (log.getOldNote and log:getOldNote()) or ""
+                local newNote = (log.getNewNote and log:getNewNote()) or ""
+                if oldNote ~= "" or newNote ~= "" then
+                    local label = (evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE") and "Nota de Oficial" or "Nota Pública"
+                    GameTooltip:AddLine(string.format("%s anterior: |cffffffff%s|r", label, oldNote ~= "" and oldNote or "vazio"), 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format("Nova %s: |cffffff00%s|r", label, newNote ~= "" and newNote or "vazio"), 0.9, 0.8, 0.5)
+                end
+
                 local guid = log:getGuid()
                 if guid and guid ~= "" then
                     GameTooltip:AddLine("GUID: |cff888888" .. guid .. "|r", 0.7, 0.7, 0.7)
@@ -726,6 +734,8 @@ function LogView:applyFilters()
                 local newRank = (log.getNewRank and log:getNewRank() or ""):lower()
                 local dateLeft = (log.getDateLeft and log:getDateLeft() or ""):lower()
                 local lastRank = (log.getLastRank and log:getLastRank() or ""):lower()
+                local oldNote = (log.getOldNote and log:getOldNote() or ""):lower()
+                local newNote = (log.getNewNote and log:getNewNote() or ""):lower()
                 local msg = (log:getMessage() or ""):lower()
                 local dateStr = (log:getDate() or ""):lower()
                 local evtStr = (evt or ""):lower()
@@ -745,9 +755,13 @@ function LogView:applyFilters()
                     matchKeyword = true
                 elseif (evt == "KICK" or evt == LogEvent.KICK) and ("removido expulso kick"):find(search, 1, true) then
                     matchKeyword = true
+                elseif (evt == "OFFICERNOTE" or evt == LogEvent.OFFICERNOTE) and ("nota oficial officer"):find(search, 1, true) then
+                    matchKeyword = true
+                elseif (evt == "PUBLICNOTE" or evt == LogEvent.PUBLICNOTE) and ("nota publica pública public"):find(search, 1, true) then
+                    matchKeyword = true
                 end
 
-                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or demoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or dateLeft:find(search, 1, true) or lastRank:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
+                if not (matchKeyword or name:find(search, 1, true) or recruiter:find(search, 1, true) or promoter:find(search, 1, true) or demoter:find(search, 1, true) or oldRank:find(search, 1, true) or newRank:find(search, 1, true) or dateLeft:find(search, 1, true) or lastRank:find(search, 1, true) or oldNote:find(search, 1, true) or newNote:find(search, 1, true) or msg:find(search, 1, true) or dateStr:find(search, 1, true) or evtStr:find(search, 1, true)) then
                     matchSearch = false
                 end
             end
@@ -988,6 +1002,13 @@ function LogView:formatColoredMessage(log)
 
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local newNote = (log.getNewNote and log:getNewNote()) or ""
+        local oldNote = (log.getOldNote and log:getOldNote()) or ""
+        if newNote ~= "" or oldNote ~= "" then
+            local newStr = newNote ~= "" and string.format("\"%s\"", newNote) or "vazio"
+            local oldStr = oldNote ~= "" and string.format("\"%s\"", oldNote) or "vazio"
+            return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffa8f0a8alterada para|r |cffb3e5fc%s|r |cff888888(anterior: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+        end
         local rawMsg = log:getMessage() or ""
         rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+de%s+[Oo]ficial:?%s*", "")
         return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffb3e5fc%s|r", coloredName, rawMsg)
@@ -995,6 +1016,13 @@ function LogView:formatColoredMessage(log)
 
     if evt == LogEvent.PUBLICNOTE or evt == "PUBLICNOTE" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
+        local newNote = (log.getNewNote and log:getNewNote()) or ""
+        local oldNote = (log.getOldNote and log:getOldNote()) or ""
+        if newNote ~= "" or oldNote ~= "" then
+            local newStr = newNote ~= "" and string.format("\"%s\"", newNote) or "vazio"
+            local oldStr = oldNote ~= "" and string.format("\"%s\"", oldNote) or "vazio"
+            return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffa8f0a8alterada para|r |cffe0f7fa%s|r |cff888888(anterior: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+        end
         local rawMsg = log:getMessage() or ""
         rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+[Pp]ública:?%s*", "")
         return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffe0f7fa%s|r", coloredName, rawMsg)

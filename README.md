@@ -18,7 +18,7 @@
 
 [X] log de RETORNAR para a guilda. Quando um membro retorna pra guilda, tem que mostrar no Log quem o recrutou, que dia ele saiu, qual foi o ultimo cargo dele e quantas vezes o membro saiu da guilda.
 
-[] log de alteraçao de notas. Todo membro quando é recrutado, tem o valor padrão de notas da Blizzard. O Addon deve ser capaz de registrar toda vez que alguém registrar um valor novo para as notas, tanto de oficial quanto nota publica, porém não registrar a nota com valor padrão da Blizzard. Se o valor for alterado para "vazio" (string vazia), deve registrar como "vazio".
+[X] log de alteraçao de notas. Todo membro quando é recrutado, tem o valor padrão de notas da Blizzard. O Addon deve ser capaz de registrar toda vez que alguém registrar um valor novo para as notas, tanto de oficial quanto nota publica, porém não registrar a nota com valor padrão da Blizzard. Se o valor for alterado para "vazio" (string vazia), deve registrar como "vazio".
 
 [] log de alteraçao de nome. Toda vez que um membro da guilda, o log precisa registrar qual era o nome dele e qual se tornou o novo nome
 

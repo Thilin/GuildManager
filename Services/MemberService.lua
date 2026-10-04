@@ -271,6 +271,22 @@ function MemberService:processRosterMember(rosterData)
             member:setTimesLeft(1)
         end
 
+        -- Detecta alterações na Nota Pública e Nota de Oficial (Blizzard)
+        local isRosterInit = (_G.GM_DB and _G.GM_DB.rosterInitialized) or (self._repository and self._repository._db and self._repository._db.rosterInitialized)
+        if isRosterInit and self._logService then
+            local oldPublicNote = member:getPublicNote() or ""
+            local newPublicNote = rosterData.publicNote or ""
+            if oldPublicNote ~= newPublicNote then
+                self._logService:logPublicNoteChange(member, oldPublicNote, newPublicNote)
+            end
+
+            local oldOfficerNote = member:getOfficerNote() or ""
+            local newOfficerNote = rosterData.officerNote or ""
+            if oldOfficerNote ~= newOfficerNote then
+                self._logService:logOfficerNoteChange(member, oldOfficerNote, newOfficerNote)
+            end
+        end
+
         -- Atualiza dados dinâmicos da API
         member:updateFromRoster(rosterData)
 
@@ -321,12 +337,20 @@ function MemberService:processRosterMember(rosterData)
         rosterData.recruiter = rec
         rosterData.isInGuild = true
         self:recordRecentJoin(rosterData.name)
+
+        local isExistingDb = (_G.GM_DB and _G.GM_DB.rosterInitialized) or (self._repository and self._repository._db and self._repository._db.rosterInitialized)
+        local isRecruit = (isExistingDb or self._repository:count() > 0)
+        if isRecruit then
+            -- Quando um membro é recrutado, os dados de nota de oficial e pública já começam com o valor vazio!
+            rosterData.publicNote = ""
+            rosterData.officerNote = ""
+        end
+
         member = Member:new(rosterData)
 
         -- Se o banco já possuía membros sincronizados anteriormente, significa que este novo membro
         -- entrou/foi recrutado para a guilda enquanto o jogador esteve offline.
-        local isExistingDb = (_G.GM_DB and _G.GM_DB.rosterInitialized) or (self._repository and self._repository._db and self._repository._db.rosterInitialized)
-        if self._logService and (isExistingDb or self._repository:count() > 0) then
+        if self._logService and isRecruit then
             self._logService:logRecruitment(member:getName(), member:getRecruiter(), member:getGuid())
         end
     end

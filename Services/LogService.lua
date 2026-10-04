@@ -1104,3 +1104,181 @@ function LogService:cleanDuplicateKickAndLeaveLogs(memberService)
     return count
 end
 
+--- Formata a mensagem para o evento OFFICERNOTE.
+---@param memberName string
+---@param oldNote string|nil
+---@param newNote string|nil
+---@param memberClass string|nil
+---@return string
+function LogService:formatOfficerNoteMessage(memberName, oldNote, newNote, memberClass)
+    local coloredMember = self:formatColoredMemberName(memberName, memberClass)
+    local newStr = (newNote and newNote ~= "") and string.format("\"%s\"", newNote) or "vazio"
+    local oldStr = (oldNote and oldNote ~= "") and string.format("\"%s\"", oldNote) or "vazio"
+    local noteChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldStr)
+    return string.format("%s |cffa8f0a8teve a|r |cff40bfffNOTA DE OFICIAL|r |cffa8f0a8alterada para|r |cffb3e5fc%s|r%s", coloredMember, newStr, noteChangeStr)
+end
+
+--- Formata a mensagem para o evento PUBLICNOTE.
+---@param memberName string
+---@param oldNote string|nil
+---@param newNote string|nil
+---@param memberClass string|nil
+---@return string
+function LogService:formatPublicNoteMessage(memberName, oldNote, newNote, memberClass)
+    local coloredMember = self:formatColoredMemberName(memberName, memberClass)
+    local newStr = (newNote and newNote ~= "") and string.format("\"%s\"", newNote) or "vazio"
+    local oldStr = (oldNote and oldNote ~= "") and string.format("\"%s\"", oldNote) or "vazio"
+    local noteChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldStr)
+    return string.format("%s |cffa8f0a8teve a|r |cff73e6ffNOTA PÚBLICA|r |cffa8f0a8alterada para|r |cffe0f7fa%s|r%s", coloredMember, newStr, noteChangeStr)
+end
+
+--- Registra a alteração da nota de oficial (OFFICERNOTE) de um membro.
+--- O valor inicial padrão da Blizzard (vazio) não é registrado como log.
+--- Se for alterado para diferente de vazio (ou para "vazio"), armazena o valor que era e o novo valor que se tornou.
+---@param member Member|string @Instância do membro ou nome
+---@param oldNote string|nil @Nota anterior
+---@param newNote string|nil @Nova nota
+---@param timestamp number|nil @Timestamp Unix do evento (opcional)
+---@param dateStr string|nil @Data legível formatada (opcional)
+---@param memberClass string|nil @Token da classe do membro (opcional)
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
+function LogService:logOfficerNoteChange(member, oldNote, newNote, timestamp, dateStr, memberClass)
+    oldNote = tostring(oldNote or "")
+    newNote = tostring(newNote or "")
+    if oldNote == newNote then
+        return nil, false
+    end
+    -- O log inicial padrão da Blizzard (quando não tem nada / ambos vazios) não deve ser registrado
+    if oldNote == "" and newNote == "" then
+        return nil, false
+    end
+
+    local memberName = ""
+    local guid = ""
+    memberClass = memberClass or ""
+    if type(member) == "table" and member.getName then
+        memberName = member:getName()
+        if memberClass == "" then memberClass = member:getClass() or "" end
+        guid = member:getGuid() or ""
+    elseif type(member) == "string" then
+        memberName = member
+    end
+
+    if not memberName or memberName == "" then
+        return nil, false
+    end
+
+    -- Evita duplicidade se já houver log recente deste mesmo evento (janela de 15 segundos)
+    if self._repository and self._repository.findRecentNoteLog then
+        local existingLog = self._repository:findRecentNoteLog(memberName, LogEvent.OFFICERNOTE, newNote, 15)
+        if existingLog then
+            return existingLog, false
+        end
+    end
+
+    -- Resolve classe se necessário
+    if memberClass == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if guid == "" then guid = m:getGuid() or "" end
+        end
+    end
+    if memberClass == "" and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    local message = self:formatOfficerNoteMessage(memberName, oldNote, newNote, memberClass)
+
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid,
+        message = message,
+        event = LogEvent.OFFICERNOTE,
+        oldNote = oldNote,
+        newNote = newNote,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
+--- Registra a alteração da nota pública (PUBLICNOTE) de um membro.
+--- O valor inicial padrão da Blizzard (vazio) não é registrado como log.
+--- Se for alterado para diferente de vazio (ou para "vazio"), armazena o valor que era e o novo valor que se tornou.
+---@param member Member|string @Instância do membro ou nome
+---@param oldNote string|nil @Nota anterior
+---@param newNote string|nil @Nova nota
+---@param timestamp number|nil @Timestamp Unix do evento (opcional)
+---@param dateStr string|nil @Data legível formatada (opcional)
+---@param memberClass string|nil @Token da classe do membro (opcional)
+---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
+function LogService:logPublicNoteChange(member, oldNote, newNote, timestamp, dateStr, memberClass)
+    oldNote = tostring(oldNote or "")
+    newNote = tostring(newNote or "")
+    if oldNote == newNote then
+        return nil, false
+    end
+    -- O log inicial padrão da Blizzard (quando não tem nada / ambos vazios) não deve ser registrado
+    if oldNote == "" and newNote == "" then
+        return nil, false
+    end
+
+    local memberName = ""
+    local guid = ""
+    memberClass = memberClass or ""
+    if type(member) == "table" and member.getName then
+        memberName = member:getName()
+        if memberClass == "" then memberClass = member:getClass() or "" end
+        guid = member:getGuid() or ""
+    elseif type(member) == "string" then
+        memberName = member
+    end
+
+    if not memberName or memberName == "" then
+        return nil, false
+    end
+
+    -- Evita duplicidade se já houver log recente deste mesmo evento (janela de 15 segundos)
+    if self._repository and self._repository.findRecentNoteLog then
+        local existingLog = self._repository:findRecentNoteLog(memberName, LogEvent.PUBLICNOTE, newNote, 15)
+        if existingLog then
+            return existingLog, false
+        end
+    end
+
+    -- Resolve classe se necessário
+    if memberClass == "" and _G.GM and _G.GM.memberService then
+        local m = _G.GM.memberService:getMember(memberName)
+        if m then
+            memberClass = m:getClass() or ""
+            if guid == "" then guid = m:getGuid() or "" end
+        end
+    end
+    if memberClass == "" and guid ~= "" and GetPlayerInfoByGUID then
+        local _, classToken = GetPlayerInfoByGUID(guid)
+        if classToken then memberClass = classToken end
+    end
+
+    local message = self:formatPublicNoteMessage(memberName, oldNote, newNote, memberClass)
+
+    local newLog = Log:new({
+        name = memberName,
+        class = memberClass,
+        guid = guid,
+        message = message,
+        event = LogEvent.PUBLICNOTE,
+        oldNote = oldNote,
+        newNote = newNote,
+        timestamp = timestamp,
+        date = dateStr,
+    })
+
+    self._repository:save(newLog)
+    return newLog, true
+end
+
