@@ -21,9 +21,11 @@ Views/MemberView.lua
 Views/LogView.lua
 Views/AuditView.lua
 Views/MinimapButton.lua
+Views/WorldMapView.lua
 
 Controllers/MemberController.lua
 Controllers/LogController.lua
 Controllers/AuditController.lua
+Controllers/WorldMapController.lua
 
 Core.lua

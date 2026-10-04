@@ -27,6 +27,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
 
         local minimapButton = MinimapButton:new()
 
+        local worldMapView = WorldMapView:new()
+        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView)
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -40,10 +43,13 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.auditView = auditView
         GM.auditController = auditController
         GM.minimapButton = minimapButton
+        GM.worldMapView = worldMapView
+        GM.worldMapController = worldMapController
 
         memberController:initHooks()
         logController:initHooks()
         auditController:initHooks()
+        worldMapController:initHooks()
 
         if logRepository.cleanDuplicateKickAndLeaveLogs then
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
