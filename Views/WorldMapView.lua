@@ -210,7 +210,7 @@ function WorldMapView:initWorldMapUI()
         end
         GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMRIGHT")
         GameTooltip:AddLine("|cffffd200GuildManager - Membros na Região|r")
-        GameTooltip:AddLine("Exibe os membros da guilda presentes nesta região do mapa com suas coordenadas e pinos em tempo real.", 1, 1, 1, true)
+        GameTooltip:AddLine("Exibe a lista de membros da guilda presentes nesta região do mapa.", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("|cff00ff00Clique para abrir/fechar o painel lateral e ver a lista completa.|r", 0.8, 0.8, 0.8)
         GameTooltip:Show()
@@ -356,7 +356,7 @@ function WorldMapView:initWorldMapUI()
     footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 8)
     footer:SetPoint("RIGHT", panel, "RIGHT", -10, 0)
     footer:SetJustifyH("LEFT")
-    footer:SetText("|cff888888Pinos no mapa mostram posições exatas.|r\n|cff888888Clique no membro para sussurrar.|r")
+    footer:SetText("|cff888888Clique no membro para sussurrar com o jogador.|r")
 
     -- Criação dos rows visíveis
     for i = 1, self._maxVisibleRows do
@@ -413,12 +413,8 @@ function WorldMapView:initWorldMapUI()
                 if data.rankName and data.rankName ~= "" then
                     GameTooltip:AddLine(string.format("Cargo: |cffffff00%s|r", data.rankName), 0.9, 0.8, 0.5)
                 end
-                if data.coordX and data.coordY and (data.coordX > 0 or data.coordY > 0) then
-                    local locType = data.isSelf and "Você" or (data.isExact and "Exatas" or (data.hubLocation or "Região"))
-                    local cColor = data.isExact and "|cff40ff40" or "|cffffd200"
-                    GameTooltip:AddLine(string.format("Coordenadas: %s%.1f, %.1f (%s)|r", cColor, data.coordX * 100, data.coordY * 100, locType), 0.9, 0.9, 0.9)
-                else
-                    GameTooltip:AddLine(string.format("Região: |cffffffff%s|r", data.zone or "Desconhecida"), 0.8, 0.8, 0.8)
+                if data.zone and data.zone ~= "" then
+                    GameTooltip:AddLine(string.format("Região: |cffffffff%s|r", data.zone), 0.8, 0.8, 0.8)
                 end
                 if data.publicNote and data.publicNote ~= "" then
                     GameTooltip:AddLine("Nota Pública: |cffffffff" .. data.publicNote .. "|r", 0.7, 0.7, 0.7, true)
@@ -629,17 +625,9 @@ function WorldMapView:refreshVisibleRows()
             -- Linha 1: Nome do personagem
             row.nameText:SetText(nameStr)
 
-            -- Linha 2: Nível, Cargo e Coordenadas (se disponíveis)
-            local rankStr = data.rankName and data.rankName ~= "" and (" |cffffff00" .. data.rankName .. "|r") or ""
-            local coordStr = ""
-            if data.coordX and data.coordY and (data.coordX > 0 or data.coordY > 0) then
-                local cColor = data.isExact and "|cff40ff40" or "|cffffd200"
-                coordStr = string.format(" %s(%.1f, %.1f)|r", cColor, data.coordX * 100, data.coordY * 100)
-            else
-                coordStr = " |cff888888(Na Região)|r"
-            end
-
-            row.subText:SetText(string.format("Lvl %d%s%s", data.level or 1, rankStr, coordStr))
+            -- Linha 2: Nível e Cargo
+            local rankStr = data.rankName and data.rankName ~= "" and (" • |cffffff00" .. data.rankName .. "|r") or ""
+            row.subText:SetText(string.format("Lvl %d%s", data.level or 1, rankStr))
             row:Show()
         elseif row then
             row.memberData = nil
@@ -648,166 +636,29 @@ function WorldMapView:refreshVisibleRows()
     end
 end
 
---- Cria ou obtém um pino reutilizável para exibição no mapa.
----@param index number
----@return table
-function WorldMapView:getOrCreatePin(index)
-    if self._pins[index] then
-        return self._pins[index]
-    end
-
-    local canvas = self:getMapCanvas()
-    local pin = CreateFrame("Button", "GM_MapPin_" .. index, canvas or WorldMapFrame)
-    pin:SetSize(24, 24)
-    pin:SetFrameStrata("HIGH")
-    pin:SetFrameLevel((canvas and canvas.GetFrameLevel and canvas:GetFrameLevel() or 20) + 15)
-
-    -- Fundo circular perfeitamente centrado
-    local bg = pin:CreateTexture(nil, "BACKGROUND")
-    bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-    bg:SetSize(22, 22)
-    bg:SetPoint("CENTER", pin, "CENTER", 0, 0)
-    bg:SetVertexColor(0.08, 0.08, 0.08, 0.95)
-    pin.bg = bg
-
-    -- Ícone circular de classe do membro perfeitamente centrado
-    local icon = pin:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(20, 20)
-    icon:SetPoint("CENTER", pin, "CENTER", 0, 0)
-    icon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-    pin.icon = icon
-
-    -- Borda dourada circular simétrica concêntrica
-    local border = pin:CreateTexture(nil, "OVERLAY")
-    border:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Border")
-    border:SetSize(32, 32)
-    border:SetPoint("CENTER", pin, "CENTER", 0, 0)
-    pin.border = border
-
-    -- Nome flutuante logo abaixo do pino
-    local label = pin:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    label:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
-    label:SetPoint("TOP", pin, "BOTTOM", 0, -2)
-    label:SetShadowColor(0, 0, 0, 1)
-    label:SetShadowOffset(1, -1)
-    pin.label = label
-
-    pin:SetScript("OnEnter", function(p)
-        if p.memberData then
-            local data = p.memberData
-            GameTooltip:SetOwner(p, "ANCHOR_TOP")
-            local cHex = (data.class and CLASS_COLORS[data.class] and CLASS_COLORS[data.class].hex) or "|cffffffff"
-            GameTooltip:AddLine(cHex .. (data.name or "Membro") .. "|r")
-            GameTooltip:AddLine(string.format("Nível %d %s", data.level or 1, data.classDisplayName or data.class or ""), 1, 1, 1)
-            if data.rankName and data.rankName ~= "" then
-                GameTooltip:AddLine(string.format("Cargo: |cffffff00%s|r", data.rankName), 0.9, 0.8, 0.5)
-            end
-            if data.coordX and data.coordY and (data.coordX > 0 or data.coordY > 0) then
-                local locType = data.isSelf and "Você" or (data.isExact and "Exatas" or (data.hubLocation or "Região"))
-                local cColor = data.isExact and "|cff40ff40" or "|cffffd200"
-                GameTooltip:AddLine(string.format("Coordenadas: %s%.1f, %.1f (%s)|r", cColor, data.coordX * 100, data.coordY * 100, locType), 0.9, 0.9, 0.9)
-            end
-            if data.zone and data.zone ~= "" then
-                GameTooltip:AddLine(string.format("Região: |cffffffff%s|r", data.zone), 0.8, 0.8, 0.8)
-            end
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("|cff00ff00Clique para sussurrar com o jogador.|r", 0.8, 0.8, 0.8)
-            GameTooltip:Show()
-        end
-    end)
-
-    pin:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-
-    pin:SetScript("OnClick", function(p)
-        if p.memberData and p.memberData.name then
-            if self._onMemberClickCallback then
-                self._onMemberClickCallback(p.memberData)
-            else
-                ChatFrame_OpenChat("/w " .. p.memberData.name .. " ")
-            end
-        end
-    end)
-
-    self._pins[index] = pin
-    return pin
-end
-
---- Limpa todos os pinos de membros atualmente visíveis no mapa.
+--- Limpa e desativa todos os pinos de membros no mapa nativo.
 function WorldMapView:clearPins()
-    for _, pin in ipairs(self._pins) do
-        pin:Hide()
-        pin.memberData = nil
+    if self._pins then
+        for _, pin in ipairs(self._pins) do
+            pin:Hide()
+            pin:ClearAllPoints()
+            pin.memberData = nil
+        end
+    end
+    -- Oculta e limpa quaisquer botões de pino criados em sessões anteriores
+    for i = 1, 100 do
+        local globalPin = _G["GM_MapPin_" .. i]
+        if globalPin then
+            globalPin:Hide()
+            globalPin:ClearAllPoints()
+            globalPin.memberData = nil
+        end
     end
 end
 
---- Plota os pinos no mapa nas coordenadas exatas de cada membro.
+--- Os pinos no mapa estão desativados: apenas mantém os pinos limpos.
 function WorldMapView:plotMemberPins()
     self:clearPins()
-
-    local canvas = self:getMapCanvas()
-    if not canvas or not canvas.GetWidth or not canvas.GetHeight then
-        return
-    end
-
-    local canvasW = canvas:GetWidth()
-    local canvasH = canvas:GetHeight()
-    if canvasW <= 0 or canvasH <= 0 then
-        return
-    end
-
-    local pinIndex = 0
-    for _, data in ipairs(self._membersData) do
-        local x = data.coordX
-        local y = data.coordY
-        -- Verifica se possui coordenadas válidas (entre 0 e 1)
-        if x and y and x > 0 and x < 1 and y > 0 and y < 1 then
-            pinIndex = pinIndex + 1
-            local pin = self:getOrCreatePin(pinIndex)
-
-            pin.memberData = data
-            pin:SetParent(canvas)
-            pin:ClearAllPoints()
-            -- Posicionamento centrado em pixels relativos ao TOPLEFT do canvas
-            pin:SetPoint("CENTER", canvas, "TOPLEFT", x * canvasW, -y * canvasH)
-
-            -- Ícone de classe
-            local coords = data.class and CLASS_ICON_COORDS[data.class]
-            if coords then
-                pin.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-            else
-                pin.icon:SetTexCoord(0, 1, 0, 1)
-            end
-
-            -- Diferenciação visual da borda do pino: Verde para 'Você', Ciano para coordenadas exatas de rede, Dourado para região
-            if data.isSelf then
-                pin:SetSize(26, 26)
-                pin.bg:SetSize(24, 24)
-                pin.icon:SetSize(22, 22)
-                pin.border:SetSize(34, 34)
-                pin.border:SetVertexColor(0.2, 1.0, 0.2, 1.0)
-            elseif data.isExact then
-                pin:SetSize(24, 24)
-                pin.bg:SetSize(22, 22)
-                pin.icon:SetSize(20, 20)
-                pin.border:SetSize(32, 32)
-                pin.border:SetVertexColor(0.3, 0.9, 1.0, 1.0)
-            else
-                pin:SetSize(24, 24)
-                pin.bg:SetSize(22, 22)
-                pin.icon:SetSize(20, 20)
-                pin.border:SetSize(32, 32)
-                pin.border:SetVertexColor(1.0, 0.85, 0.20, 1.0)
-            end
-
-            -- Rótulo com o nome colorido por classe
-            local cHex = (data.class and CLASS_COLORS[data.class] and CLASS_COLORS[data.class].hex) or "|cffffffff"
-            pin.label:SetText(cHex .. (data.name or "") .. "|r")
-
-            pin:Show()
-        end
-    end
 end
 
 --- Define o callback acionado quando o usuário clica em "Escanear Mapa".
