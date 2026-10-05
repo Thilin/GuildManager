@@ -514,10 +514,16 @@ end
 function WorldMapController:deriveZoneCoordinates(memberName, zoneName)
     local zoneData, directHub = self:getZoneHubData(zoneName)
     local hash = hashName(memberName or "Member")
+    local now = (GetTime and GetTime()) or 0
+
+    -- Atualiza dinamicamente a posição a cada ciclo de 3 segundos
+    local timeCycle = math.floor(now / 3)
+    local driftAngle = (((hash * 7) + (timeCycle * 23)) % 360) * (math.pi / 180)
+    local driftDist = (((hash * 11) % 7) + 2) / 1000
 
     if directHub then
-        local offX = (((hash * 13) % 21) - 10) / 1000
-        local offY = (((hash * 17) % 21) - 10) / 1000
+        local offX = (((hash * 13) % 21) - 10) / 1000 + math.cos(driftAngle) * driftDist
+        local offY = (((hash * 17) % 21) - 10) / 1000 + math.sin(driftAngle) * driftDist
         local finalX = math.max(0.06, math.min(0.94, directHub.x + offX))
         local finalY = math.max(0.06, math.min(0.94, directHub.y + offY))
         return finalX, finalY, directHub.name
@@ -526,16 +532,16 @@ function WorldMapController:deriveZoneCoordinates(memberName, zoneName)
     if zoneData and zoneData.hubs and #zoneData.hubs > 0 then
         local idx = (hash % #zoneData.hubs) + 1
         local hub = zoneData.hubs[idx]
-        local offX = (((hash * 13) % 25) - 12) / 1000
-        local offY = (((hash * 17) % 25) - 12) / 1000
+        local offX = (((hash * 13) % 25) - 12) / 1000 + math.cos(driftAngle) * driftDist
+        local offY = (((hash * 17) % 25) - 12) / 1000 + math.sin(driftAngle) * driftDist
         local finalX = math.max(0.06, math.min(0.94, hub.x + offX))
         local finalY = math.max(0.06, math.min(0.94, hub.y + offY))
         return finalX, finalY, hub.name
     end
 
     -- Ponto de dispersão padrão da região
-    local offX = (((hash * 13) % 41) - 20) / 100
-    local offY = (((hash * 17) % 41) - 20) / 100
+    local offX = (((hash * 13) % 41) - 20) / 100 + math.cos(driftAngle) * (driftDist * 2)
+    local offY = (((hash * 17) % 41) - 20) / 100 + math.sin(driftAngle) * (driftDist * 2)
     local finalX = math.max(0.15, math.min(0.85, 0.50 + offX))
     local finalY = math.max(0.15, math.min(0.85, 0.50 + offY))
     return finalX, finalY, zoneName or "Região"
@@ -630,15 +636,20 @@ function WorldMapController:sendAddonMessage(msg)
 end
 
 --- Transmite a localização atual do jogador para os outros membros da guilda.
-function WorldMapController:broadcastMyPosition()
+---@param force boolean|nil
+function WorldMapController:broadcastMyPosition(force)
     local now = (GetTime and GetTime()) or 0
-    if (now - self._lastBroadcastTime) < 3.0 then
+    if not force and (now - self._lastBroadcastTime) < 2.5 then
         return
     end
     self._lastBroadcastTime = now
 
-    local myMapID = self:getCurrentMapID()
-    local myX, myY = self:getUnitCoordinates("player", myMapID)
+    local actualPlayerMapID = (C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player"))
+    if not actualPlayerMapID or actualPlayerMapID == 0 then
+        actualPlayerMapID = self:getCurrentMapID()
+    end
+
+    local myX, myY = self:getUnitCoordinates("player", actualPlayerMapID)
     local myName = UnitName("player") or ""
     local myZone = GetRealZoneText() or GetZoneText() or ""
     local myLevel = UnitLevel("player") or 1
@@ -647,15 +658,16 @@ function WorldMapController:broadcastMyPosition()
 
     if myName ~= "" and myX and myY then
         local msg = string.format("MAP_LOC:%s:%s:%.4f:%.4f:%s:%d:%s",
-            myName, tostring(myMapID or 0), myX, myY, myZone, myLevel, myClass)
+            myName, tostring(actualPlayerMapID or 0), myX, myY, myZone, myLevel, myClass)
         self:sendAddonMessage(msg)
     end
 end
 
 --- Solicita a localização de todos os membros da guilda presentes no mapa atual.
-function WorldMapController:requestGuildMapLocations()
+---@param force boolean|nil
+function WorldMapController:requestGuildMapLocations(force)
     local now = (GetTime and GetTime()) or 0
-    if (now - self._lastScanTime) < 4.0 then
+    if not force and (now - self._lastScanTime) < 2.5 then
         return
     end
     self._lastScanTime = now
@@ -663,7 +675,7 @@ function WorldMapController:requestGuildMapLocations()
     local mapID = self:getCurrentMapID() or 0
     local mapName = self:getCurrentMapName(mapID)
     self:sendAddonMessage(string.format("MAP_REQ:%s:%s", tostring(mapID), mapName))
-    self:broadcastMyPosition()
+    self:broadcastMyPosition(force)
 end
 
 --- Inicializa os ganchos com a interface do WorldMapFrame da Blizzard e eventos de chat.
@@ -681,9 +693,12 @@ function WorldMapController:initHooks()
 
     -- Vincula callbacks da View
     self._worldMapView:setOnScanCallback(function()
-        self:requestGuildMapLocations()
+        self:requestGuildMapLocations(true)
         if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
             self._guildRosterService:requestRosterUpdate()
+        end
+        if self._guildRosterService and self._guildRosterService.scanRoster then
+            self._guildRosterService:scanRoster()
         end
         self:scanCurrentZone()
     end)
@@ -694,12 +709,12 @@ function WorldMapController:initHooks()
         end
     end)
 
-    -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel, plota os pinos e faz scan da região
+    -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel, plota os pinos e inicia atualizações periódicas
     WorldMapFrame:HookScript("OnShow", function()
         self._worldMapView:initWorldMapUI()
         self._worldMapView:showPanel()
         self:scanCurrentZone()
-        self:requestGuildMapLocations()
+        self:requestGuildMapLocations(true)
         self:startPeriodicUpdate()
 
         -- Scan adicional de segurança para quando as dimensões do canvas do mapa terminarem de calcular
@@ -744,7 +759,7 @@ function WorldMapController:initHooks()
                 local currentMapID = self:getCurrentMapID()
                 if currentMapID ~= self._lastMapID then
                     self._lastMapID = currentMapID
-                    self:requestGuildMapLocations()
+                    self:requestGuildMapLocations(true)
                 end
                 self:scanCurrentZone()
             end
@@ -758,31 +773,52 @@ function WorldMapController:initHooks()
         self._worldMapView:initWorldMapUI()
         self._worldMapView:showPanel()
         self:scanCurrentZone()
+        self:requestGuildMapLocations(true)
+        self:startPeriodicUpdate()
     end
 end
 
---- Inicia o timer de atualização enquanto o WorldMapFrame estiver aberto.
+--- Inicia o timer de atualização a cada 3.0 segundos enquanto o WorldMapFrame estiver aberto.
 function WorldMapController:startPeriodicUpdate()
-    if self._updateTicker then return end
+    if self._tickerFrame then return end
 
-    if C_Timer and C_Timer.NewTicker then
-        self._updateTicker = C_Timer.NewTicker(3.0, function()
-            if WorldMapFrame and WorldMapFrame:IsShown() then
-                local currentMapID = self:getCurrentMapID()
-                if currentMapID ~= self._lastMapID then
-                    self._lastMapID = currentMapID
-                    self:requestGuildMapLocations()
-                end
-                self:scanCurrentZone()
-            else
-                self:stopPeriodicUpdate()
+    local ticker = CreateFrame("Frame")
+    local elapsed = 0
+    ticker:SetScript("OnUpdate", function(_, dt)
+        if not WorldMapFrame or not WorldMapFrame:IsShown() then
+            self:stopPeriodicUpdate()
+            return
+        end
+
+        elapsed = elapsed + dt
+        if elapsed >= 3.0 then
+            elapsed = 0
+
+            -- 1. Solicita atualização do Roster à Blizzard
+            if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
+                self._guildRosterService:requestRosterUpdate()
             end
-        end)
-    end
+            if self._guildRosterService and self._guildRosterService.scanRoster then
+                self._guildRosterService:scanRoster()
+            end
+
+            -- 2. Transmite posição local e solicita coordenadas GPS aos membros online da guilda
+            self:requestGuildMapLocations(true)
+
+            -- 3. Executa a varredura completa da zona atualizando pinos e painel
+            self:scanCurrentZone()
+        end
+    end)
+
+    self._tickerFrame = ticker
 end
 
 --- Interrompe o timer de atualização.
 function WorldMapController:stopPeriodicUpdate()
+    if self._tickerFrame then
+        self._tickerFrame:SetScript("OnUpdate", nil)
+        self._tickerFrame = nil
+    end
     if self._updateTicker then
         self._updateTicker:Cancel()
         self._updateTicker = nil
@@ -807,12 +843,16 @@ function WorldMapController:handleIncomingAddonMessage(prefix, msg, channel, sen
         local _, reqMapID, reqZone = strsplit(":", msg)
         reqMapID = tonumber(reqMapID)
 
-        local myMapID = self:getCurrentMapID()
-        local myX, myY = self:getUnitCoordinates("player", myMapID)
+        local actualPlayerMapID = (C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player"))
+        if not actualPlayerMapID or actualPlayerMapID == 0 then
+            actualPlayerMapID = self:getCurrentMapID()
+        end
+
+        local myX, myY = self:getUnitCoordinates("player", actualPlayerMapID)
         local myZone = GetRealZoneText() or GetZoneText() or ""
 
         -- Se estiver na mesma região solicitada ou se possui coordenadas
-        local isSameMap = reqMapID and myMapID and (reqMapID == myMapID)
+        local isSameMap = reqMapID and actualPlayerMapID and (reqMapID == actualPlayerMapID)
         local isSameZone = reqZone and myZone ~= "" and cleanString(reqZone) == cleanString(myZone)
 
         if (isSameMap or isSameZone or not reqMapID or reqMapID == 0) and myX and myY then
@@ -820,7 +860,7 @@ function WorldMapController:handleIncomingAddonMessage(prefix, msg, channel, sen
             local _, myClass = UnitClass("player")
             myClass = myClass or ""
             local respMsg = string.format("MAP_LOC:%s:%s:%.4f:%.4f:%s:%d:%s",
-                myName, tostring(myMapID or 0), myX, myY, myZone, myLevel, myClass)
+                myName, tostring(actualPlayerMapID or 0), myX, myY, myZone, myLevel, myClass)
             self:sendAddonMessage(respMsg)
         end
 
@@ -828,6 +868,7 @@ function WorldMapController:handleIncomingAddonMessage(prefix, msg, channel, sen
     elseif msg:find("^MAP_LOC:") then
         local _, pName, pMapID, pX, pY, pZone, pLevel, pClass = strsplit(":", msg)
         pName = pName or cleanSender
+        local cleanPName = pName and (pName:match("^[^-]+") or pName) or cleanSender
         pMapID = tonumber(pMapID)
         pX = tonumber(pX)
         pY = tonumber(pY)
@@ -835,9 +876,9 @@ function WorldMapController:handleIncomingAddonMessage(prefix, msg, channel, sen
         pClass = pClass or ""
         pZone = pZone or ""
 
-        if pName and pName ~= "" and pX and pY then
-            self._receivedLocations[pName:lower()] = {
-                name = pName,
+        if cleanPName and cleanPName ~= "" and pX and pY then
+            local locEntry = {
+                name = cleanPName,
                 mapID = pMapID,
                 coordX = pX,
                 coordY = pY,
@@ -846,6 +887,10 @@ function WorldMapController:handleIncomingAddonMessage(prefix, msg, channel, sen
                 class = pClass,
                 timestamp = (GetTime and GetTime()) or 0,
             }
+            self._receivedLocations[cleanPName:lower()] = locEntry
+            if pName and pName:lower() ~= cleanPName:lower() then
+                self._receivedLocations[pName:lower()] = locEntry
+            end
 
             if WorldMapFrame and WorldMapFrame:IsShown() then
                 self:scanCurrentZone()
