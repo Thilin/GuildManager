@@ -40,6 +40,165 @@ local function cleanString(str)
     return s
 end
 
+--- Dicionário de regiões, cidades e instâncias por continente do World of Warcraft (PT e EN).
+local CONTINENT_ZONES = {
+    eastern_kingdoms = {
+        -- Floresta de Elwynn
+        "floresta de elwynn", "elwynn forest", "elwynn", "vale norte", "northshire", "vila d'ouro", "goldshire", "azora", "brackwell",
+        -- Cerro Oeste
+        "cerro oeste", "westfall", "morro da sentinela", "sentinel hill", "riacho da lua", "moonbrook", "costa dourada", "gold coast",
+        -- Montanhas Cristarrubra
+        "montanhas cristarrubra", "cristarrubra", "redridge mountains", "redridge", "vila do lago", "lakeshire", "pedra vigia", "stonewatch",
+        -- Floresta do Crepúsculo
+        "floresta do crepusculo", "crepusculo", "duskwood", "vila sombria", "darkshire", "colina dos corvos", "raven hill",
+        -- Loch Modan
+        "loch modan", "thelsamar",
+        -- Dun Morogh
+        "dun morogh", "kharanos", "vale de cristalgida", "coldridge valley", "grilloferreo",
+        -- Pantanal
+        "pantanal", "wetlands", "porto de menethil", "menethil harbor", "menethil", "whelgar",
+        -- Planalto de Arathi
+        "planalto de arathi", "arathi highlands", "arathi", "refugio", "refuge pointe", "ruina do martelo", "hammerfall",
+        -- Contrafortes de Eira dos Montes
+        "contrafortes de eira dos montes", "eira dos montes", "hillsbrad foothills", "hillsbrad", "costasul", "southshore", "moinho de tarren", "tarren mill", "durnholde",
+        -- Montanhas de Alterac
+        "montanhas de alterac", "alterac mountains", "alterac",
+        -- Terras Agrestes
+        "terras agrestes", "badlands", "kargath",
+        -- Pântano das Mágoas
+        "pantano das magoas", "swamp of sorrows", "pedregal", "stonard",
+        -- Barreira do Inferno
+        "barreira do inferno", "blasted lands", "nethergarde", "forte esmagamento",
+        -- Garganta de Fogo
+        "garganta de fogo", "searing gorge", "vigilia do torio", "thorium point",
+        -- Estepes Ardentes
+        "estepes ardentes", "burning steppes", "vigilia da morgan", "morgan's vigil", "flame crest",
+        -- Terras Pestilentas Ocidentais
+        "terras pestilentas ocidentais", "western plaguelands", "plaguelands", "andorhal",
+        -- Terras Pestilentas Orientais
+        "terras pestilentas orientais", "eastern plaguelands", "capela esperanca da luz", "light's hope chapel", "tyr's hand",
+        -- Clareiras de Tirisfal
+        "clareiras de tirisfal", "tirisfal glades", "tirisfal", "brill", "plangente", "deathknell",
+        -- Floresta de Pinho de Prata
+        "floresta de pinho de prata", "pinho de prata", "silverpine forest", "silverpine", "o sepulcro", "the sepulcher", "pirobrasa", "pyrewood",
+        -- Selva do Espinhaço / Vale do Espinhaço
+        "selva do espinhaco", "vale do espinhaco", "espinhaco", "stranglethorn vale", "stranglethorn", "angra do butim", "booty bay", "grom'gol", "gromgol", "cabo do espinhaco", "the cape of stranglethorn", "selva de espinhaco setentrional", "northern stranglethorn",
+        -- Passagem de Ventomorto
+        "passagem de ventomorto", "deadwind pass",
+        -- TBC / expansões nos Reinos do Leste
+        "floresta de petramargem", "eversong woods", "terra fantasma", "ghostlands", "tranquillien", "ilha de quel'danas", "isle of quel'danas", "terras altas do crepusculo", "twilight highlands",
+        -- Capitais
+        "cidade de ventobravo", "ventobravo", "stormwind city", "stormwind",
+        "altaforja", "ironforge",
+        "cidade baixa", "undercity",
+        "luaprata", "cidade de luaprata", "silvermoon city", "silvermoon",
+        -- Masmorras e Raides
+        "minas mortas", "deadmines",
+        "masmorras de ventobravo", "the stockade", "carcere de ventobravo", "stockade",
+        "gnomeregan",
+        "monasterio escarlate", "scarlet monastery",
+        "bastilha da presa negra", "shadowfang keep",
+        "uldaman",
+        "templo de atal'hakkar", "sunken temple", "templo submerso",
+        "abobadas negras", "blackrock depths", "cavernas da rocha negra", "brd",
+        "pico da rocha negra", "blackrock spire", "brs", "lbrs", "ubrs",
+        "nucleo derretido", "molten core",
+        "covil asa negra", "blackwing lair", "bwl",
+        "stratholme", "strat",
+        "scolomantia", "scholomance", "scholo",
+        "zul'gurub", "zg",
+        "karazhan",
+        "naxxramas", "naxx",
+        -- Campos de Batalha
+        "vale de alterac", "alterac valley", "av",
+        "bacia arathi", "arathi basin", "ab",
+    },
+    kalimdor = {
+        -- Durotar
+        "durotar", "monte navalha", "razor hill", "vale dos desafios", "valley of trials", "sen'jin",
+        -- Os Sertões
+        "os sertoes", "sertoes", "sertao", "the barrens", "barrens", "encruzilhada", "the crossroads", "crossroads", "catraca", "ratchet", "taurajo", "sertoes setentrionais", "northern barrens", "sertoes meridionais", "southern barrens",
+        -- Mulgore
+        "mulgore", "aldeia casco sangrento", "bloodhoof village", "mesa vermelha", "red cloud mesa",
+        -- Teldrassil
+        "teldrassil", "dolanaar", "varzea das sombras", "shadowglen",
+        -- Costa Negra
+        "costa negra", "darkshore", "auberdine",
+        -- Vale Gris
+        "vale gris", "ashenvale", "astranaar", "splintertree",
+        -- Cordilheira das Pedras Altas
+        "cordilheira das pedras altas", "pedras altas", "stonetalon mountains", "stonetalon", "sol-pedra", "sun rock",
+        -- Desolação
+        "desolacao", "desolace", "nijel",
+        -- Pântano Vulpino
+        "pantano vulpino", "dustwallow marsh", "dustwallow", "theramore", "brackenwall",
+        -- Feralas
+        "feralas", "plumaluna", "feathermoon", "mojache",
+        -- Mil Agulhas
+        "mil agulhas", "thousand needles", "pista de corrida cintilante", "shimmering flats", "vento livre", "freewind post",
+        -- Tanaris
+        "tanaris", "geringotz", "gadgetzan", "porto de bondebico", "steamwheedle port",
+        -- Cratera de Un'Goro
+        "cratera de un'goro", "un'goro crater", "un'goro", "ungoro",
+        -- Silithus
+        "silithus", "forte cenariano", "cenarion hold",
+        -- Hibérnia
+        "hibernia", "winterspring", "visteterna", "everlook",
+        -- Clareira da Lua
+        "clareira da lua", "moonglade", "nighthaven",
+        -- Mata Malevolente
+        "mata malevolente", "felwood",
+        -- Azshara
+        "azshara", "valormok",
+        -- Ilhas Draenei
+        "ilha nevoa lazuli", "azuremyst isle", "azuremyst", "ilha nevoa sangrenta", "bloodmyst isle", "bloodmyst",
+        -- Capitais
+        "orgrimmar",
+        "penhasco do trovao", "thunder bluff",
+        "darnassus",
+        "exodar", "o exodar",
+        -- Masmorras e Raides
+        "cavernas do braseiro", "ragefire chasm", "rfc",
+        "cavernas dos lamentos", "wailing caverns", "wc",
+        "profundezas negras", "blackfathom deeps", "bfd",
+        "coroa dos espinhos", "razorfen kraul", "rfk",
+        "labirinto dos espinhos", "razorfen downs", "rfd",
+        "zul'farrak", "zf",
+        "maraudon", "mara",
+        "glug-glug", "dire maul", "dm",
+        "ruinas de ahn'qiraj", "ruins of ahn'qiraj", "aq20",
+        "templo de ahn'qiraj", "templo de ahnqiraj", "temple of ahn'qiraj", "aq40",
+        "covil de onyxia", "onyxia's lair", "onyxia",
+        -- Campos de Batalha
+        "ravina brado guerreiro", "warsong gulch", "wsg",
+    },
+    outland = {
+        "terralem", "outland",
+        "peninsula fogo do inferno", "hellfire peninsula", "hellfire",
+        "pantano zingaro", "zangarmarsh",
+        "mata terokkar", "terokkar forest", "terokkar",
+        "nagrand",
+        "montanhas da lamina afiada", "blade's edge mountains", "blade's edge",
+        "vale da lua negra", "shadowmoon valley", "shadowmoon",
+        "eternevoa", "netherstorm",
+        "shattrath", "cidade de shattrath", "shattrath city",
+    },
+    northrend = {
+        "nortundria", "northrend",
+        "fiorde uivante", "howling fjord",
+        "tundra boreana", "borean tundra",
+        "ermo das serpentes", "dragonblight",
+        "colinas pardas", "grizzly hills",
+        "zul'drak", "zuldrak",
+        "bacia sholazar", "sholazar basin", "sholazar",
+        "picos tempestuosos", "the storm peaks", "storm peaks",
+        "coroa de gelo", "icecrown",
+        "floresta do canto cristalino", "crystalsong forest",
+        "conquista do inverno", "wintergrasp",
+        "dalaran",
+    }
+}
+
 --- Obtém o ID do mapa atual exibido no WorldMapFrame nativo.
 ---@return number|nil
 function WorldMapController:getCurrentMapID()
@@ -58,7 +217,7 @@ function WorldMapController:getCurrentMapID()
     return nil
 end
 
---- Obtém o nome legível da região do mapa visualizado.
+--- Obtém o nome legível da região ou continente do mapa visualizado.
 ---@param mapID number|nil
 ---@return string
 function WorldMapController:getCurrentMapName(mapID)
@@ -80,6 +239,95 @@ function WorldMapController:getCurrentMapName(mapID)
         if z and z ~= "" then return z end
     end
     return "Região Atual"
+end
+
+--- Verifica se a zona do membro pertence à região, continente ou mundo visualizado no mapa.
+---@param memberZone string|nil
+---@param currentMapName string
+---@param currentMapID number|nil
+---@return boolean, boolean, boolean @matches, isContinent, isWorld
+function WorldMapController:isZoneMatch(memberZone, currentMapName, currentMapID)
+    local cleanCurrent = cleanString(currentMapName)
+    local cleanMZone = cleanString(memberZone)
+
+    -- 1. Determina o tipo de mapa (Mundo, Continente ou Zona)
+    local mapInfo = currentMapID and C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(currentMapID)
+    local mapType = mapInfo and mapInfo.mapType
+
+    local isWorld = false
+    local isContinent = false
+    local continentKey = nil
+
+    -- Detecção de Mundo / Azeroth / Cósmico
+    if mapType == 0 or mapType == 1 or currentMapID == 947 or currentMapID == 946
+        or cleanCurrent == "azeroth" or cleanCurrent == "mundo" or cleanCurrent == "world" then
+        isWorld = true
+    -- Detecção de Continente
+    elseif mapType == 2
+        or currentMapID == 1415 or currentMapID == 1414 or currentMapID == 1945 or currentMapID == 113
+        or cleanCurrent:find("reinos do leste", 1, true) or cleanCurrent:find("eastern kingdoms", 1, true)
+        or cleanCurrent:find("kalimdor", 1, true)
+        or cleanCurrent:find("terralem", 1, true) or cleanCurrent:find("outland", 1, true)
+        or cleanCurrent:find("nortundria", 1, true) or cleanCurrent:find("northrend", 1, true) then
+        isContinent = true
+    end
+
+    if cleanMZone == "" then
+        return false, isContinent, isWorld
+    end
+
+    -- Se for visão global do Mundo: qualquer membro online na guilda é considerado presente
+    if isWorld then
+        return true, false, true
+    end
+
+    -- Se for visão de Continente: identifica qual continente está sendo visualizado
+    if isContinent then
+        if currentMapID == 1415 or cleanCurrent:find("reinos do leste", 1, true) or cleanCurrent:find("eastern kingdoms", 1, true) then
+            continentKey = "eastern_kingdoms"
+        elseif currentMapID == 1414 or cleanCurrent:find("kalimdor", 1, true) then
+            continentKey = "kalimdor"
+        elseif currentMapID == 1945 or cleanCurrent:find("terralem", 1, true) or cleanCurrent:find("outland", 1, true) then
+            continentKey = "outland"
+        elseif currentMapID == 113 or cleanCurrent:find("nortundria", 1, true) or cleanCurrent:find("northrend", 1, true) then
+            continentKey = "northrend"
+        end
+
+        -- A. Validação via dicionário pré-definido
+        if continentKey and CONTINENT_ZONES[continentKey] then
+            for _, zonePattern in ipairs(CONTINENT_ZONES[continentKey]) do
+                if cleanMZone == zonePattern or cleanMZone:find(zonePattern, 1, true) or zonePattern:find(cleanMZone, 1, true) then
+                    return true, true, false
+                end
+            end
+        end
+
+        -- B. Validação dinâmica via C_Map.GetMapChildrenInfo
+        if currentMapID and C_Map and C_Map.GetMapChildrenInfo then
+            local children = C_Map.GetMapChildrenInfo(currentMapID)
+            if children and type(children) == "table" then
+                for _, child in ipairs(children) do
+                    if child.name and child.name ~= "" then
+                        local cleanChild = cleanString(child.name)
+                        if cleanMZone == cleanChild or cleanMZone:find(cleanChild, 1, true) or cleanChild:find(cleanMZone, 1, true) then
+                            return true, true, false
+                        end
+                    end
+                end
+            end
+        end
+
+        return false, true, false
+    end
+
+    -- 3. Visão de Zona específica regular
+    if cleanCurrent ~= "" then
+        if cleanMZone == cleanCurrent or cleanCurrent:find(cleanMZone, 1, true) or cleanMZone:find(cleanCurrent, 1, true) then
+            return true, false, false
+        end
+    end
+
+    return false, false, false
 end
 
 --- Inicializa os ganchos com a interface do WorldMapFrame da Blizzard e eventos.
@@ -154,7 +402,7 @@ function WorldMapController:startPeriodicUpdate()
     if self._updateTicker then return end
 
     if C_Timer and C_Timer.NewTicker then
-        self._updateTicker = C_Timer.NewTicker(3.0, function()
+        self._updateTicker = C_Timer.NewTicker(2.5, function()
             if WorldMapFrame and WorldMapFrame:IsShown() then
                 self:scanCurrentZone()
             else
@@ -172,7 +420,7 @@ function WorldMapController:stopPeriodicUpdate()
     end
 end
 
---- Varre e filtra os membros da guilda presentes no mapa/região atual sem exibir coordenadas.
+--- Varre e filtra os membros da guilda presentes no mapa/região/continente atual.
 function WorldMapController:scanCurrentZone()
     local currentMapID = self:getCurrentMapID()
     local currentMapName = self:getCurrentMapName(currentMapID)
@@ -181,6 +429,9 @@ function WorldMapController:scanCurrentZone()
     local cleanCurrentMap = cleanString(currentMapName)
     local regionMembers = {}
     local addedByName = {}
+
+    -- Determina o escopo do mapa visualizado (Continente, Mundo ou Zona)
+    local _, isContinent, isWorld = self:isZoneMatch("dummy", currentMapName, currentMapID)
 
     -- Identificação do jogador local
     local myGUID = UnitGUID("player")
@@ -235,20 +486,9 @@ function WorldMapController:scanCurrentZone()
         registerAddedName(myMember:getName())
     end
 
-    -- 1. Verifica se o jogador local está na região visualizada no mapa
+    -- 1. Verifica se o jogador local está na região / continente / mundo visualizado no mapa
     local myZone = GetRealZoneText() or GetZoneText() or ""
-    local cleanMyZone = cleanString(myZone)
-    local isLocalInZone = false
-
-    if cleanCurrentMap ~= "" and cleanMyZone ~= "" then
-        if cleanCurrentMap == cleanMyZone
-            or cleanCurrentMap:find(cleanMyZone, 1, true)
-            or cleanMyZone:find(cleanCurrentMap, 1, true) then
-            isLocalInZone = true
-        end
-    elseif cleanCurrentMap == "" then
-        isLocalInZone = true
-    end
+    local isLocalInZone = self:isZoneMatch(myZone, currentMapName, currentMapID)
 
     if isLocalInZone and myName ~= "" then
         local _, unitClassToken = UnitClass("player")
@@ -275,7 +515,7 @@ function WorldMapController:scanCurrentZone()
         registerAddedName(displayName)
     end
 
-    -- 2. Membros online da guilda cuja zona no Roster coincide com a região visualizada
+    -- 2. Membros online da guilda cuja zona no Roster coincide com a região / continente visualizado
     for _, m in ipairs(allRosterMembers) do
         local mName = m:getName()
         local lowerName = mName:lower()
@@ -287,16 +527,7 @@ function WorldMapController:scanCurrentZone()
             and m:isInGuild()
             and m:isOnline() then
 
-            local mZone = cleanString(m:getZone())
-            local match = false
-
-            if mZone ~= "" and cleanCurrentMap ~= "" then
-                if mZone == cleanCurrentMap then
-                    match = true
-                elseif cleanCurrentMap:find(mZone, 1, true) or mZone:find(cleanCurrentMap, 1, true) then
-                    match = true
-                end
-            end
+            local match = self:isZoneMatch(m:getZone(), currentMapName, currentMapID)
 
             if match then
                 local data = {
@@ -327,6 +558,6 @@ function WorldMapController:scanCurrentZone()
         return (a.name or ""):lower() < (b.name or ""):lower()
     end)
 
-    -- Atualiza a View do Mapa apenas com a lista de membros na região
-    self._worldMapView:renderMembers(regionMembers, currentMapName)
+    -- Atualiza a View do Mapa passando os flags de continente e mundo
+    self._worldMapView:renderMembers(regionMembers, currentMapName, isContinent, isWorld)
 end

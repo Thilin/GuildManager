@@ -88,6 +88,8 @@ function WorldMapView:new()
     instance._rowHeight = 42
     instance._currentZoneName = ""
     instance._isPanelOpen = true
+    instance._isContinentView = false
+    instance._isWorldView = false
 
     return instance
 end
@@ -534,27 +536,34 @@ function WorldMapView:isPanelShown()
     return self._isPanelOpen == true and self._panel and self._panel:IsShown()
 end
 
---- Atualiza o texto do botão na barra do mapa com a quantidade de membros na região.
+--- Atualiza o texto do botão na barra do mapa com a quantidade de membros na região/continente.
 ---@param count number
-function WorldMapView:updateButton(count)
+---@param isContinent boolean|nil
+---@param isWorld boolean|nil
+function WorldMapView:updateButton(count, isContinent, isWorld)
     if not self._mapButton then
         self:initWorldMapUI()
     end
     local num = tonumber(count) or 0
     local color = num > 0 and "|cff00ff00" or "|cffaaaaaa"
+    local scopeText = isWorld and "no Mundo" or (isContinent and "no Continente" or "na Região")
     if self._mapButton and self._mapButton.text then
-        self._mapButton.text:SetText(string.format("|cffffd200Guilda:|r %s%d na Região|r", color, num))
+        self._mapButton.text:SetText(string.format("|cffffd200Guilda:|r %s%d %s|r", color, num, scopeText))
     end
     self:reanchorMapButton()
     self:updateButtonState()
 end
 
---- Renderiza a lista de membros e plota os pinos de localização no mapa.
----@param membersData table @Lista de membros presentes na região
+--- Renderiza a lista de membros no painel lateral do mapa.
+---@param membersData table @Lista de membros presentes na região/continente
 ---@param zoneName string @Nome da região visualizada no mapa
-function WorldMapView:renderMembers(membersData, zoneName)
+---@param isContinent boolean|nil @Indica se o mapa atual é um continente
+---@param isWorld boolean|nil @Indica se o mapa atual é o mundo global
+function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
     self._membersData = membersData or {}
     self._currentZoneName = zoneName or "Região Atual"
+    self._isContinentView = isContinent == true
+    self._isWorldView = isWorld == true
 
     if not self._panel then
         self:initWorldMapUI()
@@ -562,12 +571,13 @@ function WorldMapView:renderMembers(membersData, zoneName)
 
     if self._panel then
         self._panel.zoneTitle:SetText("|cff00e5ff" .. self._currentZoneName .. "|r")
-        self._panel.countText:SetText(string.format("|cffa8f0a8%d membro(s) encontrado(s)|r", #self._membersData))
+        local scopeText = isWorld and "no mundo" or (isContinent and "no continente" or "na região")
+        self._panel.countText:SetText(string.format("|cffa8f0a8%d membro(s) %s|r", #self._membersData, scopeText))
     end
 
-    self:updateButton(#self._membersData)
+    self:updateButton(#self._membersData, isContinent, isWorld)
 
-    -- Plota os pinos no mapa sempre que os dados forem atualizados
+    -- Plota os pinos no mapa sempre que os dados forem atualizados (mantém limpos)
     self:plotMemberPins()
 
     -- Atualiza as linhas da lista lateral se o painel estiver aberto
@@ -596,6 +606,8 @@ function WorldMapView:refreshVisibleRows()
 
     if self._panel and self._panel.emptyMsg then
         if total == 0 then
+            local emptyScope = self._isWorldView and "no mundo" or (self._isContinentView and "neste continente" or "nesta região")
+            self._panel.emptyMsg:SetText(string.format("Nenhum membro da guilda\nencontrado %s.", emptyScope))
             self._panel.emptyMsg:Show()
         else
             self._panel.emptyMsg:Hide()
@@ -625,9 +637,13 @@ function WorldMapView:refreshVisibleRows()
             -- Linha 1: Nome do personagem
             row.nameText:SetText(nameStr)
 
-            -- Linha 2: Nível e Cargo
+            -- Linha 2: Nível e Cargo (e Zona se estiver em visualização de Continente ou Mundo)
             local rankStr = data.rankName and data.rankName ~= "" and (" • |cffffff00" .. data.rankName .. "|r") or ""
-            row.subText:SetText(string.format("Lvl %d%s", data.level or 1, rankStr))
+            if (self._isContinentView or self._isWorldView) and data.zone and data.zone ~= "" then
+                row.subText:SetText(string.format("Lvl %d%s • |cff00e5ff%s|r", data.level or 1, rankStr, data.zone))
+            else
+                row.subText:SetText(string.format("Lvl %d%s", data.level or 1, rankStr))
+            end
             row:Show()
         elseif row then
             row.memberData = nil
