@@ -19,16 +19,15 @@
 [X] log de RETORNAR para a guilda. Quando um membro retorna pra guilda, tem que mostrar no Log quem o recrutou, que dia ele saiu, qual foi o ultimo cargo dele e quantas vezes o membro saiu da guilda.
 
 [X] log de alteraçao de notas. Todo membro quando é recrutado, tem o valor padrão de notas da Blizzard. O Addon deve ser capaz de registrar toda vez que alguém registrar um valor novo para as notas, tanto de oficial quanto nota publica, porém não registrar a nota com valor padrão da Blizzard. Se o valor for alterado para "vazio" (string vazia), deve registrar como "vazio".
-
-[] log de alteraçao de nome. Toda vez que um membro da guilda, o log precisa registrar qual era o nome dele e qual se tornou o novo nome
+[X] poder scanear o mapa para ver se mais alguém da guilda está pelo mapa, incluindo a sua localização
+[X] poder mencionar um player no chat da guilda e o nome dele ficar destacado quando mencionado seguido de uma leve notificação (autocomplete com @ e chat piscando com alerta)
 
 [] tela para gerenciamento de grupos
 [] tela para ajustar configuraçoes do addon
-[X] poder scanear o mapa para ver se mais alguém da guilda está pelo mapa, incluindo a sua localização
-[] mostrar quais membros podem fazer quais receitas de cada profissão
-[X] poder mencionar um player no chat da guilda e o nome dele ficar destacado quando mencionado seguido de uma leve notificação (autocomplete com @ e chat piscando com alerta)
+
 [] criar evento de Aniversário toda vez que a data de aniversário de alguém for adicionada incluindo todos os oficiais, o aniversariamente e o lider da guilda no evento
 [] compartilhar informações com outro membro da guilda que use o addon
+[] mostrar quais membros podem fazer quais receitas de cada profissão
 
 
 [] tela para caso o addon PROCURADO estiver instalado
