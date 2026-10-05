@@ -30,6 +30,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local worldMapView = WorldMapView:new()
         local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView)
 
+        local chatMentionView = ChatMentionView:new()
+        local chatMentionController = ChatMentionController:new(memberService, guildRosterService, chatMentionView)
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -45,11 +48,14 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.minimapButton = minimapButton
         GM.worldMapView = worldMapView
         GM.worldMapController = worldMapController
+        GM.chatMentionView = chatMentionView
+        GM.chatMentionController = chatMentionController
 
         memberController:initHooks()
         logController:initHooks()
         auditController:initHooks()
         worldMapController:initHooks()
+        chatMentionController:initHooks()
 
         if logRepository.cleanDuplicateKickAndLeaveLogs then
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
