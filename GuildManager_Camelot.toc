@@ -10,22 +10,26 @@ Database/Database.lua
 Models/Member.lua
 Models/Log.lua
 Models/Group.lua
+Models/Event.lua
 Models/Settings.lua
 
 Repositories/MemberRepository.lua
 Repositories/LogRepository.lua
 Repositories/GroupRepository.lua
+Repositories/EventRepository.lua
 
 Services/LogService.lua
 Services/MemberService.lua
 Services/GuildRosterService.lua
 Services/GroupService.lua
+Services/EventService.lua
 Services/SettingsService.lua
 
 Views/MemberView.lua
 Views/LogView.lua
 Views/AuditView.lua
 Views/GroupView.lua
+Views/AgendaView.lua
 Views/SettingsView.lua
 Views/MinimapButton.lua
 Views/WorldMapView.lua
@@ -35,6 +39,7 @@ Controllers/MemberController.lua
 Controllers/LogController.lua
 Controllers/AuditController.lua
 Controllers/GroupController.lua
+Controllers/AgendaController.lua
 Controllers/SettingsController.lua
 Controllers/WorldMapController.lua
 Controllers/ChatMentionController.lua

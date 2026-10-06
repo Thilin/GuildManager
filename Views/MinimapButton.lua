@@ -125,6 +125,8 @@ function MinimapButton:createUI()
                 _G.GM.logController:toggle()
             elseif defTab == "groups" and _G.GM and _G.GM.groupController then
                 _G.GM.groupController:toggle()
+            elseif defTab == "agenda" and _G.GM and _G.GM.agendaController then
+                _G.GM.agendaController:toggle()
             elseif defTab == "settings" and _G.GM and _G.GM.settingsController then
                 _G.GM.settingsController:toggle()
             elseif _G.GM and _G.GM.auditController then
@@ -145,6 +147,7 @@ function MinimapButton:createUI()
         GameTooltip:AddLine("|cffffd200Guild Manager|r")
         GameTooltip:AddLine("|cff00ff00Clique com o Botão Esquerdo:|r Abrir Painel Principal")
         GameTooltip:AddLine("|cffffd200Clique com o Botão Direito:|r Configurações do Addon")
+        GameTooltip:AddLine("|cffaaaaaaComandos: /gm, /gmaudit, /gmlogs, /gmgrupos, /gmagenda|r")
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("|cffaaaaaaArraste com o botão esquerdo para orbitar a borda do minimapa|r", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()

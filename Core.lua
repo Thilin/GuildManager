@@ -30,6 +30,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local groupView = GroupView:new()
         local groupController = GroupController:new(groupService, memberService, guildRosterService, groupView)
 
+        local eventRepository = EventRepository:new(dbTable)
+        local eventService = EventService:new(eventRepository, memberService, guildRosterService)
+        local agendaView = AgendaView:new()
+        local agendaController = AgendaController:new(eventService, memberService, guildRosterService, agendaView)
+
         local minimapButton = MinimapButton:new()
 
         local settingsService = SettingsService:new(dbTable, logRepository, memberService, guildRosterService)
@@ -58,6 +63,10 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.groupService = groupService
         GM.groupView = groupView
         GM.groupController = groupController
+        GM.eventRepository = eventRepository
+        GM.eventService = eventService
+        GM.agendaView = agendaView
+        GM.agendaController = agendaController
         GM.settingsService = settingsService
         GM.settingsView = settingsView
         GM.settingsController = settingsController
@@ -71,6 +80,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         logController:initHooks()
         auditController:initHooks()
         groupController:initHooks()
+        agendaController:initHooks()
         settingsController:initHooks()
         worldMapController:initHooks()
         chatMentionController:initHooks()
@@ -79,7 +89,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r ou |cffffff00/gmconfig|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r ou |cffffff00/gmconfig|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

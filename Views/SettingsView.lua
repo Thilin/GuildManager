@@ -356,10 +356,66 @@ function SettingsView:createSideTabs()
         end
     end)
 
-    -- Aba 4: Configurações (Ativa!)
+    -- Aba 4: Agenda
+    local tabAgenda = CreateFrame("Button", "GM_SettingsSideTab_Agenda", frame, template)
+    tabAgenda:SetSize(36, 36)
+    tabAgenda:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
+    if tabAgenda.SetBackdrop then
+        tabAgenda:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabAgenda:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabAgenda:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+    local agendaIcon = tabAgenda:CreateTexture(nil, "ARTWORK")
+    agendaIcon:SetPoint("TOPLEFT", tabAgenda, "TOPLEFT", 4, -4)
+    agendaIcon:SetPoint("BOTTOMRIGHT", tabAgenda, "BOTTOMRIGHT", -4, 4)
+    local okAgenda = agendaIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
+    if okAgenda ~= false and agendaIcon:GetTexture() then
+        agendaIcon:SetTexCoord(0.0078, 0.375, 0.0156, 0.75)
+    else
+        agendaIcon:SetTexture("Interface\\AddOns\\GuildManager\\Textures\\calendar.tga")
+        agendaIcon:SetTexCoord(0, 1, 0, 1)
+    end
+    agendaIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabAgenda.icon = agendaIcon
+
+    tabAgenda:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Agenda da Guilda|r")
+        GameTooltip:AddLine("Clique para alternar para a tela de Agenda e Eventos da guilda.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabAgenda:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        agendaIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+    tabAgenda:SetScript("OnClick", function()
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+        local agendaCtrl = (_G.GM and _G.GM.agendaController) or _G.agendaController
+        if agendaCtrl then
+            agendaCtrl:show()
+            local aFrame = (_G.GM and _G.GM.agendaView and _G.GM.agendaView.getFrame and _G.GM.agendaView:getFrame())
+            if aFrame and point then
+                aFrame:ClearAllPoints()
+                if relativeTo then aFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else aFrame:SetPoint(point, xOfs, yOfs) end
+            end
+        end
+    end)
+
+    -- Aba 5: Configurações (Ativa!)
     local tabSettings = CreateFrame("Button", "GM_SettingsSideTab_Settings", frame, template)
     tabSettings:SetSize(36, 36)
-    tabSettings:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
+    tabSettings:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
     if tabSettings.SetBackdrop then
         tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
         tabSettings:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
