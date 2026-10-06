@@ -40,6 +40,10 @@ function Database:init()
         _G.GM_DB.logs = {}
     end
 
+    if type(_G.GM_DB.groups) ~= "table" then
+        _G.GM_DB.groups = {}
+    end
+
     if not _G.GM_DB.version then
         _G.GM_DB.version = self._version
     end

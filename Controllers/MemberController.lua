@@ -228,6 +228,11 @@ function MemberController:initHooks()
                 _G.GM.logController:toggle()
                 return
             end
+        elseif arg == "grupos" or arg == "grupo" or arg == "groups" or arg == "group" then
+            if _G.GM and _G.GM.groupController then
+                _G.GM.groupController:toggle()
+                return
+            end
         end
 
         if IsInGuild and IsInGuild() then

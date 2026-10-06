@@ -25,6 +25,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local auditView = AuditView:new()
         local auditController = AuditController:new(memberService, guildRosterService, auditView, logService)
 
+        local groupRepository = GroupRepository:new(dbTable)
+        local groupService = GroupService:new(groupRepository, memberService, guildRosterService)
+        local groupView = GroupView:new()
+        local groupController = GroupController:new(groupService, memberService, guildRosterService, groupView)
+
         local minimapButton = MinimapButton:new()
 
         local worldMapView = WorldMapView:new()
@@ -45,6 +50,10 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.memberController = memberController
         GM.auditView = auditView
         GM.auditController = auditController
+        GM.groupRepository = groupRepository
+        GM.groupService = groupService
+        GM.groupView = groupView
+        GM.groupController = groupController
         GM.minimapButton = minimapButton
         GM.worldMapView = worldMapView
         GM.worldMapController = worldMapController
@@ -54,6 +63,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         memberController:initHooks()
         logController:initHooks()
         auditController:initHooks()
+        groupController:initHooks()
         worldMapController:initHooks()
         chatMentionController:initHooks()
 
@@ -61,7 +71,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r ou |cffffff00/gmaudit|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r ou |cffffff00/gmgrupos|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

@@ -649,8 +649,82 @@ function LogView:createSideTabs()
         GameTooltip:Hide()
     end)
 
+    -- ---------------------------------------------------------
+    -- Aba 3: Grupos (Inativa nesta tela - Ícone Grupos)
+    -- ---------------------------------------------------------
+    local tabGroups = CreateFrame("Button", "GM_LogSideTab_Groups", frame, template)
+    tabGroups:SetSize(36, 36)
+    tabGroups:SetPoint("TOPLEFT", tabLogs, "BOTTOMLEFT", 0, -8)
+    if tabGroups.SetBackdrop then
+        tabGroups:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabGroups:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabGroups:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+
+    local groupsIcon = tabGroups:CreateTexture(nil, "ARTWORK")
+    groupsIcon:SetPoint("TOPLEFT", tabGroups, "TOPLEFT", 4, -4)
+    groupsIcon:SetPoint("BOTTOMRIGHT", tabGroups, "BOTTOMRIGHT", -4, 4)
+    groupsIcon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
+    groupsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    groupsIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabGroups.icon = groupsIcon
+
+    local groupsHl = tabGroups:CreateTexture(nil, "HIGHLIGHT")
+    groupsHl:SetAllPoints(tabGroups)
+    groupsHl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.30)
+    tabGroups:SetHighlightTexture(groupsHl)
+
+    tabGroups:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Gerenciamento de Grupos|r")
+        GameTooltip:AddLine("Clique para alternar para a tela de Grupos (Masmorras, Raides e Diversos).", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+
+    tabGroups:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        groupsIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+
+    tabGroups:SetScript("OnClick", function()
+        if PlaySound then
+            if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB then
+                PlaySound(SOUNDKIT.IG_CHARACTER_INFO_TAB)
+            else
+                pcall(PlaySound, 841)
+            end
+        end
+
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+
+        local groupCtrl = (_G.GM and _G.GM.groupController) or _G.groupController
+        if groupCtrl then
+            groupCtrl:show()
+            local groupFrame = (_G.GM and _G.GM.groupView and _G.GM.groupView.getFrame and _G.GM.groupView:getFrame()) or (groupCtrl._groupView and groupCtrl._groupView:getFrame())
+            if groupFrame and point then
+                groupFrame:ClearAllPoints()
+                if relativeTo then
+                    groupFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs)
+                else
+                    groupFrame:SetPoint(point, xOfs, yOfs)
+                end
+            end
+        end
+    end)
+
     self._tabAudit = tabAudit
     self._tabLogs = tabLogs
+    self._tabGroups = tabGroups
 end
 
 --- Atualiza a aparência dos botões de filtro de eventos.
