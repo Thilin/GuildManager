@@ -852,7 +852,7 @@ function SettingsView:updateRetentionButtons(buttons, activeDays)
 end
 
 --- Preenche a interface com os valores atuais de Settings e estatísticas.
----@param settings Settings
+---@param settings GMSettings
 ---@param stats table
 function SettingsView:renderSettings(settings, stats)
     if not self._frame or not settings then return end

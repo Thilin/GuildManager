@@ -1,6 +1,6 @@
 ---@class SettingsService
 ---@field private _db table
----@field private _settings Settings
+---@field private _settings GMSettings
 ---@field private _logRepository LogRepository|nil
 ---@field private _memberService MemberService|nil
 ---@field private _guildRosterService GuildRosterService|nil
@@ -27,8 +27,8 @@ function SettingsService:new(db, logRepository, memberService, guildRosterServic
     instance._guildRosterService = guildRosterService
     instance._listeners = {}
 
-    -- Carrega entidade Settings mesclando com os dados persistidos
-    instance._settings = Settings:new(instance._db.settings)
+    -- Carrega entidade GMSettings mesclando com os dados persistidos
+    instance._settings = GMSettings:new(instance._db.settings)
     -- Garante sincronismo inicial dos dados
     instance:save()
 
@@ -36,7 +36,7 @@ function SettingsService:new(db, logRepository, memberService, guildRosterServic
 end
 
 --- Retorna a entidade de configurações em memória.
----@return Settings
+---@return GMSettings
 function SettingsService:getSettings()
     return self._settings
 end
@@ -84,7 +84,7 @@ end
 --- Restaura todas as configurações para os valores de fábrica.
 function SettingsService:resetToDefaults()
     local defaults = self._settings:getDefaults()
-    self._settings = Settings:new(defaults)
+    self._settings = GMSettings:new(defaults)
     self:save()
     self:notifyListeners("*", nil)
 end

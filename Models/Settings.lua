@@ -1,7 +1,7 @@
----@class Settings
+---@class GMSettings
 --- Entidade de domínio para configurações e personalizações do GuildManager.
-Settings = {}
-Settings.__index = Settings
+GMSettings = {}
+GMSettings.__index = GMSettings
 
 local DEFAULTS = {
     guildTagline = "",           -- Mensagem ou lema customizado da guilda
@@ -24,10 +24,10 @@ local DEFAULTS = {
     confirmGroupDelete = true,   -- Solicitar confirmação ao excluir grupos
 }
 
---- Construtor da entidade Settings.
+--- Construtor da entidade GMSettings.
 ---@param data table|nil
----@return Settings
-function Settings:new(data)
+---@return GMSettings
+function GMSettings:new(data)
     local instance = setmetatable({}, self)
     data = data or {}
 
@@ -42,55 +42,55 @@ function Settings:new(data)
     return instance
 end
 
-function Settings:getDefaults()
+function GMSettings:getDefaults()
     local copy = {}
     for k, v in pairs(DEFAULTS) do copy[k] = v end
     return copy
 end
 
 -- Getters
-function Settings:getGuildTagline() return self._guildTagline or "" end
-function Settings:getDefaultTab() return self._defaultTab or "audit" end
-function Settings:isTimeFormat24() return self._timeFormat24 == true end
-function Settings:isChatMentionsEnabled() return self._enableChatMentions ~= false end
-function Settings:isMentionSoundEnabled() return self._enableMentionSound ~= false end
-function Settings:isMentionFlashEnabled() return self._enableMentionFlash ~= false end
-function Settings:getMentionSoundChoice() return self._mentionSoundChoice or "whisper" end
-function Settings:isShowMinimapButton() return self._showMinimapButton ~= false end
-function Settings:getMinimapPos() return tonumber(self._minimapPos) or 215 end
-function Settings:isAutoScanRoster() return self._autoScanRoster ~= false end
-function Settings:isShowOfflineMembers() return self._showOfflineMembers ~= false end
-function Settings:isNotifyNewRecruit() return self._notifyNewRecruit ~= false end
-function Settings:isLogLevelUp() return self._logLevelUp ~= false end
-function Settings:isLogPromoteDemote() return self._logPromoteDemote ~= false end
-function Settings:isLogNotes() return self._logNotes ~= false end
-function Settings:isLogJoinLeave() return self._logJoinLeave ~= false end
-function Settings:getLogRetentionDays() return tonumber(self._logRetentionDays) or 60 end
-function Settings:isConfirmGroupDelete() return self._confirmGroupDelete ~= false end
+function GMSettings:getGuildTagline() return self._guildTagline or "" end
+function GMSettings:getDefaultTab() return self._defaultTab or "audit" end
+function GMSettings:isTimeFormat24() return self._timeFormat24 == true end
+function GMSettings:isChatMentionsEnabled() return self._enableChatMentions ~= false end
+function GMSettings:isMentionSoundEnabled() return self._enableMentionSound ~= false end
+function GMSettings:isMentionFlashEnabled() return self._enableMentionFlash ~= false end
+function GMSettings:getMentionSoundChoice() return self._mentionSoundChoice or "whisper" end
+function GMSettings:isShowMinimapButton() return self._showMinimapButton ~= false end
+function GMSettings:getMinimapPos() return tonumber(self._minimapPos) or 215 end
+function GMSettings:isAutoScanRoster() return self._autoScanRoster ~= false end
+function GMSettings:isShowOfflineMembers() return self._showOfflineMembers ~= false end
+function GMSettings:isNotifyNewRecruit() return self._notifyNewRecruit ~= false end
+function GMSettings:isLogLevelUp() return self._logLevelUp ~= false end
+function GMSettings:isLogPromoteDemote() return self._logPromoteDemote ~= false end
+function GMSettings:isLogNotes() return self._logNotes ~= false end
+function GMSettings:isLogJoinLeave() return self._logJoinLeave ~= false end
+function GMSettings:getLogRetentionDays() return tonumber(self._logRetentionDays) or 60 end
+function GMSettings:isConfirmGroupDelete() return self._confirmGroupDelete ~= false end
 
 -- Setters
-function Settings:setGuildTagline(val) self._guildTagline = tostring(val or "") end
-function Settings:setDefaultTab(val) self._defaultTab = tostring(val or "audit") end
-function Settings:setTimeFormat24(val) self._timeFormat24 = (val == true) end
-function Settings:setChatMentionsEnabled(val) self._enableChatMentions = (val == true) end
-function Settings:setMentionSoundEnabled(val) self._enableMentionSound = (val == true) end
-function Settings:setMentionFlashEnabled(val) self._enableMentionFlash = (val == true) end
-function Settings:setMentionSoundChoice(val) self._mentionSoundChoice = tostring(val or "whisper") end
-function Settings:setShowMinimapButton(val) self._showMinimapButton = (val == true) end
-function Settings:setMinimapPos(val) self._minimapPos = tonumber(val) or 215 end
-function Settings:setAutoScanRoster(val) self._autoScanRoster = (val == true) end
-function Settings:setShowOfflineMembers(val) self._showOfflineMembers = (val == true) end
-function Settings:setNotifyNewRecruit(val) self._notifyNewRecruit = (val == true) end
-function Settings:setLogLevelUp(val) self._logLevelUp = (val == true) end
-function Settings:setLogPromoteDemote(val) self._logPromoteDemote = (val == true) end
-function Settings:setLogNotes(val) self._logNotes = (val == true) end
-function Settings:setLogJoinLeave(val) self._logJoinLeave = (val == true) end
-function Settings:setLogRetentionDays(val) self._logRetentionDays = tonumber(val) or 60 end
-function Settings:setConfirmGroupDelete(val) self._confirmGroupDelete = (val == true) end
+function GMSettings:setGuildTagline(val) self._guildTagline = tostring(val or "") end
+function GMSettings:setDefaultTab(val) self._defaultTab = tostring(val or "audit") end
+function GMSettings:setTimeFormat24(val) self._timeFormat24 = (val == true) end
+function GMSettings:setChatMentionsEnabled(val) self._enableChatMentions = (val == true) end
+function GMSettings:setMentionSoundEnabled(val) self._enableMentionSound = (val == true) end
+function GMSettings:setMentionFlashEnabled(val) self._enableMentionFlash = (val == true) end
+function GMSettings:setMentionSoundChoice(val) self._mentionSoundChoice = tostring(val or "whisper") end
+function GMSettings:setShowMinimapButton(val) self._showMinimapButton = (val == true) end
+function GMSettings:setMinimapPos(val) self._minimapPos = tonumber(val) or 215 end
+function GMSettings:setAutoScanRoster(val) self._autoScanRoster = (val == true) end
+function GMSettings:setShowOfflineMembers(val) self._showOfflineMembers = (val == true) end
+function GMSettings:setNotifyNewRecruit(val) self._notifyNewRecruit = (val == true) end
+function GMSettings:setLogLevelUp(val) self._logLevelUp = (val == true) end
+function GMSettings:setLogPromoteDemote(val) self._logPromoteDemote = (val == true) end
+function GMSettings:setLogNotes(val) self._logNotes = (val == true) end
+function GMSettings:setLogJoinLeave(val) self._logJoinLeave = (val == true) end
+function GMSettings:setLogRetentionDays(val) self._logRetentionDays = tonumber(val) or 60 end
+function GMSettings:setConfirmGroupDelete(val) self._confirmGroupDelete = (val == true) end
 
 --- Serializa as configurações para uma tabela limpa.
 ---@return table
-function Settings:serialize()
+function GMSettings:serialize()
     local result = {}
     for k in pairs(DEFAULTS) do
         result[k] = self["_" .. k]
@@ -98,4 +98,7 @@ function Settings:serialize()
     return result
 end
 
-_G.Settings = Settings
+_G.GMSettings = GMSettings
+if _G.GM then
+    _G.GM.Settings = GMSettings
+end
