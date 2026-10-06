@@ -873,5 +873,35 @@ function LogRepository:hasNoteLog(name, event, newNote, eventTimestamp)
     return false
 end
 
+--- Retorna a quantidade total de logs salvos no banco.
+---@return number
+function LogRepository:count()
+    if type(self._db.logs) ~= "table" then return 0 end
+    return #self._db.logs
+end
+
+--- Remove registros de logs mais antigos que o timestamp fornecido.
+---@param cutoffTimestamp number
+---@return number @Quantidade de registros removidos
+function LogRepository:purgeOlderThan(cutoffTimestamp)
+    if not cutoffTimestamp or cutoffTimestamp <= 0 or type(self._db.logs) ~= "table" then
+        return 0
+    end
+
+    local kept = {}
+    local purged = 0
+    for _, raw in ipairs(self._db.logs) do
+        local ts = tonumber(raw.timestamp) or 0
+        if ts >= cutoffTimestamp then
+            table.insert(kept, raw)
+        else
+            purged = purged + 1
+        end
+    end
+
+    self._db.logs = kept
+    return purged
+end
+
 
 

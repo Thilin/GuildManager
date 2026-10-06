@@ -112,7 +112,7 @@ function MinimapButton:createUI()
         end
     end)
 
-    -- Ao clicar no balão, abre a tela de logs (ou auditoria com botão direito)
+    -- Ao clicar no balão, abre a aba padrão (ou configurações com botão direito)
     button:SetScript("OnClick", function(_, btn)
         if wasDragged then
             wasDragged = false
@@ -120,12 +120,21 @@ function MinimapButton:createUI()
         end
 
         if btn == "LeftButton" then
-            if _G.GM and _G.GM.logController and _G.GM.logController.toggle then
+            local defTab = (_G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.defaultTab) or "audit"
+            if defTab == "logs" and _G.GM and _G.GM.logController then
+                _G.GM.logController:toggle()
+            elseif defTab == "groups" and _G.GM and _G.GM.groupController then
+                _G.GM.groupController:toggle()
+            elseif defTab == "settings" and _G.GM and _G.GM.settingsController then
+                _G.GM.settingsController:toggle()
+            elseif _G.GM and _G.GM.auditController then
+                _G.GM.auditController:toggle()
+            elseif _G.GM and _G.GM.logController then
                 _G.GM.logController:toggle()
             end
         elseif btn == "RightButton" then
-            if _G.GM and _G.GM.auditController and _G.GM.auditController.toggle then
-                _G.GM.auditController:toggle()
+            if _G.GM and _G.GM.settingsController then
+                _G.GM.settingsController:toggle()
             end
         end
     end)
@@ -134,8 +143,8 @@ function MinimapButton:createUI()
     button:SetScript("OnEnter", function(f)
         GameTooltip:SetOwner(f, "ANCHOR_LEFT")
         GameTooltip:AddLine("|cffffd200Guild Manager|r")
-        GameTooltip:AddLine("|cff00ff00Clique com o Botão Esquerdo:|r Abrir Registro de Logs")
-        GameTooltip:AddLine("|cffffd200Clique com o Botão Direito:|r Abrir Auditoria de Membros")
+        GameTooltip:AddLine("|cff00ff00Clique com o Botão Esquerdo:|r Abrir Painel Principal")
+        GameTooltip:AddLine("|cffffd200Clique com o Botão Direito:|r Configurações do Addon")
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("|cffaaaaaaArraste com o botão esquerdo para orbitar a borda do minimapa|r", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
@@ -150,6 +159,10 @@ function MinimapButton:createUI()
     -- Posiciona no ângulo salvo ou padrão
     local savedAngle = (_G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.minimapPos) or DEFAULT_ANGLE
     self:updatePosition(savedAngle)
+
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.showMinimapButton == false then
+        button:Hide()
+    end
 end
 
 --- Atualiza a posição angular do botão orbitando a borda do Minimapa.

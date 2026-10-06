@@ -45,6 +45,10 @@ function LogService:logRecruitment(recruitName, recruiterName, guid, timestamp, 
         return nil, false
     end
 
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logJoinLeave == false then
+        return nil, false
+    end
+
     -- Resolve tokens de classe caso disponíveis
     local memberClass = ""
     local recClass = ""
@@ -173,6 +177,10 @@ end
 ---@return Log|nil, boolean @Retorna a entidade Log e se foi criada
 function LogService:logGuildLeave(memberName, guid, timestamp, dateStr, memberClass)
     if not memberName or memberName == "" then
+        return nil, false
+    end
+
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logJoinLeave == false then
         return nil, false
     end
 
@@ -511,6 +519,10 @@ function LogService:logGuildKick(kickedName, kickerName, guid, timestamp, dateSt
         return nil, false
     end
 
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logJoinLeave == false then
+        return nil, false
+    end
+
     local kicker = kickerName or ""
 
     -- 1. Verifica se já existe um KICK para este personagem no mesmo período
@@ -655,6 +667,10 @@ function LogService:logMemberLeveled(member, newLevel, oldLevel, timestamp, date
         return nil, false
     end
 
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logLevelUp == false then
+        return nil, false
+    end
+
     local memberName = ""
     local memberClass = ""
     local guid = ""
@@ -762,6 +778,10 @@ end
 ---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
 function LogService:logMemberPromotion(member, promoterName, oldRank, newRank, oldRankIndex, newRankIndex, timestamp, dateStr, promoterClass)
     if not member or not newRank or newRank == "" then
+        return nil, false
+    end
+
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logPromoteDemote == false then
         return nil, false
     end
 
@@ -921,6 +941,10 @@ end
 ---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
 function LogService:logMemberDemotion(member, demoterName, oldRank, newRank, oldRankIndex, newRankIndex, timestamp, dateStr, demoterClass)
     if not member or not newRank or newRank == "" then
+        return nil, false
+    end
+
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logPromoteDemote == false then
         return nil, false
     end
 
@@ -1143,6 +1167,10 @@ end
 ---@param memberClass string|nil @Token da classe do membro (opcional)
 ---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
 function LogService:logOfficerNoteChange(member, oldNote, newNote, timestamp, dateStr, memberClass)
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logNotes == false then
+        return nil, false
+    end
+
     oldNote = tostring(oldNote or "")
     newNote = tostring(newNote or "")
     if oldNote == newNote then
@@ -1218,6 +1246,10 @@ end
 ---@param memberClass string|nil @Token da classe do membro (opcional)
 ---@return Log|nil, boolean @Retorna a entidade Log e se foi criada (true) ou atualizada/já existia (false)
 function LogService:logPublicNoteChange(member, oldNote, newNote, timestamp, dateStr, memberClass)
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logNotes == false then
+        return nil, false
+    end
+
     oldNote = tostring(oldNote or "")
     newNote = tostring(newNote or "")
     if oldNote == newNote then

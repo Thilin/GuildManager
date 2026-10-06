@@ -258,6 +258,11 @@ function ChatMentionController:onChatTextChanged(editBox, userInput)
         local isValidQuery = not isAlreadyFinished and #mentionQuery <= 35 and not mentionQuery:find("[%c\r\n]")
 
         if isValidAt and isValidQuery then
+            if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.enableChatMentions == false then
+                if self._view and self._view:isPickerShown() then self._view:hidePicker() end
+                return
+            end
+
             self._activeEditBox = editBox
             self._mentionPreText = pre
 

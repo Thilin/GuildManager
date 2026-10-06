@@ -233,6 +233,11 @@ function MemberController:initHooks()
                 _G.GM.groupController:toggle()
                 return
             end
+        elseif arg == "config" or arg == "settings" or arg == "opcoes" or arg == "opções" then
+            if _G.GM and _G.GM.settingsController then
+                _G.GM.settingsController:toggle()
+                return
+            end
         end
 
         if IsInGuild and IsInGuild() then

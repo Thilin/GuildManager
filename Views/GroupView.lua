@@ -601,9 +601,61 @@ function GroupView:createSideTabs()
     end)
     tabGroups:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Aba 4: Configurações do Addon
+    local tabSettings = CreateFrame("Button", "GM_GroupSideTab_Settings", frame, template)
+    tabSettings:SetSize(36, 36)
+    tabSettings:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
+    if tabSettings.SetBackdrop then
+        tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabSettings:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabSettings:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+    local settingsIcon = tabSettings:CreateTexture(nil, "ARTWORK")
+    settingsIcon:SetPoint("TOPLEFT", tabSettings, "TOPLEFT", 4, -4)
+    settingsIcon:SetPoint("BOTTOMRIGHT", tabSettings, "BOTTOMRIGHT", -4, 4)
+    settingsIcon:SetTexture("Interface\\Icons\\Trade_Engineering")
+    settingsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    settingsIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabSettings.icon = settingsIcon
+
+    tabSettings:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        settingsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200Configurações do Addon|r")
+        GameTooltip:AddLine("Clique para alternar para a tela de Opções e Personalização.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabSettings:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        settingsIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+    tabSettings:SetScript("OnClick", function()
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+        local settingsCtrl = (_G.GM and _G.GM.settingsController) or _G.settingsController
+        if settingsCtrl then
+            settingsCtrl:show()
+            local sFrame = (_G.GM and _G.GM.settingsView and _G.GM.settingsView.getFrame and _G.GM.settingsView:getFrame()) or (settingsCtrl._settingsView and settingsCtrl._settingsView:getFrame())
+            if sFrame and point then
+                sFrame:ClearAllPoints()
+                if relativeTo then sFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else sFrame:SetPoint(point, xOfs, yOfs) end
+            end
+        end
+    end)
+
     self._tabAudit = tabAudit
     self._tabLogs = tabLogs
     self._tabGroups = tabGroups
+    self._tabSettings = tabSettings
 end
 
 --- Cria as 3 colunas: Masmorras, Raides e Diversos.

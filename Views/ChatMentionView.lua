@@ -640,20 +640,41 @@ function ChatMentionView:flashChatFrame(chatFrame)
         return
     end
 
-    local overlay = self._flashOverlay
-    overlay:ClearAllPoints()
-    overlay:SetPoint("TOPLEFT", target, "TOPLEFT", -6, 6)
-    overlay:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 6, -6)
-    overlay:Show()
+    local allowFlash = not (_G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.enableMentionFlash == false)
+    if allowFlash then
+        local overlay = self._flashOverlay
+        overlay:ClearAllPoints()
+        overlay:SetPoint("TOPLEFT", target, "TOPLEFT", -6, 6)
+        overlay:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 6, -6)
+        overlay:Show()
 
-    -- Pisca a aba do chat também se disponível
-    local tab = _G[target:GetName() .. "Tab"]
-    if FCF_StartAlertFlash then
-        pcall(FCF_StartAlertFlash, target)
-    elseif tab and tab.StartFlashing then
-        pcall(tab.StartFlashing, tab)
-    elseif UIFrameFlash and tab then
-        pcall(UIFrameFlash, tab, 0.25, 0.25, 2.5, true, 0.1, 0.1)
+        -- Pisca a aba do chat também se disponível
+        local tab = _G[target:GetName() .. "Tab"]
+        if FCF_StartAlertFlash then
+            pcall(FCF_StartAlertFlash, target)
+        elseif tab and tab.StartFlashing then
+            pcall(tab.StartFlashing, tab)
+        elseif UIFrameFlash and tab then
+            pcall(UIFrameFlash, tab, 0.25, 0.25, 2.5, true, 0.1, 0.1)
+        end
+
+        -- Animação de pulso senoidal suave (4 pulsos vibrantes ao longo de 2.4s)
+        local totalDuration = 2.4
+        local elapsed = 0
+        local pulseFreq = 3.5
+
+        overlay:SetScript("OnUpdate", function(f, dt)
+            elapsed = elapsed + (dt or 0.016)
+            if elapsed >= totalDuration then
+                f:Hide()
+                f:SetScript("OnUpdate", nil)
+            else
+                -- Oscila o alpha suavemente entre 0.15 e 0.95
+                local wave = 0.5 + 0.5 * math.sin(elapsed * pulseFreq * math.pi * 2 - math.pi / 2)
+                local alpha = 0.15 + (0.80 * wave)
+                f:SetAlpha(alpha)
+            end
+        end)
     end
 
     -- Toca o som de alerta (com proteção de debounce de 0.5s)
@@ -662,24 +683,6 @@ function ChatMentionView:flashChatFrame(chatFrame)
         self._lastSoundPlayTime = now
         self:playMentionSound()
     end
-
-    -- Animação de pulso senoidal suave (4 pulsos vibrantes ao longo de 2.4s)
-    local totalDuration = 2.4
-    local elapsed = 0
-    local pulseFreq = 3.5
-
-    overlay:SetScript("OnUpdate", function(f, dt)
-        elapsed = elapsed + (dt or 0.016)
-        if elapsed >= totalDuration then
-            f:Hide()
-            f:SetScript("OnUpdate", nil)
-        else
-            -- Oscila o alpha suavemente entre 0.15 e 0.95
-            local wave = 0.5 + 0.5 * math.sin(elapsed * pulseFreq * math.pi * 2 - math.pi / 2)
-            local alpha = 0.15 + (0.80 * wave)
-            f:SetAlpha(alpha)
-        end
-    end)
 end
 
 --- Toca o som de notificação quando for mencionado.
@@ -688,9 +691,19 @@ function ChatMentionView:playMentionSound()
         return
     end
 
-    if SOUNDKIT and SOUNDKIT.TELL_MESSAGE then
-        pcall(PlaySound, SOUNDKIT.TELL_MESSAGE, "Master")
-    else
-        pcall(PlaySound, 3081, "Master")
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.enableMentionSound == false then
+        return
     end
+
+    local choice = (_G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.mentionSoundChoice) or "whisper"
+    local soundId = 3081
+    if choice == "raid" then
+        soundId = 8959
+    elseif choice == "ready" then
+        soundId = 8960
+    elseif choice == "coin" then
+        soundId = 120
+    end
+
+    pcall(PlaySound, soundId, "Master")
 end

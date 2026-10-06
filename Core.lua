@@ -32,6 +32,10 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
 
         local minimapButton = MinimapButton:new()
 
+        local settingsService = SettingsService:new(dbTable, logRepository, memberService, guildRosterService)
+        local settingsView = SettingsView:new()
+        local settingsController = SettingsController:new(settingsService, settingsView, memberService, guildRosterService, logService, minimapButton)
+
         local worldMapView = WorldMapView:new()
         local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView)
 
@@ -54,6 +58,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.groupService = groupService
         GM.groupView = groupView
         GM.groupController = groupController
+        GM.settingsService = settingsService
+        GM.settingsView = settingsView
+        GM.settingsController = settingsController
         GM.minimapButton = minimapButton
         GM.worldMapView = worldMapView
         GM.worldMapController = worldMapController
@@ -64,6 +71,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         logController:initHooks()
         auditController:initHooks()
         groupController:initHooks()
+        settingsController:initHooks()
         worldMapController:initHooks()
         chatMentionController:initHooks()
 
@@ -71,7 +79,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r ou |cffffff00/gmgrupos|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r ou |cffffff00/gmconfig|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

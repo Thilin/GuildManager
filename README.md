@@ -23,7 +23,7 @@
 [X] poder mencionar um player no chat da guilda e o nome dele ficar destacado quando mencionado seguido de uma leve notificação (autocomplete com @ e chat piscando com alerta)
 [X] tela para gerenciamento de grupos
 
-[] tela para ajustar configuraçoes do addon
+[X] tela para ajustar configuraçoes do addon
 
 [] criar evento de Aniversário toda vez que a data de aniversário de alguém for adicionada incluindo todos os oficiais, o aniversariamente e o lider da guilda no evento
 [] compartilhar informações com outro membro da guilda que use o addon
