@@ -8,11 +8,12 @@
 ---@field private _syncNotificationView SyncNotificationView|nil
 ---@field private _isConductingElection boolean
 ---@field private _electionCandidates table<string, number>
----@field private _hasPerformedLoginSync boolean
+---@field private _loginSyncCompleted boolean
 ---@field private _isSyncing boolean
 ---@field private _activeSyncPeer string|nil
 ---@field private _syncStartTime number
 ---@field private _eventFrame table
+---@field private _verboseDiagnostics boolean
 SyncController = {}
 SyncController.__index = SyncController
 
@@ -40,12 +41,42 @@ function SyncController:new(syncService, agendaController, groupController, audi
 
     instance._isConductingElection = false
     instance._electionCandidates = {}
-    instance._hasPerformedLoginSync = false
+    instance._loginSyncCompleted = false
     instance._isSyncing = false
     instance._activeSyncPeer = nil
     instance._syncStartTime = 0
+    instance._verboseDiagnostics = false
 
     return instance
+end
+
+--- Registra o prefixo de comunicação do AddOn utilizando as APIs corretas do WoW.
+---@return boolean
+function SyncController:registerPrefix()
+    local ok = false
+    if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+        local success, res = pcall(C_ChatInfo.RegisterAddonMessagePrefix, "GuildManager")
+        ok = success and (res == true or res == 0 or res == 1 or res == nil)
+    elseif C_ChatInfo and C_ChatInfo.RegisterAddonPrefix then
+        local success, res = pcall(C_ChatInfo.RegisterAddonPrefix, "GuildManager")
+        ok = success
+    elseif RegisterAddonMessagePrefix then
+        local success, res = pcall(RegisterAddonMessagePrefix, "GuildManager")
+        ok = success
+    end
+    return ok
+end
+
+--- Verifica se o prefixo 'GuildManager' está registrado com sucesso no cliente.
+---@return boolean
+function SyncController:isPrefixRegistered()
+    if C_ChatInfo and C_ChatInfo.IsAddonMessagePrefixRegistered then
+        local ok, reg = pcall(C_ChatInfo.IsAddonMessagePrefixRegistered, "GuildManager")
+        if ok and type(reg) == "boolean" then
+            return reg
+        end
+    end
+    return true
 end
 
 --- Verifica se o cliente já está em processo de sincronização com alguém (respeitando timeout de segurança).
@@ -95,37 +126,46 @@ function SyncController:releaseSyncLock()
     self._syncStartTime = 0
 end
 
+--- Inicia watchdog de segurança para cancelar a trava se o outro jogador parar de responder.
+---@param peerName string
+function SyncController:startSyncWatchdog(peerName)
+    local targetName = self._syncService:sanitizeName(peerName)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(SYNC_TIMEOUT, function()
+            if self:isSyncing() and self._activeSyncPeer == targetName then
+                self:handleSyncError("Tempo limite esgotado sem resposta do jogador", targetName)
+            end
+        end)
+    end
+end
+
 --- Registra os manipuladores de eventos e inicializa a escuta de mensagens do AddOn.
 function SyncController:initHooks()
-    -- Registra o prefixo de comunicação do AddOn
-    if C_ChatInfo and C_ChatInfo.RegisterAddonPrefix then
-        pcall(C_ChatInfo.RegisterAddonPrefix, "GuildManager")
-    elseif RegisterAddonMessagePrefix then
-        pcall(RegisterAddonMessagePrefix, "GuildManager")
-    end
+    self:registerPrefix()
 
     -- Cria o quadro de eventos do controlador
     local frame = CreateFrame("Frame")
     frame:RegisterEvent("PLAYER_LOGIN")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:RegisterEvent("PLAYER_GUILD_UPDATE")
     frame:RegisterEvent("CHAT_MSG_ADDON")
 
     frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
-            if C_ChatInfo and C_ChatInfo.RegisterAddonPrefix then
-                pcall(C_ChatInfo.RegisterAddonPrefix, "GuildManager")
-            elseif RegisterAddonMessagePrefix then
-                pcall(RegisterAddonMessagePrefix, "GuildManager")
-            end
-
-            -- Dispara a sincronização automática após alguns segundos do login
-            if not self._hasPerformedLoginSync then
-                self._hasPerformedLoginSync = true
+            self:registerPrefix()
+            if not self._loginSyncCompleted then
                 if C_Timer and C_Timer.After then
-                    C_Timer.After(3.5, function()
-                        self:startLoginSync()
+                    C_Timer.After(2.5, function()
+                        self:tryLoginSync(1)
                     end)
+                else
+                    self:tryLoginSync(1)
                 end
+            end
+        elseif event == "PLAYER_GUILD_UPDATE" then
+            self:registerPrefix()
+            if not self._loginSyncCompleted and IsInGuild and IsInGuild() then
+                self:tryLoginSync(1)
             end
         elseif event == "CHAT_MSG_ADDON" then
             local prefix = arg1
@@ -146,7 +186,34 @@ function SyncController:initHooks()
     -- Configura os callbacks do protocolo de comunicação no SyncService
     self:setupSyncCallbacks()
 
-    -- Registra comando de barra para sincronização manual /gmsync
+    -- Registra comandos de barra
+    self:registerSlashCommands()
+end
+
+--- Tenta disparar a sincronização inicial de login com retentativas caso a guilda ainda esteja carregando.
+---@param attempt number|nil
+function SyncController:tryLoginSync(attempt)
+    attempt = attempt or 1
+    if self._loginSyncCompleted then return end
+
+    self:registerPrefix()
+
+    if IsInGuild and IsInGuild() then
+        self._loginSyncCompleted = true
+        self:startElection(false)
+    else
+        -- No WoW Classic a guilda frequentemente leva alguns segundos para carregar do servidor
+        if attempt < 5 and C_Timer and C_Timer.After then
+            local nextDelay = (attempt == 1 and 3.0) or (attempt == 2 and 5.0) or 8.0
+            C_Timer.After(nextDelay, function()
+                self:tryLoginSync(attempt + 1)
+            end)
+        end
+    end
+end
+
+--- Registra o comando de chat /gmsync.
+function SyncController:registerSlashCommands()
     SLASH_GMSYNC1 = "/gmsync"
     SlashCmdList["GMSYNC"] = function(msg)
         local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
@@ -168,8 +235,144 @@ function SyncController:initHooks()
             local testSender = (UnitName and UnitName("player")) or "Membro"
             self:handleSyncError("Tempo limite esgotado sem resposta do jogador", testSender)
             return
+        elseif arg == "status" then
+            self:printStatus()
+            return
         end
-        self:startManualSync()
+        self:startElection(true)
+    end
+end
+
+--- Exibe informações diagnósticas no chat sobre o estado da sincronização.
+function SyncController:printStatus()
+    local inGuild = IsInGuild and IsInGuild()
+    local prefixReg = self:isPrefixRegistered()
+    local myUptime = self._syncService and self._syncService:getUptime() or 0
+    local isSyncing = self:isSyncing()
+    local activePeer = self._activeSyncPeer or "Nenhum"
+
+    print("|cff00ff00[GuildManager Sync Status]|r")
+    print(string.format("  Em guilda: %s", inGuild and "|cff00ff00Sim|r" or "|cffff0000Não|r"))
+    print(string.format("  Prefixo 'GuildManager' registrado: %s", prefixReg and "|cff00ff00Sim|r" or "|cffff0000Não|r"))
+    print(string.format("  Tempo de sessão (uptime): |cffffff00%ds|r", myUptime))
+    print(string.format("  Sincronização em andamento: %s (com %s)", isSyncing and "|cffff9900Sim|r" or "|cff888888Não|r", activePeer))
+    print(string.format("  Login sync concluído: %s", self._loginSyncCompleted and "|cff00ff00Sim|r" or "|cffff9900Pendente|r"))
+end
+
+--- Inicia o processo de descoberta e sincronização de dados com outros membros da guilda.
+---@param verbose boolean|nil @Se true, exibe detalhes diagnósticos no chat
+function SyncController:startElection(verbose)
+    if not IsInGuild or not IsInGuild() then
+        if verbose then
+            print("|cffff0000[GuildManager]|r Você não está em uma guilda para sincronizar dados.")
+        end
+        return
+    end
+
+    self:registerPrefix()
+
+    if self:isSyncing() then
+        if verbose then
+            print(string.format("|cffff9900[GuildManager]|r Sincronização já em andamento com %s. Aguarde.", tostring(self._activeSyncPeer)))
+        end
+        return
+    end
+
+    if self._isConductingElection then
+        if verbose then
+            print("|cffff9900[GuildManager]|r Já existe uma busca de membros em andamento. Aguarde alguns instantes.")
+        end
+        return
+    end
+
+    self._isConductingElection = true
+    self._electionCandidates = {}
+    self._verboseDiagnostics = verbose or false
+
+    local myUptime = self._syncService:getUptime()
+    if self._verboseDiagnostics then
+        print(string.format("|cff00ff00[GuildManager]|r Procurando membros da guilda com o AddOn... (seu tempo online: %ds)", myUptime))
+    end
+
+    -- Envia transmissão HELLO para a guilda com seu uptime atual
+    self._syncService:sendLogicalMessage("HELLO", myUptime, "*")
+
+    -- Aguarda 2 segundos para coletar respostas de outros jogadores online com o AddOn
+    if C_Timer and C_Timer.After then
+        C_Timer.After(2.0, function()
+            self:resolveElection()
+        end)
+    else
+        self:resolveElection()
+    end
+end
+
+--- Avalia as respostas recebidas e decide a direção da sincronização garantindo concatenação sem perda.
+function SyncController:resolveElection()
+    if not self._isConductingElection then
+        return
+    end
+    self._isConductingElection = false
+
+    local myUptime = self._syncService:getUptime()
+    local myName = self._syncService:getMyName()
+
+    local bestCandidate = nil
+    local maxUptime = -1
+
+    for candidateName, uptime in pairs(self._electionCandidates) do
+        if uptime > maxUptime then
+            maxUptime = uptime
+            bestCandidate = candidateName
+        elseif uptime == maxUptime and bestCandidate then
+            -- Desempate alfabético determinístico
+            if candidateName:lower() < bestCandidate:lower() then
+                bestCandidate = candidateName
+            end
+        end
+    end
+
+    if not bestCandidate then
+        -- Nenhum outro membro com o AddOn respondeu
+        self:releaseSyncLock()
+        if self._verboseDiagnostics then
+            print("|cffff9900[GuildManager]|r Nenhum outro membro com o AddOn online no momento. O banco de dados está pronto.")
+        end
+        return
+    end
+
+    -- Determina quem é o coordenador (o online há mais tempo)
+    local remoteIsOlder = (maxUptime > myUptime) or (maxUptime == myUptime and bestCandidate:lower() < myName:lower())
+
+    if remoteIsOlder then
+        -- O membro remoto está online há mais tempo!
+        -- Solicitamos (PULL) que ele nos envie a base dele
+        if not self:acquireSyncLock(bestCandidate) then
+            return
+        end
+
+        if self._syncNotificationView and type(self._syncNotificationView.showProgress) == "function" then
+            self._syncNotificationView:showProgress(bestCandidate)
+        end
+        print(string.format("|cff00ff00[GuildManager]|r Sincronizando com |cffffff00%s|r...", tostring(bestCandidate)))
+
+        self._syncService:sendLogicalMessage("PULL", { target = bestCandidate }, bestCandidate)
+        self:startSyncWatchdog(bestCandidate)
+    else
+        -- O jogador local está online há mais tempo!
+        -- O jogador local é o provedor e envia a base diretamente para o recém-chegado
+        if not self:acquireSyncLock(bestCandidate) then
+            return
+        end
+
+        if self._syncNotificationView and type(self._syncNotificationView.showProgress) == "function" then
+            self._syncNotificationView:showProgress(bestCandidate)
+        end
+        print(string.format("|cff00ff00[GuildManager]|r Sincronizando com |cffffff00%s|r...", tostring(bestCandidate)))
+
+        local exportData = self._syncService:exportAllData()
+        self._syncService:sendLogicalMessage("DATA", exportData, bestCandidate)
+        self:startSyncWatchdog(bestCandidate)
     end
 end
 
@@ -177,21 +380,16 @@ end
 function SyncController:setupSyncCallbacks()
     if not self._syncService then return end
 
-    -- 1. HELLO: Outro jogador acabou de logar e anunciou sua entrada
+    -- 1. HELLO: Outro jogador acabou de logar ou solicitou sincronização
     self._syncService:registerCallback("HELLO", function(sender, payload)
-        -- Se já estivermos sincronizando com alguém, não participa como provedor para um terceiro
+        -- Se já estivermos ocupados sincronizando ativamente, não participa
         if self:isSyncing() then
             return
         end
 
-        local remoteUptime = tonumber(payload) or 0
         local myUptime = self._syncService:getUptime()
-
-        -- Se o jogador local estiver conectado há mais tempo que o recém-chegado,
-        -- responde informando seu próprio uptime para participar da eleição
-        if myUptime > remoteUptime then
-            self._syncService:sendLogicalMessage("UPTIME", myUptime, sender)
-        end
+        -- SEMPRE responde informando seu próprio uptime para que o iniciador conheça todos os membros online
+        self._syncService:sendLogicalMessage("UPTIME", myUptime, sender)
     end)
 
     -- 2. UPTIME: Resposta recebida dos jogadores já online informando quanto tempo estão conectados
@@ -199,6 +397,9 @@ function SyncController:setupSyncCallbacks()
         if self._isConductingElection then
             local remoteUptime = tonumber(payload) or 0
             self._electionCandidates[sender] = remoteUptime
+            if self._verboseDiagnostics then
+                print(string.format("|cff00ff00[GuildManager]|r Membro encontrado: |cffffff00%s|r (online há %ds)", tostring(sender), remoteUptime))
+            end
         end
     end)
 
@@ -230,6 +431,7 @@ function SyncController:setupSyncCallbacks()
 
             local exportData = self._syncService:exportAllData()
             self._syncService:sendLogicalMessage("DATA", exportData, sender)
+            self:startSyncWatchdog(sender)
         end
     end)
 
@@ -242,7 +444,7 @@ function SyncController:setupSyncCallbacks()
         print(string.format("|cffff9900[GuildManager]|r %s está ocupado sincronizando com outro membro no momento. A sincronização ocorrerá em breve.", tostring(sender)))
     end)
 
-    -- 5. DATA: Dados recebidos do jogador online há mais tempo
+    -- 5. DATA: Dados recebidos do jogador com a base
     self._syncService:registerCallback("DATA", function(sender, payload)
         if type(payload) ~= "table" then return end
 
@@ -280,6 +482,7 @@ function SyncController:setupSyncCallbacks()
         if hasDiff then
             -- Envia as informações complementares de volta para que ambos fiquem 100% sincronizados
             self._syncService:sendLogicalMessage("DIFF", diff, sender)
+            self:startSyncWatchdog(sender)
         else
             -- Confirmação final
             self._syncService:sendLogicalMessage("ACK", "OK", sender)
@@ -289,7 +492,7 @@ function SyncController:setupSyncCallbacks()
         local totalNew = (summary.totalAdded or 0)
         local totalUpd = (summary.totalUpdated or 0)
         if totalNew > 0 or totalUpd > 0 then
-            print(string.format("|cff00ff00[GuildManager]|r Sincronização automática concluída com |cffffff00%s|r! (+%d novos registros, %d complementados)",
+            print(string.format("|cff00ff00[GuildManager]|r Sincronização concluída com |cffffff00%s|r! (+%d novos registros, %d complementados)",
                 tostring(sender), totalNew, totalUpd))
         else
             print(string.format("|cff00ff00[GuildManager]|r Sincronização concluída com |cffffff00%s|r! Banco de dados atualizado.",
@@ -349,86 +552,6 @@ function SyncController:setupSyncCallbacks()
     end)
 end
 
---- Inicia o processo automático de sincronização ao entrar no jogo.
-function SyncController:startLoginSync()
-    if not IsInGuild or not IsInGuild() then
-        return
-    end
-
-    if self:isSyncing() or self._isConductingElection then
-        return
-    end
-
-    self._isConductingElection = true
-    self._electionCandidates = {}
-
-    local myUptime = self._syncService:getUptime()
-
-    -- Envia transmissão HELLO para a guilda com seu uptime atual
-    self._syncService:sendLogicalMessage("HELLO", myUptime, "*")
-
-    -- Aguarda 2 segundos para coletar respostas de outros jogadores online com o AddOn
-    if C_Timer and C_Timer.After then
-        C_Timer.After(2.0, function()
-            self:resolveElection()
-        end)
-    else
-        self:resolveElection()
-    end
-end
-
---- Avalia as respostas recebidas e força o jogador online há mais tempo a enviar os dados.
-function SyncController:resolveElection()
-    if not self._isConductingElection then
-        return
-    end
-    self._isConductingElection = false
-
-    local bestCandidate = nil
-    local maxUptime = -1
-
-    for candidateName, uptime in pairs(self._electionCandidates) do
-        if uptime > maxUptime then
-            maxUptime = uptime
-            bestCandidate = candidateName
-        elseif uptime == maxUptime and bestCandidate then
-            -- Desempate alfabético determinístico
-            if candidateName:lower() < bestCandidate:lower() then
-                bestCandidate = candidateName
-            end
-        end
-    end
-
-    if bestCandidate then
-        -- Adquire a trava exclusiva de sincronização com o candidato eleito
-        if not self:acquireSyncLock(bestCandidate) then
-            return
-        end
-
-        -- Mostra na tela e no chat com quem está sincronizando
-        if self._syncNotificationView and type(self._syncNotificationView.showProgress) == "function" then
-            self._syncNotificationView:showProgress(bestCandidate)
-        end
-        print(string.format("|cff00ff00[GuildManager]|r Sincronizando com |cffffff00%s|r...", tostring(bestCandidate)))
-
-        -- Envia PULL para que o jogador com maior tempo online inicie o envio
-        self._syncService:sendLogicalMessage("PULL", { target = bestCandidate }, "*")
-
-        -- Timeout de segurança caso o jogador eleito não responda
-        if C_Timer and C_Timer.After then
-            local targetName = bestCandidate
-            C_Timer.After(8.0, function()
-                if self:isSyncing() and self._activeSyncPeer == self._syncService:sanitizeName(targetName) then
-                    self:handleSyncError("Tempo limite esgotado sem resposta do jogador", targetName)
-                end
-            end)
-        end
-    else
-        -- Nenhum outro membro com o AddOn respondeu: jogador está sozinho online no momento
-        self:releaseSyncLock()
-    end
-end
-
 --- Trata e exibe visualmente qualquer erro ocorrido durante o processo de sincronização.
 ---@param errorMessage string
 ---@param peerName string|nil
@@ -447,22 +570,6 @@ function SyncController:handleSyncError(errorMessage, peerName)
     -- Alerta no chat em vermelho
     print(string.format("|cffff0000[GuildManager]|r Erro na sincronização com |cffffff00%s|r: %s",
         tostring(targetPeer), tostring(errorMessage or "Falha inesperada")))
-end
-
---- Disparo manual via comando /gmsync.
-function SyncController:startManualSync()
-    if not IsInGuild or not IsInGuild() then
-        print("|cffff0000[GuildManager]|r Você não está em uma guilda para sincronizar dados.")
-        return
-    end
-
-    if self:isSyncing() then
-        print(string.format("|cffff9900[GuildManager]|r Sincronização já em andamento com %s. Aguarde.", tostring(self._activeSyncPeer)))
-        return
-    end
-
-    print("|cff00ff00[GuildManager]|r Iniciando busca por membros da guilda para sincronização...")
-    self:startLoginSync()
 end
 
 --- Atualiza as views do AddOn com os novos dados sincronizados.

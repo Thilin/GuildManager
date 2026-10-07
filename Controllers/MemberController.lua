@@ -129,7 +129,9 @@ function MemberController:initHooks()
                     self:registerAllHooks()
                 end
             elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_GUILD_UPDATE" then
-                if C_ChatInfo and C_ChatInfo.RegisterAddonPrefix then
+                if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
+                    pcall(C_ChatInfo.RegisterAddonMessagePrefix, "GuildManager")
+                elseif C_ChatInfo and C_ChatInfo.RegisterAddonPrefix then
                     pcall(C_ChatInfo.RegisterAddonPrefix, "GuildManager")
                 elseif RegisterAddonMessagePrefix then
                     pcall(RegisterAddonMessagePrefix, "GuildManager")

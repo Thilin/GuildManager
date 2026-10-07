@@ -13,8 +13,8 @@ SyncService = {}
 SyncService.__index = SyncService
 
 local PACKET_PREFIX = "GM_SYNC"
-local CHUNK_SIZE = 175 -- Tamanho seguro do bloco em caracteres (abaixo do limite de 255 bytes do WoW)
-local SEND_INTERVAL = 0.04 -- Intervalo entre disparos (25 mensagens/segundo, seguro contra flood limiter)
+local CHUNK_SIZE = 140 -- Tamanho seguro do bloco em caracteres (abaixo do limite de 255 bytes do WoW com cabeçalho)
+local SEND_INTERVAL = 0.12 -- Intervalo entre disparos (8 mensagens/segundo, seguro contra flood limiter da Blizzard)
 
 --- Construtor do serviço de sincronização automática entre membros da guilda.
 ---@param eventRepository EventRepository
@@ -714,7 +714,8 @@ function SyncService:handleIncomingPacket(rawMessage, sender)
     -- Limpeza de fluxos pendentes que excederam o tempo limite (pacotes perdidos)
     local now = (GetTime and GetTime()) or 0
     for sId, sData in pairs(self._incomingStreams) do
-        if (now - (sData.startTime or 0)) > 8 then
+        local lastTime = sData.lastActivity or sData.startTime or 0
+        if (now - lastTime) > 12 then
             self._incomingStreams[sId] = nil
             triggerCallback(self, "ERROR", sData.sender, "Pacotes perdidos ou transmissão incompleta")
         end
@@ -729,10 +730,12 @@ function SyncService:handleIncomingPacket(rawMessage, sender)
             parts = {},
             sender = senderClean,
             startTime = now,
+            lastActivity = now,
         }
     end
 
     local stream = self._incomingStreams[streamId]
+    stream.lastActivity = now
     if not stream.parts[part] then
         stream.parts[part] = chunk
         stream.receivedCount = stream.receivedCount + 1
