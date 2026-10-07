@@ -1,4 +1,4 @@
----@class WorldMapView
+﻿---@class WorldMapView
 ---@field private _frame table|nil
 ---@field private _mapButton table|nil
 ---@field private _panel table|nil
@@ -320,19 +320,21 @@ function WorldMapView:initWorldMapUI()
     end
     panel.listContainer = listContainer
 
+    listContainer.SetVerticalScroll = function() end
+
     -- ScrollBar para a lista
     local scrollBar = CreateFrame("Slider", "GM_WorldMapPanelScrollBar", listContainer, "UIPanelScrollBarTemplate")
     scrollBar:SetPoint("TOPRIGHT", listContainer, "TOPRIGHT", -2, -18)
     scrollBar:SetPoint("BOTTOMRIGHT", listContainer, "BOTTOMRIGHT", -2, 18)
-    scrollBar:SetMinMaxValues(0, 0)
-    scrollBar:SetValue(0)
-    scrollBar:SetValueStep(1)
     scrollBar:SetWidth(16)
-    scrollBar:Hide()
     scrollBar:SetScript("OnValueChanged", function(_, val)
         self._scrollOffset = math.floor(val)
         self:refreshVisibleRows()
     end)
+    scrollBar:SetMinMaxValues(0, 0)
+    scrollBar:SetValueStep(1)
+    scrollBar:SetValue(0)
+    scrollBar:Hide()
     self._scrollBar = scrollBar
 
     listContainer:EnableMouseWheel(true)

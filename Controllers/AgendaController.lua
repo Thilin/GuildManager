@@ -160,6 +160,20 @@ function AgendaController:refreshAgenda()
         birthdays = self._eventService:getUpcomingBirthdays() or {}
     end
     self._agendaView:setUpcomingBirthdays(birthdays)
+
+    -- 3. Carrega lista de membros ativos da guilda para buscas e convites
+    local guildMembers = {}
+    if self._memberService and self._memberService.getAllMembers then
+        local all = self._memberService:getAllMembers() or {}
+        for _, m in ipairs(all) do
+            if m:isInGuild() then
+                table.insert(guildMembers, m)
+            end
+        end
+    end
+    if self._agendaView.setGuildMembers then
+        self._agendaView:setGuildMembers(guildMembers)
+    end
 end
 
 --- Abre a janela da agenda da guilda.

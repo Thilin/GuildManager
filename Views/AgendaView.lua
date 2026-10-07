@@ -200,6 +200,7 @@ function AgendaView:new()
     -- Modais
     instance._eventModal = nil
     instance._inviteeModal = nil
+    instance._guildMembers = {}
 
     instance:createUI()
 
@@ -215,6 +216,30 @@ function AgendaView:setOnRemoveInviteeCallback(cb) self._onRemoveInviteeCallback
 function AgendaView:setOnInviteMemberInGameCallback(cb) self._onInviteMemberInGameCallback = cb end
 function AgendaView:setOnInviteAllOnlineCallback(cb) self._onInviteAllOnlineCallback = cb end
 function AgendaView:setOnCreateBirthdayEventCallback(cb) self._onCreateBirthdayEventCallback = cb end
+
+function AgendaView:setGuildMembers(members)
+    self._guildMembers = members or {}
+end
+
+function AgendaView:getGuildMembers()
+    if self._guildMembers and #self._guildMembers > 0 then
+        return self._guildMembers
+    end
+    if _G.GuildManager and _G.GuildManager.memberService then
+        local all = _G.GuildManager.memberService:getAllMembers() or {}
+        local active = {}
+        for _, m in ipairs(all) do
+            if m:isInGuild() then
+                table.insert(active, m)
+            end
+        end
+        if #active > 0 then
+            self._guildMembers = active
+            return self._guildMembers
+        end
+    end
+    return self._guildMembers or {}
+end
 
 function AgendaView:getFrame()
     return self._frame
@@ -1444,6 +1469,9 @@ function AgendaView:createInviteeModal()
     modal:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
     modal:SetPoint("CENTER", UIParent, "CENTER", 0, 10)
     modal:Hide()
+    modal:SetScript("OnHide", function()
+        if modal.suggestFrame then modal.suggestFrame:Hide() end
+    end)
 
     if UISpecialFrames then
         table.insert(UISpecialFrames, "GM_AgendaInviteeModal")
@@ -1491,10 +1519,10 @@ function AgendaView:createInviteeModal()
     totalText:SetText("|cffaaaaaaTotal: 0 convidados|r")
     modal.totalText = totalText
 
-    -- Linha de Adicionar Convidado
+    -- Linha de Adicionar Convidado com Busca / Autocomplete
     local addLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     addLabel:SetPoint("TOPLEFT", inviteAllBtn, "BOTTOMLEFT", 0, -12)
-    addLabel:SetText("|cffffd200Adicionar Convidado:|r")
+    addLabel:SetText("|cffffd200Adicionar Convidado:|r |cffaaaaaa(Digite o nome para buscar na guilda)|r")
 
     local addEB = CreateFrame("EditBox", nil, modal, template)
     addEB:SetPoint("TOPLEFT", addLabel, "BOTTOMLEFT", 0, -4)
@@ -1502,25 +1530,202 @@ function AgendaView:createInviteeModal()
     styleBox(addEB)
     modal.addEB = addEB
 
+    local addSearchHint = addEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    addSearchHint:SetPoint("LEFT", addEB, "LEFT", 8, 0)
+    addSearchHint:SetText("|cffaaaaaaBuscar membro na guilda...|r")
+    modal.addSearchHint = addSearchHint
+
     local addBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     addBtn:SetSize(110, 22)
     addBtn:SetPoint("LEFT", addEB, "RIGHT", 8, 0)
     addBtn:SetText("+ Adicionar")
+    modal.addBtn = addBtn
+
+    -- Dropdown Flutuante de Sugestões de Membros da Guilda
+    local suggestFrame = CreateFrame("Frame", "GM_AgendaInviteeSuggest", modal, template)
+    suggestFrame:SetPoint("TOPLEFT", addEB, "BOTTOMLEFT", 0, -2)
+    suggestFrame:SetSize(378, 160)
+    suggestFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    suggestFrame:SetFrameLevel((modal:GetFrameLevel() or 20) + 50)
+    suggestFrame:EnableMouse(true)
+    suggestFrame:Hide()
+    modal.suggestFrame = suggestFrame
+
+    if suggestFrame.SetBackdrop then
+        suggestFrame:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        suggestFrame:SetBackdropColor(0.04, 0.03, 0.015, 0.98)
+        suggestFrame:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+    end
+
+    local scrollBar = CreateFrame("Slider", "GM_AgendaInviteeSuggestScrollBar", suggestFrame, "UIPanelScrollBarTemplate")
+    modal.suggestScrollBar = scrollBar
+    scrollBar:SetPoint("TOPRIGHT", suggestFrame, "TOPRIGHT", -4, -18)
+    scrollBar:SetPoint("BOTTOMRIGHT", suggestFrame, "BOTTOMRIGHT", -4, 18)
+    scrollBar:SetWidth(14)
+    scrollBar:SetMinMaxValues(0, 1)
+    scrollBar:SetValueStep(1)
+    scrollBar:Hide()
+    scrollBar:SetScript("OnValueChanged", function(_, val)
+        modal.suggestOffset = math.floor(val)
+        self:renderInviteeSuggestions()
+    end)
+
+    local suggestEmpty = suggestFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    suggestEmpty:SetPoint("CENTER", suggestFrame, "CENTER", 0, 0)
+    suggestEmpty:SetText("|cff888888Nenhum membro encontrado|r")
+    suggestEmpty:Hide()
+    modal.suggestEmpty = suggestEmpty
+
+    modal.suggestRows = {}
+    local maxSuggestRows = 6
+    local suggestRowHeight = 24
+    for i = 1, maxSuggestRows do
+        local row = CreateFrame("Button", nil, suggestFrame)
+        row:SetHeight(suggestRowHeight)
+        row:SetPoint("TOPLEFT", suggestFrame, "TOPLEFT", 6, -5 - (i - 1) * suggestRowHeight)
+        row:SetPoint("RIGHT", suggestFrame, "RIGHT", -6, 0)
+
+        local selBg = row:CreateTexture(nil, "BACKGROUND")
+        selBg:SetAllPoints(row)
+        selBg:SetColorTexture(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 0.25)
+        selBg:Hide()
+        row.selectedBg = selBg
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row)
+        hl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], 0.15)
+        row:SetHighlightTexture(hl)
+
+        -- Status online/offline
+        local statusDot = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        statusDot:SetPoint("LEFT", row, "LEFT", 4, 0)
+        statusDot:SetText("●")
+        row.statusDot = statusDot
+
+        -- Ícone circular de classe
+        local classIcon = row:CreateTexture(nil, "ARTWORK")
+        classIcon:SetSize(16, 16)
+        classIcon:SetPoint("LEFT", statusDot, "RIGHT", 4, 0)
+        classIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+        row.classIcon = classIcon
+
+        -- Nome do jogador
+        local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        nameText:SetPoint("LEFT", classIcon, "RIGHT", 6, 0)
+        row.nameText = nameText
+
+        -- Detalhes (Nível / Cargo)
+        local infoText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        infoText:SetPoint("LEFT", nameText, "RIGHT", 6, 0)
+        row.infoText = infoText
+
+        -- Dica de ação
+        local actionText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        actionText:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+        actionText:SetText("|cff00ff00+ Convidar|r")
+        row.actionText = actionText
+
+        row:SetScript("OnEnter", function()
+            modal.suggestSelectedIndex = (modal.suggestOffset or 0) + i
+            self:updateSuggestSelectionVisual()
+        end)
+
+        row:SetScript("OnClick", function()
+            if row.item then
+                self:selectAndAddInvitee(row.item.cleanName)
+            end
+        end)
+
+        modal.suggestRows[i] = row
+    end
+
+    local function onSuggestWheel(delta)
+        local candidates = modal.suggestCandidates or {}
+        if #candidates <= maxSuggestRows then return end
+        local maxOffset = #candidates - maxSuggestRows
+        local cur = modal.suggestOffset or 0
+        if delta > 0 then
+            modal.suggestOffset = math.max(0, cur - 1)
+        else
+            modal.suggestOffset = math.min(maxOffset, cur + 1)
+        end
+        self:renderInviteeSuggestions()
+    end
+    suggestFrame:EnableMouseWheel(true)
+    suggestFrame:SetScript("OnMouseWheel", function(_, delta) onSuggestWheel(delta) end)
+
+    addEB:SetScript("OnTextChanged", function(box)
+        local txt = box:GetText() or ""
+        if txt ~= "" then
+            addSearchHint:Hide()
+        else
+            addSearchHint:Show()
+        end
+        self:filterInviteeCandidates(txt)
+    end)
+
+    addEB:SetScript("OnKeyDown", function(box, key)
+        local sf = modal.suggestFrame
+        if sf and sf:IsShown() and modal.suggestCandidates and #modal.suggestCandidates > 0 then
+            local total = #modal.suggestCandidates
+            if key == "DOWN" then
+                modal.suggestSelectedIndex = math.min((modal.suggestSelectedIndex or 1) + 1, total)
+                if modal.suggestSelectedIndex > (modal.suggestOffset or 0) + maxSuggestRows then
+                    modal.suggestOffset = modal.suggestSelectedIndex - maxSuggestRows
+                end
+                self:renderInviteeSuggestions()
+                return
+            elseif key == "UP" then
+                modal.suggestSelectedIndex = math.max((modal.suggestSelectedIndex or 1) - 1, 1)
+                if modal.suggestSelectedIndex <= (modal.suggestOffset or 0) then
+                    modal.suggestOffset = math.max(0, modal.suggestSelectedIndex - 1)
+                end
+                self:renderInviteeSuggestions()
+                return
+            elseif key == "TAB" then
+                local selected = modal.suggestCandidates[modal.suggestSelectedIndex or 1]
+                if selected then
+                    self:selectAndAddInvitee(selected.cleanName)
+                    return
+                end
+            elseif key == "ESCAPE" then
+                sf:Hide()
+                return
+            end
+        end
+        if key == "ESCAPE" then
+            modal:Hide()
+        end
+    end)
+
+    addEB:SetScript("OnEnterPressed", function()
+        local sf = modal.suggestFrame
+        if sf and sf:IsShown() and modal.suggestCandidates and #modal.suggestCandidates > 0 then
+            local selected = modal.suggestCandidates[modal.suggestSelectedIndex or 1]
+            if selected then
+                self:selectAndAddInvitee(selected.cleanName)
+                return
+            end
+        end
+        addBtn:Click()
+    end)
+
     addBtn:SetScript("OnClick", function()
         local name = addEB:GetText() or ""
         if name:match("^%s*$") then return end
+        if modal.suggestFrame then modal.suggestFrame:Hide() end
         if modal.currentEvent and self._onAddInviteeCallback then
             local ok, err = self._onAddInviteeCallback(modal.currentEvent:getId(), name)
             if ok then
                 addEB:SetText("")
-                -- Atualiza a tela de convidados
+                addSearchHint:Show()
                 self:refreshInviteeModal()
+                self:renderEvents()
             else
                 print(string.format("|cffff4444[GuildManager]|r %s", err or "Falha ao adicionar."))
             end
         end
     end)
-    addEB:SetScript("OnEnterPressed", function() addBtn:Click() end)
 
     -- Container e ScrollFrame da lista de convidados
     local listContainer = CreateFrame("Frame", nil, modal, template)
@@ -1564,13 +1769,223 @@ function AgendaView:createInviteeModal()
     self._inviteeModal = modal
 end
 
+--- Filtra os membros da guilda com base no texto digitado no campo de adicionar convidado.
+---@param text string
+function AgendaView:filterInviteeCandidates(text)
+    local modal = self._inviteeModal
+    if not modal or not modal:IsShown() then return end
+    local sf = modal.suggestFrame
+    if not sf then return end
+
+    local query = (text or ""):lower():match("^%s*(.-)%s*$")
+    if not query or query == "" then
+        sf:Hide()
+        return
+    end
+
+    local all = self:getGuildMembers()
+    local currentEvent = modal.currentEvent
+    local candidates = {}
+
+    for _, m in ipairs(all) do
+        local rawName = m:getName() or ""
+        local cleanName = rawName:match("^[^-]+") or rawName
+        local cleanLower = cleanName:lower()
+
+        -- Não sugere membros que já foram convidados para este evento
+        local alreadyInvited = currentEvent and currentEvent:hasInvitee(cleanName)
+
+        if not alreadyInvited and cleanLower:find(query, 1, true) then
+            local isOnline = (type(m.isOnline) == "function" and m:isOnline()) or false
+            local startsWith = (cleanLower:find("^" .. query) ~= nil)
+            table.insert(candidates, {
+                member = m,
+                name = rawName,
+                cleanName = cleanName,
+                class = m:getClass() or "",
+                level = m:getLevel() or 1,
+                rank = m:getRankName() or "",
+                isOnline = isOnline,
+                startsWith = startsWith,
+            })
+        end
+    end
+
+    -- Ordena: quem começa com a busca primeiro, online primeiro, alfabético
+    table.sort(candidates, function(a, b)
+        if a.startsWith ~= b.startsWith then
+            return a.startsWith == true
+        end
+        if a.isOnline ~= b.isOnline then
+            return a.isOnline == true
+        end
+        return a.cleanName < b.cleanName
+    end)
+
+    modal.suggestCandidates = candidates
+    modal.suggestOffset = 0
+    modal.suggestSelectedIndex = 1
+
+    self:renderInviteeSuggestions()
+end
+
+--- Renderiza visualmente as linhas de sugestões de membros no dropdown.
+function AgendaView:renderInviteeSuggestions()
+    local modal = self._inviteeModal
+    if not modal then return end
+    local sf = modal.suggestFrame
+    if not sf then return end
+
+    local candidates = modal.suggestCandidates or {}
+    local maxVisible = 6
+    local rowHeight = 24
+
+    if #candidates == 0 then
+        for _, row in ipairs(modal.suggestRows or {}) do row:Hide() end
+        if modal.suggestScrollBar then modal.suggestScrollBar:Hide() end
+        if modal.suggestEmpty then
+            local q = (modal.addEB and modal.addEB:GetText()) or ""
+            modal.suggestEmpty:SetText(string.format("|cff888888Nenhum membro encontrado com \"%s\"|r", q))
+            modal.suggestEmpty:Show()
+        end
+        sf:SetHeight(38)
+        sf:Show()
+        return
+    end
+
+    if modal.suggestEmpty then modal.suggestEmpty:Hide() end
+
+    local total = #candidates
+    local offset = modal.suggestOffset or 0
+    local visibleCount = math.min(total, maxVisible)
+
+    sf:SetHeight(visibleCount * rowHeight + 10)
+    sf:Show()
+
+    local sb = modal.suggestScrollBar
+    if total > maxVisible then
+        sb:Show()
+        sb:SetMinMaxValues(0, total - maxVisible)
+        sb:SetValue(offset)
+    else
+        sb:Hide()
+    end
+
+    for i = 1, maxVisible do
+        local row = modal.suggestRows[i]
+        local cIndex = offset + i
+        local item = candidates[cIndex]
+
+        if item and i <= visibleCount then
+            row.item = item
+            row:SetPoint("TOPLEFT", sf, "TOPLEFT", 6, -5 - (i - 1) * rowHeight)
+            if total > maxVisible then
+                row:SetPoint("RIGHT", sf, "RIGHT", -22, 0)
+            else
+                row:SetPoint("RIGHT", sf, "RIGHT", -6, 0)
+            end
+
+            -- Status online/offline
+            if item.isOnline then
+                row.statusDot:SetText("|cff00ff00●|r")
+            else
+                row.statusDot:SetText("|cff666666○|r")
+            end
+
+            -- Ícone de classe
+            local tok = item.class and (CLASS_NAME_TO_TOKEN[item.class:upper()] or item.class:upper()) or ""
+            local coords = tok ~= "" and CLASS_ICON_COORDS[tok]
+            if coords then
+                row.classIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+                row.classIcon:Show()
+                row.nameText:SetPoint("LEFT", row.classIcon, "RIGHT", 6, 0)
+            else
+                row.classIcon:Hide()
+                row.nameText:SetPoint("LEFT", row.statusDot, "RIGHT", 6, 0)
+            end
+
+            -- Nome colorido
+            row.nameText:SetText(getColoredName(item.cleanName, item.class))
+
+            -- Informações (Nível / Cargo)
+            local infoStr = string.format("|cffaaaaaaNv. %d|r", item.level or 1)
+            if item.rank and item.rank ~= "" then
+                infoStr = infoStr .. string.format(" |cff888888• %s|r", item.rank)
+            end
+            row.infoText:SetText(infoStr)
+
+            -- Destaque de seleção
+            if cIndex == (modal.suggestSelectedIndex or 1) then
+                row.selectedBg:Show()
+            else
+                row.selectedBg:Hide()
+            end
+
+            row:Show()
+        else
+            if row then row:Hide() end
+        end
+    end
+end
+
+--- Atualiza o destaque visual da seleção nas linhas de sugestão.
+function AgendaView:updateSuggestSelectionVisual()
+    local modal = self._inviteeModal
+    if not modal or not modal.suggestRows then return end
+    local selectedIndex = modal.suggestSelectedIndex or 1
+    local offset = modal.suggestOffset or 0
+    for i, row in ipairs(modal.suggestRows) do
+        local cIndex = offset + i
+        if cIndex == selectedIndex then
+            row.selectedBg:Show()
+        else
+            row.selectedBg:Hide()
+        end
+    end
+end
+
+--- Seleciona e adiciona o membro escolhido diretamente ao evento.
+---@param memberName string
+function AgendaView:selectAndAddInvitee(memberName)
+    local modal = self._inviteeModal
+    if not modal or not memberName or memberName == "" then return end
+
+    if modal.suggestFrame then
+        modal.suggestFrame:Hide()
+    end
+
+    if modal.currentEvent and self._onAddInviteeCallback then
+        local ok, err = self._onAddInviteeCallback(modal.currentEvent:getId(), memberName)
+        if ok then
+            modal.addEB:SetText("")
+            if modal.addSearchHint then modal.addSearchHint:Show() end
+            self:refreshInviteeModal()
+            self:renderEvents()
+        else
+            print(string.format("|cffff4444[GuildManager]|r %s", err or "Falha ao adicionar."))
+        end
+    end
+end
+
 --- Abre a modal de gerenciamento de convidados do evento.
 ---@param event Event
 function AgendaView:openInviteeModal(event)
     if not self._inviteeModal or not event then return end
     self._inviteeModal.currentEvent = event
+    if self._inviteeModal.suggestFrame then
+        self._inviteeModal.suggestFrame:Hide()
+    end
+    if self._inviteeModal.addEB then
+        self._inviteeModal.addEB:SetText("")
+    end
+    if self._inviteeModal.addSearchHint then
+        self._inviteeModal.addSearchHint:Show()
+    end
     self:refreshInviteeModal()
     self._inviteeModal:Show()
+    if self._inviteeModal.addEB then
+        self._inviteeModal.addEB:SetFocus()
+    end
 end
 
 --- Atualiza a lista visual de convidados dentro da modal de convidados.
@@ -1578,6 +1993,14 @@ function AgendaView:refreshInviteeModal()
     local modal = self._inviteeModal
     if not modal or not modal.currentEvent then return end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+
+    local evId = modal.currentEvent:getId()
+    for _, item in ipairs(self._events or {}) do
+        if item:getId() == evId then
+            modal.currentEvent = item
+            break
+        end
+    end
 
     local ev = modal.currentEvent
     modal.mSubtitle:SetText(string.format("|cffffd200%s|r  |cffaaaaaa(%s às %s)|r", ev:getTitle(), ev:getDate(), ev:getTime()))
