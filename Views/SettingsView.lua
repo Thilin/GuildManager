@@ -61,6 +61,13 @@ local SOUND_OPTIONS = {
     { id = "coin",    label = "Moeda", soundId = 120 },
 }
 
+local LOOKAHEAD_OPTIONS = {
+    { days = 7,  label = "7 Dias" },
+    { days = 14, label = "14 Dias" },
+    { days = 30, label = "30 Dias" },
+    { days = 60, label = "60 Dias" },
+}
+
 --- Construtor da View de Configurações.
 ---@return SettingsView
 function SettingsView:new()
@@ -517,7 +524,7 @@ function SettingsView:createSettingsColumns()
 
     local lChild = CreateFrame("Frame", nil, lScroll)
     lChild:SetWidth(colWidth - 30)
-    lChild:SetHeight(420)
+    lChild:SetHeight(480)
     lScroll:SetScrollChild(lChild)
 
     -- --- SEÇÃO 1: APRESENTAÇÃO & INTERFACE ---
@@ -539,13 +546,14 @@ function SettingsView:createSettingsColumns()
         { id = "audit",    label = "Auditoria" },
         { id = "logs",     label = "Logs" },
         { id = "groups",   label = "Grupos" },
+        { id = "agenda",   label = "Agenda" },
         { id = "settings", label = "Opções" },
     }
     local tabButtons = {}
     for i, tDef in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, lChild, template)
-        btn:SetSize(82, 20)
-        btn:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", (i - 1) * 88, -4)
+        btn:SetSize(62, 20)
+        btn:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", (i - 1) * 65, -4)
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
@@ -671,8 +679,35 @@ function SettingsView:createSettingsColumns()
         posSlider:SetValue(215)
     end)
 
+    -- --- SEÇÃO 4: MAPA MUNDIAL & RASTREAMENTO ---
+    local s4Header = lChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s4Header:SetPoint("TOPLEFT", sliderLabel, "BOTTOMLEFT", -4, -34)
+    s4Header:SetText("|cffffd2004. MAPA MUNDIAL & RASTREAMENTO|r")
+
+    local s4Sep = lChild:CreateTexture(nil, "ARTWORK")
+    s4Sep:SetPoint("TOPLEFT", s4Header, "BOTTOMLEFT", 0, -3)
+    s4Sep:SetPoint("RIGHT", lChild, "RIGHT", -4, 0)
+    s4Sep:SetHeight(1)
+    s4Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
+
+    local cbWorldMapBtn = createCheckbox(lChild, "Exibir botão do GuildManager no cabeçalho do Mapa", "Botão no Mapa", "Mostra o botão de resumo da guilda na barra superior direita do mapa mundial.")
+    cbWorldMapBtn:SetPoint("TOPLEFT", s4Sep, "BOTTOMLEFT", 0, -4)
+    self._widgets.showWorldMapButton = cbWorldMapBtn
+
+    local cbAutoScanMap = createCheckbox(lChild, "Escanear membros da guilda ao abrir o mapa mundial", "Varredura Automática", "Atualiza a lista de membros e suas posições sempre que você abre o mapa.")
+    cbAutoScanMap:SetPoint("TOPLEFT", cbWorldMapBtn, "BOTTOMLEFT", 0, -2)
+    self._widgets.autoScanWorldMap = cbAutoScanMap
+
+    local cbShowMapPins = createCheckbox(lChild, "Exibir marcadores e painel de membros na zona", "Marcadores no Mapa", "Exibe marcadores e o painel expansível de membros da guilda no mapa.")
+    cbShowMapPins:SetPoint("TOPLEFT", cbAutoScanMap, "BOTTOMLEFT", 0, -2)
+    self._widgets.showMapPins = cbShowMapPins
+
+    local cbHighlightSelf = createCheckbox(lChild, "Destacar o próprio jogador na listagem da região", "Destacar a Si Mesmo", "Exibe seu personagem no topo da lista com identificação e destaque dourado.")
+    cbHighlightSelf:SetPoint("TOPLEFT", cbShowMapPins, "BOTTOMLEFT", 0, -2)
+    self._widgets.highlightSelfOnMap = cbHighlightSelf
+
     -- =========================================================================
-    -- COLUNA DIREITA: Roster, Registro de Logs & Manutenção
+    -- COLUNA DIREITA: Agenda, Grupos, Roster, Logs & Manutenção
     -- =========================================================================
     local rightCol = CreateFrame("Frame", nil, frame, template)
     rightCol:SetPoint("TOPLEFT", leftCol, "TOPRIGHT", 12, 0)
@@ -689,22 +724,97 @@ function SettingsView:createSettingsColumns()
 
     local rChild = CreateFrame("Frame", nil, rScroll)
     rChild:SetWidth(colWidth - 30)
-    rChild:SetHeight(440)
+    rChild:SetHeight(760)
     rScroll:SetScrollChild(rChild)
 
-    -- --- SEÇÃO 4: AUDITORIA & ROSTER ---
-    local s4Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s4Header:SetPoint("TOPLEFT", rChild, "TOPLEFT", 4, -4)
-    s4Header:SetText("|cffffd2004. AUDITORIA & ROSTER DE MEMBROS|r")
+    -- --- SEÇÃO 5: AGENDA & EVENTOS DA GUILDA ---
+    local s5Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s5Header:SetPoint("TOPLEFT", rChild, "TOPLEFT", 4, -4)
+    s5Header:SetText("|cffffd2005. AGENDA & EVENTOS DA GUILDA|r")
 
-    local s4Sep = rChild:CreateTexture(nil, "ARTWORK")
-    s4Sep:SetPoint("TOPLEFT", s4Header, "BOTTOMLEFT", 0, -3)
-    s4Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
-    s4Sep:SetHeight(1)
-    s4Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
+    local s5Sep = rChild:CreateTexture(nil, "ARTWORK")
+    s5Sep:SetPoint("TOPLEFT", s5Header, "BOTTOMLEFT", 0, -3)
+    s5Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
+    s5Sep:SetHeight(1)
+    s5Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
+
+    local cbBdayLogin = createCheckbox(rChild, "Avisar no chat sobre aniversariantes do dia ao conectar", "Aniversariantes de Hoje", "Exibe lembrete no chat local caso haja colegas de guilda fazendo aniversário no dia atual.")
+    cbBdayLogin:SetPoint("TOPLEFT", s5Sep, "BOTTOMLEFT", 0, -4)
+    self._widgets.notifyBirthdaysOnLogin = cbBdayLogin
+
+    local cbEventLogin = createCheckbox(rChild, "Avisar no chat sobre eventos da guilda agendados para hoje", "Eventos de Hoje", "Notifica no chat local sobre eventos de raide, masmorra ou comemorações hoje.")
+    cbEventLogin:SetPoint("TOPLEFT", cbBdayLogin, "BOTTOMLEFT", 0, -2)
+    self._widgets.notifyUpcomingEvents = cbEventLogin
+
+    local cbConfirmEvent = createCheckbox(rChild, "Solicitar confirmação ao excluir eventos da agenda", "Segurança da Agenda", "Exige confirmação antes de remover qualquer evento registrado.")
+    cbConfirmEvent:SetPoint("TOPLEFT", cbEventLogin, "BOTTOMLEFT", 0, -2)
+    self._widgets.confirmEventDelete = cbConfirmEvent
+
+    local bdayLookaheadLabel = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    bdayLookaheadLabel:SetPoint("TOPLEFT", cbConfirmEvent, "BOTTOMLEFT", 4, -6)
+    bdayLookaheadLabel:SetText("Antecedência de aniversários na lista:")
+
+    local lookaheadButtons = {}
+    for i, lDef in ipairs(LOOKAHEAD_OPTIONS) do
+        local btn = CreateFrame("Button", nil, rChild, template)
+        btn:SetSize(78, 20)
+        btn:SetPoint("TOPLEFT", bdayLookaheadLabel, "BOTTOMLEFT", (i - 1) * 82, -3)
+        if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+        local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        txt:SetText(lDef.label)
+        btn.txt = txt
+        btn:SetScript("OnClick", function()
+            self._widgets.selectedBirthdayLookaheadDays = lDef.days
+            self:updateLookaheadButtons(lookaheadButtons, lDef.days)
+        end)
+        lookaheadButtons[lDef.days] = btn
+    end
+    self._widgets.lookaheadButtons = lookaheadButtons
+
+    local defTimeLabel = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    defTimeLabel:SetPoint("TOPLEFT", bdayLookaheadLabel, "BOTTOMLEFT", 0, -32)
+    defTimeLabel:SetText("Horário padrão sugerido ao criar eventos:")
+
+    local defTimeEB = CreateFrame("EditBox", "GM_DefaultEventTimeEditBox", rChild)
+    defTimeEB:SetSize(70, 20)
+    defTimeEB:SetPoint("LEFT", defTimeLabel, "RIGHT", 8, 0)
+    defTimeEB:SetMaxLetters(5)
+    styleBox(defTimeEB)
+    self._widgets.defaultEventTime = defTimeEB
+
+    -- --- SEÇÃO 6: GERENCIAMENTO DE GRUPOS ---
+    local s6Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s6Header:SetPoint("TOPLEFT", defTimeLabel, "BOTTOMLEFT", 0, -14)
+    s6Header:SetText("|cffffd2006. GERENCIAMENTO DE GRUPOS|r")
+
+    local s6Sep = rChild:CreateTexture(nil, "ARTWORK")
+    s6Sep:SetPoint("TOPLEFT", s6Header, "BOTTOMLEFT", 0, -3)
+    s6Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
+    s6Sep:SetHeight(1)
+    s6Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
+
+    local cbConfirmGroup = createCheckbox(rChild, "Solicitar confirmação ao excluir grupos de masmorra/raide", "Segurança de Grupos", "Exige confirmação antes de remover um grupo criado.")
+    cbConfirmGroup:SetPoint("TOPLEFT", s6Sep, "BOTTOMLEFT", 0, -4)
+    self._widgets.confirmGroupDelete = cbConfirmGroup
+
+    local cbAutoRole = createCheckbox(rChild, "Sugerir função automaticamente pela classe ao adicionar", "Função Automática", "Define Tanque, Cura ou Dano automaticamente com base na classe do personagem.")
+    cbAutoRole:SetPoint("TOPLEFT", cbConfirmGroup, "BOTTOMLEFT", 0, -2)
+    self._widgets.autoAssignGroupRole = cbAutoRole
+
+    -- --- SEÇÃO 7: AUDITORIA & ROSTER DE MEMBROS ---
+    local s7Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s7Header:SetPoint("TOPLEFT", cbAutoRole, "BOTTOMLEFT", 2, -12)
+    s7Header:SetText("|cffffd2007. AUDITORIA & ROSTER DE MEMBROS|r")
+
+    local s7Sep = rChild:CreateTexture(nil, "ARTWORK")
+    s7Sep:SetPoint("TOPLEFT", s7Header, "BOTTOMLEFT", 0, -3)
+    s7Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
+    s7Sep:SetHeight(1)
+    s7Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
     local cbAutoScan = createCheckbox(rChild, "Varredura automática ao conectar e em eventos da guilda", "Auto Varredura", "Sincroniza membros e cargos da guilda automaticamente em segundo plano.")
-    cbAutoScan:SetPoint("TOPLEFT", s4Sep, "BOTTOMLEFT", 0, -4)
+    cbAutoScan:SetPoint("TOPLEFT", s7Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.autoScanRoster = cbAutoScan
 
     local cbOffline = createCheckbox(rChild, "Exibir membros desconectados na auditoria por padrão", "Membros Offline", "Mantém os membros offline visíveis na lista de auditoria.")
@@ -715,19 +825,23 @@ function SettingsView:createSettingsColumns()
     cbNotifyRecruit:SetPoint("TOPLEFT", cbOffline, "BOTTOMLEFT", 0, -2)
     self._widgets.notifyNewRecruit = cbNotifyRecruit
 
-    -- --- SEÇÃO 5: REGISTRO DE EVENTOS (LOGS) ---
-    local s5Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s5Header:SetPoint("TOPLEFT", cbNotifyRecruit, "BOTTOMLEFT", 2, -12)
-    s5Header:SetText("|cffffd2005. REGISTRO DE EVENTOS (LOGS)|r")
+    local cbNotifyLevel = createCheckbox(rChild, "Avisar no chat local quando um membro subir de nível", "Aviso de Nível", "Envia mensagem no chat local quando um colega de guilda ganha nível.")
+    cbNotifyLevel:SetPoint("TOPLEFT", cbNotifyRecruit, "BOTTOMLEFT", 0, -2)
+    self._widgets.notifyMemberLevelUp = cbNotifyLevel
 
-    local s5Sep = rChild:CreateTexture(nil, "ARTWORK")
-    s5Sep:SetPoint("TOPLEFT", s5Header, "BOTTOMLEFT", 0, -3)
-    s5Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
-    s5Sep:SetHeight(1)
-    s5Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
+    -- --- SEÇÃO 8: REGISTRO DE EVENTOS (LOGS) ---
+    local s8Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s8Header:SetPoint("TOPLEFT", cbNotifyLevel, "BOTTOMLEFT", 2, -12)
+    s8Header:SetText("|cffffd2008. REGISTRO DE EVENTOS (LOGS)|r")
+
+    local s8Sep = rChild:CreateTexture(nil, "ARTWORK")
+    s8Sep:SetPoint("TOPLEFT", s8Header, "BOTTOMLEFT", 0, -3)
+    s8Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
+    s8Sep:SetHeight(1)
+    s8Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
     local cbLvl = createCheckbox(rChild, "Registrar quando membros subirem de nível", "Log de Nível", "Grava registro histórico quando qualquer membro da guilda ganha um nível.")
-    cbLvl:SetPoint("TOPLEFT", s5Sep, "BOTTOMLEFT", 0, -4)
+    cbLvl:SetPoint("TOPLEFT", s8Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.logLevelUp = cbLvl
 
     local cbPromote = createCheckbox(rChild, "Registrar promoções e rebaixamentos de cargo", "Log de Cargos", "Grava quando alguém tem cargo alterado, identificando quem alterou.")
@@ -742,8 +856,12 @@ function SettingsView:createSettingsColumns()
     cbJoinLeave:SetPoint("TOPLEFT", cbNotes, "BOTTOMLEFT", 0, -2)
     self._widgets.logJoinLeave = cbJoinLeave
 
+    local cbRejoin = createCheckbox(rChild, "Registrar retorno à guilda (jogadores que já saíram)", "Log de Reingresso", "Grava quando um membro que já fez parte da guilda retorna, mantendo histórico prévio.")
+    cbRejoin:SetPoint("TOPLEFT", cbJoinLeave, "BOTTOMLEFT", 0, -2)
+    self._widgets.logRejoin = cbRejoin
+
     local retLabel = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    retLabel:SetPoint("TOPLEFT", cbJoinLeave, "BOTTOMLEFT", 4, -6)
+    retLabel:SetPoint("TOPLEFT", cbRejoin, "BOTTOMLEFT", 4, -6)
     retLabel:SetText("Retenção máxima de histórico de logs:")
 
     local retentionDefs = {
@@ -770,25 +888,21 @@ function SettingsView:createSettingsColumns()
     end
     self._widgets.retentionButtons = retentionButtons
 
-    -- --- SEÇÃO 6: SEGURANÇA & GRUPOS ---
-    local s6Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s6Header:SetPoint("TOPLEFT", retLabel, "BOTTOMLEFT", 0, -32)
-    s6Header:SetText("|cffffd2006. SEGURANÇA & MANUTENÇÃO|r")
+    -- --- SEÇÃO 9: SEGURANÇA & MANUTENÇÃO ---
+    local s9Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    s9Header:SetPoint("TOPLEFT", retLabel, "BOTTOMLEFT", 0, -32)
+    s9Header:SetText("|cffffd2009. SEGURANÇA & MANUTENÇÃO|r")
 
-    local s6Sep = rChild:CreateTexture(nil, "ARTWORK")
-    s6Sep:SetPoint("TOPLEFT", s6Header, "BOTTOMLEFT", 0, -3)
-    s6Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
-    s6Sep:SetHeight(1)
-    s6Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
-
-    local cbConfirmGroup = createCheckbox(rChild, "Solicitar confirmação ao excluir grupos de masmorra/raide", "Segurança de Grupos", "Exige confirmação antes de remover um grupo criado.")
-    cbConfirmGroup:SetPoint("TOPLEFT", s6Sep, "BOTTOMLEFT", 0, -4)
-    self._widgets.confirmGroupDelete = cbConfirmGroup
+    local s9Sep = rChild:CreateTexture(nil, "ARTWORK")
+    s9Sep:SetPoint("TOPLEFT", s9Header, "BOTTOMLEFT", 0, -3)
+    s9Sep:SetPoint("RIGHT", rChild, "RIGHT", -4, 0)
+    s9Sep:SetHeight(1)
+    s9Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
     -- Botões de Ação do Banco
     local purgeBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     purgeBtn:SetSize(170, 22)
-    purgeBtn:SetPoint("TOPLEFT", cbConfirmGroup, "BOTTOMLEFT", 4, -10)
+    purgeBtn:SetPoint("TOPLEFT", s9Sep, "BOTTOMLEFT", 4, -8)
     purgeBtn:SetText("Limpar Logs Antigos")
     purgeBtn:SetScript("OnClick", function()
         if self._onPurgeLogsCallback then
@@ -907,6 +1021,24 @@ function SettingsView:updateRetentionButtons(buttons, activeDays)
     end
 end
 
+--- Atualiza botões de antecedência de aniversariantes.
+function SettingsView:updateLookaheadButtons(buttons, activeDays)
+    for days, btn in pairs(buttons) do
+        local isActive = (days == activeDays)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
+                btn:SetBackdropBorderColor(PALETTE.ACTIVE_TAB_BORDER[1], PALETTE.ACTIVE_TAB_BORDER[2], PALETTE.ACTIVE_TAB_BORDER[3], 1.0)
+                btn.txt:SetTextColor(1.0, 0.85, 0.20)
+            else
+                btn:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.80)
+                btn:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.85)
+                btn.txt:SetTextColor(0.80, 0.80, 0.80)
+            end
+        end
+    end
+end
+
 --- Preenche a interface com os valores atuais de Settings e estatísticas.
 ---@param settings GMSettings
 ---@param stats table
@@ -945,21 +1077,38 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.minimapSlider:SetValue(mPos)
     self._widgets.sliderLabel:SetText(string.format("Posição Orbital do Minimapa: %d°", mPos))
 
+    -- Mapa Mundial & Rastreamento
+    self._widgets.showWorldMapButton:SetChecked(settings:isShowWorldMapButton())
+    self._widgets.autoScanWorldMap:SetChecked(settings:isAutoScanWorldMap())
+    self._widgets.showMapPins:SetChecked(settings:isShowMapPins())
+    self._widgets.highlightSelfOnMap:SetChecked(settings:isHighlightSelfOnMap())
+
+    -- Agenda & Eventos
+    self._widgets.notifyBirthdaysOnLogin:SetChecked(settings:isNotifyBirthdaysOnLogin())
+    self._widgets.notifyUpcomingEvents:SetChecked(settings:isNotifyUpcomingEvents())
+    self._widgets.confirmEventDelete:SetChecked(settings:isConfirmEventDelete())
+    self._widgets.selectedBirthdayLookaheadDays = settings:getBirthdayLookaheadDays()
+    self:updateLookaheadButtons(self._widgets.lookaheadButtons, self._widgets.selectedBirthdayLookaheadDays)
+    self._widgets.defaultEventTime:SetText(settings:getDefaultEventTime() or "20:00")
+
+    -- Grupos
+    self._widgets.confirmGroupDelete:SetChecked(settings:isConfirmGroupDelete())
+    self._widgets.autoAssignGroupRole:SetChecked(settings:isAutoAssignGroupRole())
+
     -- Auditoria & Roster
     self._widgets.autoScanRoster:SetChecked(settings:isAutoScanRoster())
     self._widgets.showOfflineMembers:SetChecked(settings:isShowOfflineMembers())
     self._widgets.notifyNewRecruit:SetChecked(settings:isNotifyNewRecruit())
+    self._widgets.notifyMemberLevelUp:SetChecked(settings:isNotifyMemberLevelUp())
 
     -- Logs
     self._widgets.logLevelUp:SetChecked(settings:isLogLevelUp())
     self._widgets.logPromoteDemote:SetChecked(settings:isLogPromoteDemote())
     self._widgets.logNotes:SetChecked(settings:isLogNotes())
     self._widgets.logJoinLeave:SetChecked(settings:isLogJoinLeave())
+    self._widgets.logRejoin:SetChecked(settings:isLogRejoin())
     self._widgets.selectedRetentionDays = settings:getLogRetentionDays()
     self:updateRetentionButtons(self._widgets.retentionButtons, self._widgets.selectedRetentionDays)
-
-    -- Grupos
-    self._widgets.confirmGroupDelete:SetChecked(settings:isConfirmGroupDelete())
 
     self._widgets.statusMsg:SetText("")
 end
@@ -978,15 +1127,27 @@ function SettingsView:gatherFormData()
         mentionSoundChoice = w.selectedMentionSound or "whisper",
         showMinimapButton = w.showMinimapButton:GetChecked() == true,
         minimapPos = math.floor(w.minimapSlider:GetValue()),
+        showWorldMapButton = w.showWorldMapButton:GetChecked() == true,
+        autoScanWorldMap = w.autoScanWorldMap:GetChecked() == true,
+        showMapPins = w.showMapPins:GetChecked() == true,
+        highlightSelfOnMap = w.highlightSelfOnMap:GetChecked() == true,
+        notifyBirthdaysOnLogin = w.notifyBirthdaysOnLogin:GetChecked() == true,
+        notifyUpcomingEvents = w.notifyUpcomingEvents:GetChecked() == true,
+        confirmEventDelete = w.confirmEventDelete:GetChecked() == true,
+        birthdayLookaheadDays = tonumber(w.selectedBirthdayLookaheadDays) or 30,
+        defaultEventTime = (w.defaultEventTime:GetText() and w.defaultEventTime:GetText() ~= "") and w.defaultEventTime:GetText() or "20:00",
+        confirmGroupDelete = w.confirmGroupDelete:GetChecked() == true,
+        autoAssignGroupRole = w.autoAssignGroupRole:GetChecked() == true,
         autoScanRoster = w.autoScanRoster:GetChecked() == true,
         showOfflineMembers = w.showOfflineMembers:GetChecked() == true,
         notifyNewRecruit = w.notifyNewRecruit:GetChecked() == true,
+        notifyMemberLevelUp = w.notifyMemberLevelUp:GetChecked() == true,
         logLevelUp = w.logLevelUp:GetChecked() == true,
         logPromoteDemote = w.logPromoteDemote:GetChecked() == true,
         logNotes = w.logNotes:GetChecked() == true,
         logJoinLeave = w.logJoinLeave:GetChecked() == true,
+        logRejoin = w.logRejoin:GetChecked() == true,
         logRetentionDays = tonumber(w.selectedRetentionDays) or 60,
-        confirmGroupDelete = w.confirmGroupDelete:GetChecked() == true,
     }
 end
 

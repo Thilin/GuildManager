@@ -360,11 +360,17 @@ end
 --- Calcula e retorna a lista dos próximos aniversariantes da guilda,
 --- ordenados pelos que fazem aniversário mais cedo a partir de hoje.
 ---@return table[] @Lista com { member, name, cleanName, class, level, rank, birthday, daysUntil, daysText }
-function EventService:getUpcomingBirthdays()
+function EventService:getUpcomingBirthdays(maxDays)
     local result = {}
     if not self._memberService or not self._memberService.getAllMembers then
         return result
     end
+
+    local lookahead = maxDays
+    if not lookahead and _G.GM and _G.GM.settingsService then
+        lookahead = _G.GM.settingsService:get("birthdayLookaheadDays")
+    end
+    lookahead = tonumber(lookahead) or 30
 
     local allMembers = self._memberService:getAllMembers() or {}
     local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 6 }
@@ -434,18 +440,20 @@ function EventService:getUpcomingBirthdays()
                     local rawName = m:getName() or "Membro"
                     local cleanName = rawName:match("^[^-]+") or rawName
 
-                    table.insert(result, {
-                        member = m,
-                        name = rawName,
-                        cleanName = cleanName,
-                        class = m:getClass() or "",
-                        level = m:getLevel() or 1,
-                        rank = m:getRankName() or "",
-                        birthday = string.format("%02d/%02d", month, day),
-                        targetYear = targetYear,
-                        daysUntil = daysUntil,
-                        daysText = daysText,
-                    })
+                    if not lookahead or lookahead <= 0 or daysUntil <= lookahead then
+                        table.insert(result, {
+                            member = m,
+                            name = rawName,
+                            cleanName = cleanName,
+                            class = m:getClass() or "",
+                            level = m:getLevel() or 1,
+                            rank = m:getRankName() or "",
+                            birthday = string.format("%02d/%02d", month, day),
+                            targetYear = targetYear,
+                            daysUntil = daysUntil,
+                            daysText = daysText,
+                        })
+                    end
                 end
             end
         end

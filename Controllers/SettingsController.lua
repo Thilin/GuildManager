@@ -51,6 +51,16 @@ function SettingsController:setupCallbacks()
             end
         end
 
+        -- Aplica visibilidade do botão no mapa mundial imediatamente
+        if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView._mapButton then
+            if formData.showWorldMapButton then
+                _G.GM.worldMapView._mapButton:Show()
+            else
+                _G.GM.worldMapView._mapButton:Hide()
+                if _G.GM.worldMapView.hidePanel then _G.GM.worldMapView:hidePanel() end
+            end
+        end
+
         -- Notifica no chat do jogador
         print("|cff00ff00[GuildManager]|r Configurações salvas e aplicadas com sucesso!")
         view:showStatus("Configurações salvas com sucesso!", false)
@@ -65,6 +75,10 @@ function SettingsController:setupCallbacks()
         if self._minimapButton and self._minimapButton._button then
             self._minimapButton._button:Show()
             self._minimapButton:updatePosition(215)
+        end
+
+        if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView._mapButton then
+            _G.GM.worldMapView._mapButton:Show()
         end
 
         print("|cffffff00[GuildManager]|r Todas as configurações foram restauradas para o padrão.")

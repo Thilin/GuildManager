@@ -127,6 +127,19 @@ function AgendaController:initHooks()
         end)
     end
 
+    -- Monitora entrada no mundo para notificar sobre aniversários e eventos do dia
+    local loginFrame = CreateFrame("Frame")
+    loginFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    loginFrame:SetScript("OnEvent", function(frame)
+        frame:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        if C_Timer and C_Timer.After then
+            C_Timer.After(4.0, function()
+                if not IsInGuild or not IsInGuild() then return end
+                self:checkLoginNotifications()
+            end)
+        end
+    end)
+
     -- Comandos de chat /gmagenda, /gmeventos, /gmevento, /gmaniversarios
     SLASH_GUILDMANAGERAGENDA1 = "/gmagenda"
     SLASH_GUILDMANAGERAGENDA2 = "/gmeventos"
@@ -134,6 +147,43 @@ function AgendaController:initHooks()
     SLASH_GUILDMANAGERAGENDA4 = "/gmaniversarios"
     SlashCmdList["GUILDMANAGERAGENDA"] = function()
         self:toggle()
+    end
+end
+
+--- Verifica e envia notificações no chat local ao conectar sobre aniversariantes e eventos de hoje.
+function AgendaController:checkLoginNotifications()
+    if not _G.GM or not _G.GM.settingsService then return end
+    local settingsService = _G.GM.settingsService
+
+    -- 1. Aniversariantes de hoje
+    if settingsService:get("notifyBirthdaysOnLogin") ~= false and self._eventService and self._eventService.getUpcomingBirthdays then
+        local bdays = self._eventService:getUpcomingBirthdays(1) or {}
+        local todayList = {}
+        for _, b in ipairs(bdays) do
+            if b.daysUntil == 0 then
+                table.insert(todayList, "|cffffd200" .. (b.cleanName or b.name) .. "|r")
+            end
+        end
+        if #todayList > 0 then
+            print(string.format("|cff00ff00[GuildManager]|r 🎂 |cffffd200Aniversário Hoje:|r %s está fazendo aniversário! Dê os parabéns!", table.concat(todayList, ", ")))
+        end
+    end
+
+    -- 2. Eventos agendados para hoje
+    if settingsService:get("notifyUpcomingEvents") ~= false and self._eventService and self._eventService.getAllEvents then
+        local allEvents = self._eventService:getAllEvents() or {}
+        local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 6 }
+        local todayStr = string.format("%02d/%02d/%04d", curDate.day or 1, curDate.month or 1, curDate.year or 2026)
+        local todayEvents = {}
+        for _, ev in ipairs(allEvents) do
+            if ev:getDate() == todayStr then
+                local timeDisplay = ev:getTime() and ev:getTime() ~= "" and (" às " .. ev:getTime()) or ""
+                table.insert(todayEvents, string.format("|cffffd200%s|r (%s%s)", ev:getTitle(), ev:getType() or "Evento", timeDisplay))
+            end
+        end
+        if #todayEvents > 0 then
+            print(string.format("|cff00ff00[GuildManager]|r 📅 |cffffd200Eventos da Guilda Hoje:|r %s", table.concat(todayEvents, ", ")))
+        end
     end
 end
 

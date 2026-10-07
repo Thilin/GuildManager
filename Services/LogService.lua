@@ -290,6 +290,10 @@ function LogService:logMemberRejoin(memberName, recruiterName, dateLeft, lastRan
         return nil, false
     end
 
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.logRejoin == false then
+        return nil, false
+    end
+
     local mService = self._memberService or (_G.GM and _G.GM.memberService)
 
     -- Trava 1: Se o membro acabou de sair ou ser expulso (janela de carência de 60s),
@@ -722,6 +726,11 @@ function LogService:logMemberLeveled(member, newLevel, oldLevel, timestamp, date
     })
 
     self._repository:save(newLog)
+
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.notifyMemberLevelUp ~= false then
+        print(string.format("|cff00ff00[GuildManager]|r 🌟 |cffffff00%s|r subiu para o nível |cff00ff00%d|r! Parabéns!", memberName, targetLevel))
+    end
+
     return newLog, true
 end
 

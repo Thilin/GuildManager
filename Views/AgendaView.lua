@@ -1022,8 +1022,30 @@ function AgendaView:renderEvents()
         end)
 
         card.deleteBtn:SetScript("OnClick", function()
-            if self._onDeleteEventCallback then
-                self._onDeleteEventCallback(currentEventId)
+            local confirm = true
+            if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("confirmEventDelete") == false then
+                confirm = false
+            end
+            if confirm and StaticPopupDialogs then
+                StaticPopupDialogs["GM_CONFIRM_DELETE_EVENT"] = {
+                    text = "Deseja realmente excluir este evento da guilda?",
+                    button1 = "Sim",
+                    button2 = "Não",
+                    OnAccept = function()
+                        if self._onDeleteEventCallback then
+                            self._onDeleteEventCallback(currentEventId)
+                        end
+                    end,
+                    timeout = 0,
+                    whileDead = true,
+                    hideOnEscape = true,
+                    preferredIndex = 3,
+                }
+                StaticPopup_Show("GM_CONFIRM_DELETE_EVENT")
+            else
+                if self._onDeleteEventCallback then
+                    self._onDeleteEventCallback(currentEventId)
+                end
             end
         end)
 
@@ -1425,7 +1447,8 @@ function AgendaView:openEventModal(event, prefill)
         local p = prefill or {}
         modal.titleEB:SetText(p.title or "")
         modal.dateEB:SetText(p.date or "")
-        modal.timeEB:SetText(p.time or "20:00")
+        local defTime = (_G.GM and _G.GM.settingsService and _G.GM.settingsService:get("defaultEventTime")) or "20:00"
+        modal.timeEB:SetText(p.time or defTime)
         modal.descEB:SetText(p.description or "")
         modal.selectedType = p.type or "RAID"
     end

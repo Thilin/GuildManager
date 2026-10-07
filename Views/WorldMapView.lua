@@ -1,4 +1,4 @@
-﻿---@class WorldMapView
+---@class WorldMapView
 ---@field private _frame table|nil
 ---@field private _mapButton table|nil
 ---@field private _panel table|nil
@@ -579,8 +579,16 @@ function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
 
     self:updateButton(#self._membersData, isContinent, isWorld)
 
-    -- Plota os pinos no mapa sempre que os dados forem atualizados (mantém limpos)
-    self:plotMemberPins()
+    -- Plota os pinos no mapa se habilitado nas opções
+    local showPins = true
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showMapPins") == false then
+        showPins = false
+    end
+    if showPins then
+        self:plotMemberPins()
+    else
+        self:clearPins()
+    end
 
     -- Atualiza as linhas da lista lateral se o painel estiver aberto
     if self._isPanelOpen then

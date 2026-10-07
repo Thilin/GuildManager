@@ -353,16 +353,37 @@ function WorldMapController:initHooks()
     -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel e varre os membros da região
     WorldMapFrame:HookScript("OnShow", function()
         self._worldMapView:initWorldMapUI()
-        self._worldMapView:showPanel()
-        self:scanCurrentZone()
-        self:startPeriodicUpdate()
 
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.1, function()
-                if WorldMapFrame and WorldMapFrame:IsShown() then
-                    self:scanCurrentZone()
-                end
-            end)
+        local showBtn = true
+        local autoScan = true
+        if _G.GM and _G.GM.settingsService then
+            if _G.GM.settingsService:get("showWorldMapButton") == false then
+                showBtn = false
+            end
+            if _G.GM.settingsService:get("autoScanWorldMap") == false then
+                autoScan = false
+            end
+        end
+
+        if showBtn then
+            if self._worldMapView._mapButton then self._worldMapView._mapButton:Show() end
+            self._worldMapView:showPanel()
+        else
+            if self._worldMapView._mapButton then self._worldMapView._mapButton:Hide() end
+            self._worldMapView:hidePanel()
+        end
+
+        if autoScan then
+            self:scanCurrentZone()
+            self:startPeriodicUpdate()
+
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.1, function()
+                    if WorldMapFrame and WorldMapFrame:IsShown() then
+                        self:scanCurrentZone()
+                    end
+                end)
+            end
         end
     end)
 
@@ -494,7 +515,14 @@ function WorldMapController:scanCurrentZone()
         local _, unitClassToken = UnitClass("player")
         local displayName = (myMember and myMember:getName() and myMember:getName() ~= "") and myMember:getName() or myName
         local myRank = myMember and myMember:getRankName()
-        local rankDisplay = (myRank and myRank ~= "") and (myRank .. " (Você)") or "Você"
+        local highlightSelf = true
+        if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("highlightSelfOnMap") == false then
+            highlightSelf = false
+        end
+        local rankDisplay = (myRank and myRank ~= "") and myRank or "Membro"
+        if highlightSelf then
+            rankDisplay = (myRank and myRank ~= "") and (myRank .. " (Você)") or "Você"
+        end
         local myLevel = (myMember and myMember:getLevel() and myMember:getLevel() > 0) and myMember:getLevel() or (UnitLevel("player") or 1)
         local myClass = (myMember and myMember:getClass() and myMember:getClass() ~= "") and myMember:getClass() or (unitClassToken or "")
         local myClassDisplay = (myMember and myMember:getClassDisplayName() and myMember:getClassDisplayName() ~= "") and myMember:getClassDisplayName() or (UnitClass("player") or "")
@@ -509,7 +537,7 @@ function WorldMapController:scanCurrentZone()
             officerNote = myMember and myMember:getOfficerNote() or "",
             zone = myZone,
             isOnline = true,
-            isSelf = true,
+            isSelf = highlightSelf,
         }
         table.insert(regionMembers, myData)
         registerAddedName(displayName)

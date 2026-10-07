@@ -1224,8 +1224,31 @@ function GroupView:createModals()
     delGroupBtn:SetText("Excluir Grupo")
     delGroupBtn:SetScript("OnClick", function()
         if detailModal.currentGroup and self._onDeleteGroupCallback then
-            self._onDeleteGroupCallback(detailModal.currentGroup:getId())
-            detailModal:Hide()
+            local gId = detailModal.currentGroup:getId()
+            local gName = detailModal.currentGroup:getName() or "este grupo"
+            local confirm = true
+            if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("confirmGroupDelete") == false then
+                confirm = false
+            end
+            if confirm and StaticPopupDialogs then
+                StaticPopupDialogs["GM_CONFIRM_DELETE_GROUP"] = {
+                    text = string.format("Deseja realmente excluir o grupo '%s'?", gName),
+                    button1 = "Sim",
+                    button2 = "Não",
+                    OnAccept = function()
+                        self._onDeleteGroupCallback(gId)
+                        detailModal:Hide()
+                    end,
+                    timeout = 0,
+                    whileDead = true,
+                    hideOnEscape = true,
+                    preferredIndex = 3,
+                }
+                StaticPopup_Show("GM_CONFIRM_DELETE_GROUP")
+            else
+                self._onDeleteGroupCallback(gId)
+                detailModal:Hide()
+            end
         end
     end)
 
@@ -1974,6 +1997,9 @@ function GroupView:updateRoleButtons(roleButtons, activeRole)
 end
 
 function GroupView:autoSelectRoleForClass(roleButtons, classToken, setCallback)
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("autoAssignGroupRole") == false then
+        return
+    end
     local raw = (classToken or ""):upper()
     local upper = CLASS_NAME_TO_TOKEN[raw] or raw
     local chosen = GroupRole.DPS

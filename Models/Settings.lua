@@ -22,6 +22,26 @@ local DEFAULTS = {
     logJoinLeave = true,         -- Registrar logs de entrada, saída e expulsão
     logRetentionDays = 60,       -- Dias de retenção de histórico (0 = ilimitado, 30, 60, 90, 180)
     confirmGroupDelete = true,   -- Solicitar confirmação ao excluir grupos
+
+    -- Agenda & Eventos
+    notifyBirthdaysOnLogin = true,    -- Notificar no chat local sobre aniversários de hoje ao conectar
+    notifyUpcomingEvents = true,      -- Notificar no chat local sobre eventos agendados para hoje
+    confirmEventDelete = true,        -- Solicitar confirmação ao excluir eventos da agenda
+    birthdayLookaheadDays = 30,       -- Dias de antecedência para listar próximos aniversariantes (7, 14, 30, 60)
+    defaultEventTime = "20:00",       -- Horário padrão sugerido ao criar eventos
+
+    -- Mapa Mundial & Rastreamento
+    showWorldMapButton = true,        -- Exibir botão do GuildManager no Mapa Mundial
+    autoScanWorldMap = true,          -- Escanear membros da guilda automaticamente ao abrir o mapa
+    showMapPins = true,               -- Exibir marcadores dos colegas no mapa
+    highlightSelfOnMap = true,        -- Destacar localização do próprio jogador no mapa
+
+    -- Grupos
+    autoAssignGroupRole = true,       -- Sugerir função automaticamente baseado na classe do jogador
+
+    -- Auditoria & Alertas
+    notifyMemberLevelUp = true,       -- Avisar no chat local quando um membro subir de nível
+    logRejoin = true,                 -- Registrar logs de retorno à guilda (membros que já saíram)
 }
 
 --- Construtor da entidade GMSettings.
@@ -68,6 +88,21 @@ function GMSettings:isLogJoinLeave() return self._logJoinLeave ~= false end
 function GMSettings:getLogRetentionDays() return tonumber(self._logRetentionDays) or 60 end
 function GMSettings:isConfirmGroupDelete() return self._confirmGroupDelete ~= false end
 
+function GMSettings:isNotifyBirthdaysOnLogin() return self._notifyBirthdaysOnLogin ~= false end
+function GMSettings:isNotifyUpcomingEvents() return self._notifyUpcomingEvents ~= false end
+function GMSettings:isConfirmEventDelete() return self._confirmEventDelete ~= false end
+function GMSettings:getBirthdayLookaheadDays() return tonumber(self._birthdayLookaheadDays) or 30 end
+function GMSettings:getDefaultEventTime() return self._defaultEventTime or "20:00" end
+
+function GMSettings:isShowWorldMapButton() return self._showWorldMapButton ~= false end
+function GMSettings:isAutoScanWorldMap() return self._autoScanWorldMap ~= false end
+function GMSettings:isShowMapPins() return self._showMapPins ~= false end
+function GMSettings:isHighlightSelfOnMap() return self._highlightSelfOnMap ~= false end
+
+function GMSettings:isAutoAssignGroupRole() return self._autoAssignGroupRole ~= false end
+function GMSettings:isNotifyMemberLevelUp() return self._notifyMemberLevelUp ~= false end
+function GMSettings:isLogRejoin() return self._logRejoin ~= false end
+
 -- Setters
 function GMSettings:setGuildTagline(val) self._guildTagline = tostring(val or "") end
 function GMSettings:setDefaultTab(val) self._defaultTab = tostring(val or "audit") end
@@ -87,6 +122,21 @@ function GMSettings:setLogNotes(val) self._logNotes = (val == true) end
 function GMSettings:setLogJoinLeave(val) self._logJoinLeave = (val == true) end
 function GMSettings:setLogRetentionDays(val) self._logRetentionDays = tonumber(val) or 60 end
 function GMSettings:setConfirmGroupDelete(val) self._confirmGroupDelete = (val == true) end
+
+function GMSettings:setNotifyBirthdaysOnLogin(val) self._notifyBirthdaysOnLogin = (val == true) end
+function GMSettings:setNotifyUpcomingEvents(val) self._notifyUpcomingEvents = (val == true) end
+function GMSettings:setConfirmEventDelete(val) self._confirmEventDelete = (val == true) end
+function GMSettings:setBirthdayLookaheadDays(val) self._birthdayLookaheadDays = tonumber(val) or 30 end
+function GMSettings:setDefaultEventTime(val) self._defaultEventTime = tostring(val or "20:00") end
+
+function GMSettings:setShowWorldMapButton(val) self._showWorldMapButton = (val == true) end
+function GMSettings:setAutoScanWorldMap(val) self._autoScanWorldMap = (val == true) end
+function GMSettings:setShowMapPins(val) self._showMapPins = (val == true) end
+function GMSettings:setHighlightSelfOnMap(val) self._highlightSelfOnMap = (val == true) end
+
+function GMSettings:setAutoAssignGroupRole(val) self._autoAssignGroupRole = (val == true) end
+function GMSettings:setNotifyMemberLevelUp(val) self._notifyMemberLevelUp = (val == true) end
+function GMSettings:setLogRejoin(val) self._logRejoin = (val == true) end
 
 --- Serializa as configurações para uma tabela limpa.
 ---@return table
