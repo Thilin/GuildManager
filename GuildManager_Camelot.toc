@@ -6,6 +6,7 @@
 ## SavedVariables: GM_DB
 
 Database/Database.lua
+Utils/Serializer.lua
 
 Models/Member.lua
 Models/Log.lua
@@ -24,6 +25,7 @@ Services/GuildRosterService.lua
 Services/GroupService.lua
 Services/EventService.lua
 Services/SettingsService.lua
+Services/SyncService.lua
 
 Views/MemberView.lua
 Views/LogView.lua
@@ -34,6 +36,7 @@ Views/SettingsView.lua
 Views/MinimapButton.lua
 Views/WorldMapView.lua
 Views/ChatMentionView.lua
+Views/SyncNotificationView.lua
 
 Controllers/MemberController.lua
 Controllers/LogController.lua
@@ -43,5 +46,6 @@ Controllers/AgendaController.lua
 Controllers/SettingsController.lua
 Controllers/WorldMapController.lua
 Controllers/ChatMentionController.lua
+Controllers/SyncController.lua
 
 Core.lua
