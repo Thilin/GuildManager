@@ -42,7 +42,8 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local settingsController = SettingsController:new(settingsService, settingsView, memberService, guildRosterService, logService, minimapButton)
 
         local worldMapView = WorldMapView:new()
-        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView)
+        local locationService = LocationService:new(memberService)
+        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
 
         local chatMentionView = ChatMentionView:new()
         local chatMentionController = ChatMentionController:new(memberService, guildRosterService, chatMentionView)
@@ -72,10 +73,12 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.settingsController = settingsController
         GM.minimapButton = minimapButton
         GM.worldMapView = worldMapView
+        GM.locationService = locationService
         GM.worldMapController = worldMapController
         GM.chatMentionView = chatMentionView
         GM.chatMentionController = chatMentionController
 
+        locationService:initHooks()
         memberController:initHooks()
         logController:initHooks()
         auditController:initHooks()

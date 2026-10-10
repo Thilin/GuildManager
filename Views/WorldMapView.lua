@@ -662,6 +662,98 @@ function WorldMapView:refreshVisibleRows()
     end
 end
 
+--- Obtém ou cria um pino reutilizável do pool para renderização no mapa nativo.
+---@param index number
+---@return table|nil
+function WorldMapView:acquirePin(index)
+    local canvas = self:getMapCanvas()
+    if not canvas then return nil end
+
+    if not self._pins[index] then
+        local pinName = "GM_MapPin_" .. index
+        local pin = CreateFrame("Button", pinName, canvas)
+        pin:SetSize(22, 22)
+
+        -- Fundo escuro circular para contraste contra o terreno do mapa
+        local bg = pin:CreateTexture(nil, "BACKGROUND", nil, -1)
+        bg:SetSize(20, 20)
+        bg:SetPoint("CENTER", pin, "CENTER", 0, 0)
+        bg:SetTexture("Interface\\Buttons\\WHITE8X8")
+        bg:SetVertexColor(0.05, 0.04, 0.02, 0.90)
+        pin.bg = bg
+
+        -- Ícone circular oficial da classe do jogador
+        local icon = pin:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(20, 20)
+        icon:SetPoint("CENTER", pin, "CENTER", 0, 0)
+        icon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+        pin.icon = icon
+
+        -- Borda circular dourada em torno do ícone
+        local border = pin:CreateTexture(nil, "OVERLAY")
+        border:SetSize(26, 26)
+        border:SetPoint("CENTER", pin, "CENTER", 0, 0)
+        border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+        pin.border = border
+
+        -- Efeito de realce ao passar o mouse
+        local hl = pin:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetSize(26, 26)
+        hl:SetPoint("CENTER", pin, "CENTER", 0, 0)
+        hl:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+        hl:SetBlendMode("ADD")
+        pin:SetHighlightTexture(hl)
+
+        pin:SetScript("OnEnter", function(p)
+            if p.memberData then
+                local data = p.memberData
+                GameTooltip:SetOwner(p, "ANCHOR_RIGHT")
+                local cls = (data.class or ""):upper()
+                local cHex = (CLASS_COLORS[cls] and CLASS_COLORS[cls].hex) or "|cffffffff"
+                GameTooltip:AddLine(cHex .. (data.name or "Membro") .. "|r")
+                GameTooltip:AddLine(string.format("Nível %d %s", data.level or 1, data.classDisplayName or data.class or ""), 1, 1, 1)
+                if data.rankName and data.rankName ~= "" then
+                    GameTooltip:AddLine(string.format("Cargo: |cffffff00%s|r", data.rankName), 0.9, 0.8, 0.5)
+                end
+                if data.zone and data.zone ~= "" then
+                    GameTooltip:AddLine(string.format("Região: |cffffffff%s|r", data.zone), 0.8, 0.8, 0.8)
+                end
+                if data.rawX and data.rawY then
+                    GameTooltip:AddLine(string.format("Coordenadas: |cff00ff00%.1f, %.1f|r", data.rawX * 100, data.rawY * 100), 0.7, 0.9, 0.7)
+                end
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("|cff00ff00Clique para sussurrar com o jogador.|r", 0.8, 0.8, 0.8)
+                GameTooltip:Show()
+            end
+        end)
+
+        pin:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
+
+        pin:SetScript("OnClick", function(p)
+            if p.memberData and p.memberData.name then
+                if self._onMemberClickCallback then
+                    self._onMemberClickCallback(p.memberData)
+                else
+                    ChatFrame_OpenChat("/w " .. p.memberData.name .. " ")
+                end
+            end
+        end)
+
+        self._pins[index] = pin
+    end
+
+    local pin = self._pins[index]
+    if pin:GetParent() ~= canvas then
+        pin:SetParent(canvas)
+    end
+    pin:SetFrameStrata(canvas:GetFrameStrata())
+    pin:SetFrameLevel((canvas:GetFrameLevel() or 10) + 30)
+
+    return pin
+end
+
 --- Limpa e desativa todos os pinos de membros no mapa nativo.
 function WorldMapView:clearPins()
     if self._pins then
@@ -671,7 +763,6 @@ function WorldMapView:clearPins()
             pin.memberData = nil
         end
     end
-    -- Oculta e limpa quaisquer botões de pino criados em sessões anteriores
     for i = 1, 100 do
         local globalPin = _G["GM_MapPin_" .. i]
         if globalPin then
@@ -682,9 +773,93 @@ function WorldMapView:clearPins()
     end
 end
 
---- Os pinos no mapa estão desativados: apenas mantém os pinos limpos.
+--- Renderiza os pinos de coordenadas em tempo real no WorldMapFrame oficial.
+--- Cada outro jogador que utiliza o addon recebe um marcador com o ícone da sua classe.
+---@param pinsData table @Lista de tabelas com dados dos pinos a desenhar
+function WorldMapView:renderPins(pinsData)
+    local showPins = true
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showMapPins") == false then
+        showPins = false
+    end
+
+    if not showPins or not pinsData or #pinsData == 0 then
+        self:clearPins()
+        return
+    end
+
+    local canvas = self:getMapCanvas()
+    if not canvas or not canvas:IsShown() then
+        self:clearPins()
+        return
+    end
+
+    local canvasW = canvas:GetWidth()
+    local canvasH = canvas:GetHeight()
+    if not canvasW or canvasW <= 0 or not canvasH or canvasH <= 0 then
+        if WorldMapFrame and WorldMapFrame.ScrollContainer and WorldMapFrame.ScrollContainer.Child then
+            canvasW = WorldMapFrame.ScrollContainer.Child:GetWidth()
+            canvasH = WorldMapFrame.ScrollContainer.Child:GetHeight()
+        end
+    end
+    if not canvasW or canvasW <= 0 or not canvasH or canvasH <= 0 then
+        if WorldMapFrame then
+            canvasW = WorldMapFrame:GetWidth()
+            canvasH = WorldMapFrame:GetHeight()
+        end
+    end
+    if not canvasW or canvasW <= 0 or not canvasH or canvasH <= 0 then
+        self:clearPins()
+        return
+    end
+
+    -- Compensa a escala de zoom do mapa para manter o tamanho visual do pino constante
+    local canvasScale = canvas:GetScale() or 1
+    local pinScale = 1
+    if canvasScale > 0.05 then
+        pinScale = 1 / canvasScale
+    end
+
+    for i, data in ipairs(pinsData) do
+        local pin = self:acquirePin(i)
+        if pin then
+            pin.memberData = data
+            pin:SetScale(pinScale)
+
+            -- Ícone de classe oficial
+            local cls = (data.class or ""):upper()
+            local coords = CLASS_ICON_COORDS[cls]
+            if coords and pin.icon then
+                pin.icon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+                pin.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+                pin.icon:Show()
+            elseif pin.icon then
+                pin.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                pin.icon:SetTexCoord(0, 1, 0, 1)
+                pin.icon:Show()
+            end
+
+            -- Posicionamento exato relativo ao canvas TOPLEFT
+            pin:ClearAllPoints()
+            pin:SetPoint("CENTER", canvas, "TOPLEFT", data.renderX * canvasW, -data.renderY * canvasH)
+            pin:Show()
+        end
+    end
+
+    -- Oculta os pinos restantes do pool que não foram utilizados nesta iteração
+    for i = #pinsData + 1, #self._pins do
+        local pin = self._pins[i]
+        if pin then
+            pin:Hide()
+            pin:ClearAllPoints()
+            pin.memberData = nil
+        end
+    end
+end
+
+--- Mantém os pinos atualizados ou limpos conforme o estado.
 function WorldMapView:plotMemberPins()
-    self:clearPins()
+    -- Se renderPins já foi invocado pelo Controller com pinsData, a renderização é automática.
+    -- Caso contrário, garante que os pinos estejam limpos se não houver dados.
 end
 
 --- Define o callback acionado quando o usuário clica em "Escanear Mapa".

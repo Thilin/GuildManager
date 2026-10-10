@@ -2,6 +2,7 @@
 ---@field private _memberService MemberService
 ---@field private _guildRosterService GuildRosterService
 ---@field private _worldMapView WorldMapView
+---@field private _locationService LocationService|nil
 ---@field private _lastMapID number|nil
 ---@field private _updateTicker table|nil
 ---@field private _eventFrame table|nil
@@ -12,17 +13,25 @@ WorldMapController.__index = WorldMapController
 ---@param memberService MemberService @Serviço de gerenciamento de membros
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
 ---@param worldMapView WorldMapView @Camada de visualização no mapa nativo
+---@param locationService LocationService|nil @Serviço de rastreamento e comunicação de coordenadas
 ---@return WorldMapController
-function WorldMapController:new(memberService, guildRosterService, worldMapView)
+function WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
     local instance = setmetatable({}, self)
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService
     instance._worldMapView = worldMapView
+    instance._locationService = locationService
     instance._lastMapID = nil
     instance._updateTicker = nil
     instance._eventFrame = nil
 
     return instance
+end
+
+--- Define ou atualiza o serviço de localização.
+---@param locationService LocationService
+function WorldMapController:setLocationService(locationService)
+    self._locationService = locationService
 end
 
 --- Normaliza strings para comparação (remove acentos, espaços extras e caixa alta).
@@ -330,10 +339,156 @@ function WorldMapController:isZoneMatch(memberZone, currentMapName, currentMapID
     return false, false, false
 end
 
+--- Auxiliar para criação de Vector2D compatível com C_Map.
+---@param x number
+---@param y number
+---@return table
+function WorldMapController:makeVector2D(x, y)
+    local numX = tonumber(x) or 0
+    local numY = tonumber(y) or 0
+    if CreateVector2D then
+        return CreateVector2D(numX, numY)
+    end
+    local vec = { x = numX, y = numY }
+    function vec:GetXY()
+        return self.x, self.y
+    end
+    return vec
+end
+
+--- Converte e projeta com precisão as coordenadas do jogador remoto para o mapa atualmente visualizado.
+--- Independente de estar na mesma região ou não, calcula a projeção para mapas locais, continentes e visão global.
+---@param loc table @Dados da localização remota (mapID, x, y, worldX, worldY)
+---@param currentMapID number @ID do mapa atualmente visualizado no WorldMapFrame
+---@return number|nil, number|nil @renderX, renderY (entre 0 e 1 se visível no mapa atual)
+function WorldMapController:translateCoordinatesToMap(loc, currentMapID)
+    if not loc or not currentMapID then return nil, nil end
+
+    -- 1. Coincidência direta de Map ID (o jogador remoto está na mesma região exata do mapa visualizado)
+    if loc.mapID and loc.mapID == currentMapID then
+        if loc.x and loc.y and loc.x >= 0 and loc.x <= 1 and loc.y >= 0 and loc.y <= 1 then
+            return loc.x, loc.y
+        end
+    end
+
+    -- 2. Conversão através das coordenadas mundiais exatas (em jardas)
+    if loc.worldX and loc.worldY and (loc.worldX ~= 0 or loc.worldY ~= 0) and C_Map and C_Map.GetMapPosFromWorldPos then
+        local wVec = self:makeVector2D(loc.worldX, loc.worldY)
+        local mPos = C_Map.GetMapPosFromWorldPos(currentMapID, wVec)
+        if mPos then
+            local mx, my = mPos:GetXY()
+            if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
+                return mx, my
+            end
+        end
+    end
+
+    -- 3. Conversão indireta: do mapa de origem para coordenadas mundiais, e então para o mapa visualizado
+    if loc.mapID and loc.x and loc.y and C_Map and C_Map.GetWorldPosFromMapPos and C_Map.GetMapPosFromWorldPos then
+        local sVec = self:makeVector2D(loc.x, loc.y)
+        local _, wPos = C_Map.GetWorldPosFromMapPos(loc.mapID, sVec)
+        if wPos then
+            local mPos = C_Map.GetMapPosFromWorldPos(currentMapID, wPos)
+            if mPos then
+                local mx, my = mPos:GetXY()
+                if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
+                    return mx, my
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--- Atualiza a renderização dos marcadores de classe em tempo real no mapa oficial da Blizzard.
+--- O emissor não rastreia sua própria posição enviada; apenas posições de outros jogadores são renderizadas.
+function WorldMapController:updateMapPins()
+    if not self._worldMapView or not WorldMapFrame or not WorldMapFrame:IsShown() then
+        return
+    end
+
+    -- Respeita a opção de configuração de exibição de marcadores no mapa
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showMapPins") == false then
+        self._worldMapView:clearPins()
+        return
+    end
+
+    if not self._locationService then
+        self._worldMapView:clearPins()
+        return
+    end
+
+    local currentMapID = self:getCurrentMapID()
+    if not currentMapID then
+        self._worldMapView:clearPins()
+        return
+    end
+
+    local remoteLocations = self._locationService:getAllLocations()
+    if not remoteLocations or next(remoteLocations) == nil then
+        self._worldMapView:clearPins()
+        return
+    end
+
+    -- Identificação do jogador local para garantir exclusão do emissor
+    local myName = UnitName and UnitName("player") or ""
+    local myFirstName = myName:match("^(%S+)") or myName
+    local cleanMyName = cleanString(myName)
+    local cleanMyFirst = cleanString(myFirstName)
+
+    local pinsToRender = {}
+
+    for _, loc in pairs(remoteLocations) do
+        local locName = loc.name or ""
+        local cleanLocName = cleanString(locName)
+        local locFirst = cleanString(locName:match("^(%S+)") or locName)
+
+        -- O emissor não deve ser rastreado; o marcador é apenas para qualquer outro jogador
+        local isSelf = (cleanLocName == cleanMyName or cleanLocName == cleanMyFirst or locFirst == cleanMyName or locFirst == cleanMyFirst)
+
+        if not isSelf and locName ~= "" then
+            local renderX, renderY = self:translateCoordinatesToMap(loc, currentMapID)
+            if renderX and renderY and renderX >= 0 and renderX <= 1 and renderY >= 0 and renderY <= 1 then
+                local member = self._memberService and self._memberService:getMember(locName)
+                local cls = loc.class or (member and member:getClass()) or "WARRIOR"
+                local clsDisplay = (member and member:getClassDisplayName()) or loc.class or ""
+                local lvl = loc.level or (member and member:getLevel()) or 1
+                local rank = (member and member:getRankName()) or ""
+                local zn = loc.zone or (member and member:getZone()) or ""
+
+                table.insert(pinsToRender, {
+                    name = locName,
+                    class = cls:upper(),
+                    classDisplayName = clsDisplay,
+                    level = lvl,
+                    rankName = rank,
+                    zone = zn,
+                    rawX = loc.x,
+                    rawY = loc.y,
+                    renderX = renderX,
+                    renderY = renderY,
+                })
+            end
+        end
+    end
+
+    self._worldMapView:renderPins(pinsToRender)
+end
+
 --- Inicializa os ganchos com a interface do WorldMapFrame da Blizzard e eventos.
 function WorldMapController:initHooks()
     if not WorldMapFrame then
         return
+    end
+
+    -- Vincula callback de recepção de coordenadas em tempo real pelo canal de comunicação
+    if self._locationService and self._locationService.setOnLocationUpdatedCallback then
+        self._locationService:setOnLocationUpdatedCallback(function()
+            if WorldMapFrame and WorldMapFrame:IsShown() then
+                self:updateMapPins()
+            end
+        end)
     end
 
     -- Vincula callbacks da View
@@ -341,7 +496,12 @@ function WorldMapController:initHooks()
         if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
             self._guildRosterService:requestRosterUpdate()
         end
+        if self._locationService then
+            self._locationService:broadcastLocation(true)
+            self._locationService:requestLocations()
+        end
         self:scanCurrentZone()
+        self:updateMapPins()
     end)
 
     self._worldMapView:setOnMemberClickCallback(function(memberData)
@@ -350,7 +510,7 @@ function WorldMapController:initHooks()
         end
     end)
 
-    -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel e varre os membros da região
+    -- Hook do WorldMapFrame OnShow: inicializa UI, transmite e solicita posições, exibe o painel e varre os membros
     WorldMapFrame:HookScript("OnShow", function()
         self._worldMapView:initWorldMapUI()
 
@@ -373,17 +533,26 @@ function WorldMapController:initHooks()
             self._worldMapView:hidePanel()
         end
 
+        if self._locationService then
+            self._locationService:broadcastLocation(true)
+            self._locationService:requestLocations()
+        end
+
         if autoScan then
             self:scanCurrentZone()
+            self:updateMapPins()
             self:startPeriodicUpdate()
 
             if C_Timer and C_Timer.After then
                 C_Timer.After(0.1, function()
                     if WorldMapFrame and WorldMapFrame:IsShown() then
                         self:scanCurrentZone()
+                        self:updateMapPins()
                     end
                 end)
             end
+        else
+            self:updateMapPins()
         end
     end)
 
@@ -392,6 +561,16 @@ function WorldMapController:initHooks()
         self:stopPeriodicUpdate()
         self._worldMapView:clearPins()
     end)
+
+    -- Hook do evento de troca de mapa nativo da Blizzard
+    if WorldMapFrame.OnMapChanged then
+        hooksecurefunc(WorldMapFrame, "OnMapChanged", function()
+            if WorldMapFrame:IsShown() then
+                self:scanCurrentZone()
+                self:updateMapPins()
+            end
+        end)
+    end
 
     -- Frame de eventos para monitorar atualizações de mapa e roster da guilda
     local eventFrame = CreateFrame("Frame")
@@ -405,6 +584,7 @@ function WorldMapController:initHooks()
     eventFrame:SetScript("OnEvent", function(_, event)
         if WorldMapFrame and WorldMapFrame:IsShown() then
             self:scanCurrentZone()
+            self:updateMapPins()
         end
     end)
 
@@ -415,17 +595,20 @@ function WorldMapController:initHooks()
         self._worldMapView:initWorldMapUI()
         self._worldMapView:showPanel()
         self:scanCurrentZone()
+        self:updateMapPins()
     end
 end
 
 --- Inicia o timer de atualização enquanto o WorldMapFrame estiver aberto.
+--- Intervalo de 1.0s para sincronização fluida e precisa em tempo real.
 function WorldMapController:startPeriodicUpdate()
     if self._updateTicker then return end
 
     if C_Timer and C_Timer.NewTicker then
-        self._updateTicker = C_Timer.NewTicker(2.5, function()
+        self._updateTicker = C_Timer.NewTicker(1.0, function()
             if WorldMapFrame and WorldMapFrame:IsShown() then
                 self:scanCurrentZone()
+                self:updateMapPins()
             else
                 self:stopPeriodicUpdate()
             end
@@ -588,4 +771,7 @@ function WorldMapController:scanCurrentZone()
 
     -- Atualiza a View do Mapa passando os flags de continente e mundo
     self._worldMapView:renderMembers(regionMembers, currentMapName, isContinent, isWorld)
+
+    -- Atualiza os marcadores de coordenadas em tempo real no mapa
+    self:updateMapPins()
 end
