@@ -8,11 +8,12 @@ LocationService.__index = LocationService
 
 local PRIMARY_PREFIX = "GM_POS"
 local FALLBACK_PREFIX = "AJ_POS"
-local COMM_CHANNELS = { "GMShare", "AJShare" }
+local MSG_PREFIX = "AJ_POS"
+local COMM_CHANNEL_NAME = "AJShare"
 
-local MOVE_THROTTLE = 1.0     -- Intervalo quando o jogador está em movimento (1.0s)
-local IDLE_HEARTBEAT = 3.5    -- Intervalo de heartbeat quando o jogador está parado (3.5s)
-local PEER_TIMEOUT = 30.0     -- Tempo sem sinal para considerar o jogador offline (30s)
+local MOVE_THROTTLE = 1.25    -- Intervalo quando o jogador está em movimento (1.25s)
+local IDLE_HEARTBEAT = 4.0     -- Intervalo de heartbeat quando o jogador está parado (4.0s)
+local PEER_TIMEOUT = 30.0      -- Tempo sem sinal para considerar o jogador offline (30s)
 
 -- Registra os prefixos de mensagem imediatamente no carregamento do arquivo
 local RegisterPrefix = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
@@ -29,7 +30,9 @@ function LocationService:new(memberService)
     instance._memberService = memberService
     instance._peers = {}
     instance._listeners = {}
+    instance._channelNumber = nil
     instance._channelNumbers = {}
+    instance._silencedChannels = {}
     instance._lastJoinAttempt = 0
     instance._myPlayerName = nil
     instance._myFullName = nil
@@ -140,46 +143,45 @@ function LocationService:getGuildAddonUsers()
     return users
 end
 
---- Garante a conexão aos canais globais sem poluir as abas de chat nativas
+--- Garante a conexão ao canal global reservado do AddOn sem poluir janelas de chat nativas
 function LocationService:ensureGlobalChannels()
+    if self._channelNumber and self._channelNumber > 0 then
+        return
+    end
+
     local now = GetTime and GetTime() or 0
-    if (now - self._lastJoinAttempt) < 10.0 then return end
+    if (now - self._lastJoinAttempt) < 8.0 then return end
     self._lastJoinAttempt = now
 
-    for _, chName in ipairs(COMM_CHANNELS) do
-        local id = nil
+    local chName = COMM_CHANNEL_NAME
+    local id = nil
+
+    if GetChannelName then
+        local ok, chID = pcall(GetChannelName, chName)
+        if ok and chID and type(chID) == "number" and chID > 0 then
+            id = chID
+        end
+    end
+
+    if not id and JoinChannelByName then
+        pcall(JoinChannelByName, chName)
         if GetChannelName then
-            local ok, chID = pcall(GetChannelName, chName)
-            if ok and chID and type(chID) == "number" and chID > 0 then
-                id = chID
+            local ok, newID = pcall(GetChannelName, chName)
+            if ok and newID and type(newID) == "number" and newID > 0 then
+                id = newID
             end
         end
+    end
 
-        if not id and JoinChannelByName then
-            pcall(JoinChannelByName, chName)
-            if GetChannelName then
-                local ok, newID = pcall(GetChannelName, chName)
-                if ok and newID and type(newID) == "number" and newID > 0 then
-                    id = newID
-                end
-            end
-        end
+    if id and id > 0 then
+        self._channelNumber = id
+        self._channelNumbers[chName:lower()] = id
 
-        if id and id > 0 then
-            self._channelNumbers[chName:lower()] = id
-
-            -- Silencia janelas de chat nativas
-            if ChatFrame_RemoveChannel then
-                if DEFAULT_CHAT_FRAME then
-                    pcall(ChatFrame_RemoveChannel, DEFAULT_CHAT_FRAME, chName)
-                end
-                local maxFrames = NUM_CHAT_WINDOWS or 10
-                for i = 1, maxFrames do
-                    local cf = _G["ChatFrame" .. i]
-                    if cf then
-                        pcall(ChatFrame_RemoveChannel, cf, chName)
-                    end
-                end
+        -- Silencia no chat nativo da Blizzard uma única vez (sem resetar as abas ou animações de fade)
+        if not self._silencedChannels[chName:lower()] then
+            self._silencedChannels[chName:lower()] = true
+            if ChatFrame_RemoveChannel and DEFAULT_CHAT_FRAME then
+                pcall(ChatFrame_RemoveChannel, DEFAULT_CHAT_FRAME, chName)
             end
         end
     end
@@ -292,27 +294,24 @@ function LocationService:sendPosition(force)
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
     if not Send then return end
 
-    local prefixesToSend = { PRIMARY_PREFIX, FALLBACK_PREFIX }
+    -- 1. Transmite para Raide ou Grupo (se agrupado)
+    if IsInRaid and IsInRaid() then
+        pcall(Send, MSG_PREFIX, payload, "RAID")
+    elseif IsInGroup and IsInGroup() then
+        pcall(Send, MSG_PREFIX, payload, "PARTY")
+    end
 
-    for _, prefix in ipairs(prefixesToSend) do
-        -- 1. Transmite para Raide ou Grupo
-        if IsInRaid and IsInRaid() then
-            pcall(Send, prefix, payload, "RAID")
-        elseif IsInGroup and IsInGroup() then
-            pcall(Send, prefix, payload, "PARTY")
-        end
+    -- 2. Transmite para a Guilda (1 prefixo limpo, sem pacotes duplicados que poluem o chat)
+    if IsInGuild and IsInGuild() then
+        pcall(Send, MSG_PREFIX, payload, "GUILD")
+    end
 
-        -- 2. Transmite para a Guilda (alcance instantâneo para todos os membros)
-        if IsInGuild and IsInGuild() then
-            pcall(Send, prefix, payload, "GUILD")
-        end
-
-        -- 3. Transmite para os canais globais conectados
-        for chLower, chNum in pairs(self._channelNumbers) do
-            if chNum and chNum > 0 then
-                pcall(Send, prefix, payload, "CHANNEL", chNum)
-            end
-        end
+    -- 3. Transmite para o canal global do AddOn ("AJShare")
+    if not self._channelNumber and self.ensureGlobalChannels then
+        self:ensureGlobalChannels()
+    end
+    if self._channelNumber and self._channelNumber > 0 then
+        pcall(Send, MSG_PREFIX, payload, "CHANNEL", self._channelNumber)
     end
 end
 
@@ -575,9 +574,22 @@ function LocationService:initHooks()
             self:onAddonMessage(prefix, msg, ch, sender)
 
         elseif event == "CHAT_MSG_CHANNEL_NOTICE" then
-            local noticeType, _, _, _, _, _, _, channelIndex, channelName = ...
-            if noticeType == "YOU_JOINED" and channelName and channelIndex then
-                self._channelNumbers[channelName:lower()] = channelIndex
+            local noticeType, _, _, _, _, _, _, arg8, arg9 = ...
+            if noticeType == "YOU_JOINED" then
+                local chName = (type(arg9) == "string" and arg9) or (type(arg8) == "string" and arg8) or nil
+                local chIndex = (type(arg8) == "number" and arg8) or (type(arg9) == "number" and arg9) or nil
+                if chName and chName:lower():find("ajshare", 1, true) then
+                    if chIndex and chIndex > 0 then
+                        self._channelNumber = chIndex
+                        self._channelNumbers["ajshare"] = chIndex
+                    end
+                    if not self._silencedChannels["ajshare"] then
+                        self._silencedChannels["ajshare"] = true
+                        if ChatFrame_RemoveChannel and DEFAULT_CHAT_FRAME then
+                            pcall(ChatFrame_RemoveChannel, DEFAULT_CHAT_FRAME, chName)
+                        end
+                    end
+                end
             end
 
         elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" or event == "CHANNEL_UI_UPDATE" then
@@ -606,10 +618,12 @@ function LocationService:initHooks()
             self:sendPosition(false)
         end
 
-        -- Verifica conexão aos canais a cada 8 segundos se ainda não resolvidos
-        if channelTicker >= 8.0 then
+        -- Garante conexão ao canal global reservado somente se ainda não conectado (a cada 15s)
+        if channelTicker >= 15.0 then
             channelTicker = 0
-            self:ensureGlobalChannels()
+            if not self._channelNumber or self._channelNumber <= 0 then
+                self:ensureGlobalChannels()
+            end
         end
 
         -- Animação em tempo real para peer de teste se ativo

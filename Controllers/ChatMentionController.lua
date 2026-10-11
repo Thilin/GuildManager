@@ -162,6 +162,19 @@ function ChatMentionController:initHooks()
             return self:onGuildChatMessage(chatFrame, event, msg, author, ...)
         end)
     end
+
+    -- 5. Garante tempo de visibilidade adequado para as mensagens no chat (120s padrão Blizzard)
+    -- evitando que mensagens da guilda desapareçam em poucos segundos
+    local maxFrames = NUM_CHAT_WINDOWS or 10
+    for i = 1, maxFrames do
+        local cf = _G["ChatFrame" .. i]
+        if cf and cf.SetTimeVisible then
+            local currTime = cf.GetTimeVisible and cf:GetTimeVisible() or 0
+            if currTime and currTime < 60 then
+                pcall(cf.SetTimeVisible, cf, 120)
+            end
+        end
+    end
 end
 
 --- Verifica se o EditBox fornecido está atualmente configurado para o chat da guilda (/g, /guild).
