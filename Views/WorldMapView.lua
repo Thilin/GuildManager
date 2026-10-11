@@ -1,6 +1,8 @@
 ---@class WorldMapView
 ---@field private _frame table|nil
 ---@field private _mapButton table|nil
+---@field private _realtimeBadge table|nil
+---@field private _updateFrame table|nil
 ---@field private _panel table|nil
 ---@field private _pins table
 ---@field private _memberRows table
@@ -76,6 +78,180 @@ local CLASS_ICON_COORDS = {
     DEATHKNIGHT = { 0.25, 0.49609375, 0.5, 0.75 },
 }
 
+--- Cria vetor bidimensional compatível com todas as versões da API C_Map
+local function MakeVector2D(x, y)
+    if CreateVector2D then
+        return CreateVector2D(x, y)
+    elseif Vector2D_Create then
+        return Vector2D_Create(x, y)
+    end
+    local v = { x = x, y = y }
+    function v:GetXY() return self.x, self.y end
+    return v
+end
+
+--- Obtém o ID do mapa atual exibido no WorldMapFrame oficial da Blizzard
+local function GetCurrentWorldMapID()
+    if WorldMapFrame and WorldMapFrame.GetMapID then
+        local ok, id = pcall(WorldMapFrame.GetMapID, WorldMapFrame)
+        if ok and id and id > 0 then return id end
+    end
+    if WorldMapFrame and WorldMapFrame.mapID and WorldMapFrame.mapID > 0 then
+        return WorldMapFrame.mapID
+    end
+    if C_Map and C_Map.GetBestMapForUnit then
+        local ok, id = pcall(C_Map.GetBestMapForUnit, "player")
+        if ok and id and id > 0 then return id end
+    end
+    if GetCurrentMapAreaID then
+        local ok, id = pcall(GetCurrentMapAreaID)
+        if ok and id and id > 0 then return id end
+    end
+    return nil
+end
+
+--- Identifica se o mapa é um continente, mundo ou mapa global
+local function IsContinentOrWorld(mapID)
+    if not mapID then return false end
+    if mapID == 947 or mapID == 946 or mapID == 1414 or mapID == 1415 or mapID == 1945 or mapID == 113 then
+        return true
+    end
+    if C_Map and C_Map.GetMapInfo then
+        local ok, info = pcall(C_Map.GetMapInfo, mapID)
+        if ok and info and info.mapType ~= nil then
+            if info.mapType == 0 or info.mapType == 1 or info.mapType == 2 then
+                return true
+            end
+            if Enum and Enum.UIMapType then
+                if info.mapType == Enum.UIMapType.Continent or info.mapType == Enum.UIMapType.World or info.mapType == Enum.UIMapType.Cosmic then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+--- Verifica se o mapa de origem é uma subzona/micro-mapa dentro da zona visualizada
+local function IsChildOfViewZone(parentMapID, childMapID)
+    if not parentMapID or not childMapID or parentMapID == childMapID then return false end
+    if C_Map and C_Map.GetMapInfo then
+        local ok, info = pcall(C_Map.GetMapInfo, childMapID)
+        if ok and info and info.parentMapID == parentMapID then
+            return true
+        end
+    end
+    return false
+end
+
+--- Extrai a posição mundial a partir da posição no mapa de forma segura
+local function SafeGetWorldPos(sourceMapID, sourceX, sourceY)
+    if not (C_Map and C_Map.GetWorldPosFromMapPos) then return nil, nil end
+    local v = MakeVector2D(sourceX, sourceY)
+    local ok, r1, r2 = pcall(C_Map.GetWorldPosFromMapPos, sourceMapID, v)
+    if not ok or not r1 then return nil, nil end
+
+    if type(r1) == "number" and (type(r2) == "table" or type(r2) == "userdata") then
+        return r1, r2
+    elseif (type(r1) == "table" or type(r1) == "userdata") and type(r2) == "number" then
+        return r2, r1
+    elseif (type(r1) == "table" or type(r1) == "userdata") then
+        local cID = 0
+        if C_Map.GetMapInfo then
+            local info = C_Map.GetMapInfo(sourceMapID)
+            if info and info.parentMapID then cID = info.parentMapID end
+        end
+        return cID, r1
+    end
+    return nil, nil
+end
+
+--- Extrai as coordenadas (x, y) normalizadas no mapa alvo de forma universal
+local function SafeGetMapPos(continentID, worldPos, targetMapID)
+    if not (C_Map and C_Map.GetMapPosFromWorldPos) then return nil, nil end
+    local ok, r1, r2 = pcall(C_Map.GetMapPosFromWorldPos, continentID, worldPos, targetMapID)
+    if not ok or not r1 then return nil, nil end
+
+    if type(r1) == "number" and type(r2) == "number" then
+        return r1, r2
+    end
+    if type(r1) == "table" or type(r1) == "userdata" then
+        if r1.GetXY then
+            local okXY, x, y = pcall(r1.GetXY, r1)
+            if okXY and type(x) == "number" and type(y) == "number" then
+                return x, y
+            end
+        end
+        if type(r1.x) == "number" and type(r1.y) == "number" then
+            return r1.x, r1.y
+        end
+    end
+    return nil, nil
+end
+
+--- Traduz coordenadas entre zonas, continentes e subzonas no mapa oficial da Blizzard
+---@param sourceMapID number
+---@param sourceX number
+---@param sourceY number
+---@param viewMapID number
+---@return number|nil renderX, number|nil renderY
+local function TranslateCoordsToViewMap(sourceMapID, sourceX, sourceY, viewMapID)
+    if not sourceMapID or not viewMapID or not sourceX or not sourceY then return nil, nil end
+
+    -- Caso 1: Mesma zona exata
+    if sourceMapID == viewMapID then
+        return sourceX, sourceY
+    end
+
+    -- Caso 2: O mapa visualizado é um CONTINENTE ou MUNDO (ex: Kalimdor, Reinos do Leste)
+    if IsContinentOrWorld(viewMapID) then
+        local continentID, worldPos = SafeGetWorldPos(sourceMapID, sourceX, sourceY)
+        if not continentID or not worldPos then return nil, nil end
+
+        local mx, my = SafeGetMapPos(continentID, worldPos, viewMapID)
+        if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
+            return mx, my
+        end
+        return nil, nil
+    end
+
+    -- Caso 3: O jogador remoto está em uma micro-zona/caverna cujo mapa-mãe é a zona visualizada
+    if IsChildOfViewZone(viewMapID, sourceMapID) then
+        local continentID, worldPos = SafeGetWorldPos(sourceMapID, sourceX, sourceY)
+        if continentID and worldPos then
+            local mx, my = SafeGetMapPos(continentID, worldPos, viewMapID)
+            if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
+                return mx, my
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+--- Aplica a textura do ícone oficial circular da classe no pino
+local function ApplyClassIcon(texture, classFile)
+    classFile = classFile or "WARRIOR"
+    local coords = CLASS_ICON_COORDS[classFile]
+
+    local ok = pcall(function()
+        texture:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+        if coords then
+            texture:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        end
+    end)
+
+    if not ok or not texture:GetTexture() then
+        texture:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+        if coords then
+            local l, r, t, b = coords[1], coords[2], coords[3], coords[4]
+            local dx = (r - l) * 0.05
+            local dy = (b - t) * 0.05
+            texture:SetTexCoord(l + dx, r - dx, t + dy, b - dy)
+        end
+    end
+end
+
 --- Construtor da View do Mapa Mundi.
 ---@return WorldMapView
 function WorldMapView:new()
@@ -90,26 +266,51 @@ function WorldMapView:new()
     instance._isPanelOpen = true
     instance._isContinentView = false
     instance._isWorldView = false
+    instance._realtimeBadge = nil
+    instance._updateFrame = nil
 
     return instance
 end
 
---- Obtém a camada onde os pinos de mapa devem ser desenhados (canvas do WorldMapFrame).
---- Suporta WoW Classic Era 1.15 (MapCanvasFrame) e versões clássicas/legadas.
----@return table|nil
+--- Retorna o canvas oficial do WorldMapFrame da Blizzard e suas dimensões garantidas
+---@return table|nil canvas, number cw, number ch
 function WorldMapView:getMapCanvas()
-    if WorldMapFrame then
-        if WorldMapFrame.GetCanvas then
-            local canvas = WorldMapFrame:GetCanvas()
-            if canvas then return canvas end
-        end
-        if WorldMapFrame.ScrollContainer and WorldMapFrame.ScrollContainer.Child then
-            return WorldMapFrame.ScrollContainer.Child
+    if not WorldMapFrame then return nil, 1002, 668 end
+
+    local canvas = nil
+    if WorldMapFrame.GetCanvas then
+        local ok, c = pcall(WorldMapFrame.GetCanvas, WorldMapFrame)
+        if ok and c then canvas = c end
+    end
+
+    if not canvas and WorldMapFrame.ScrollContainer and WorldMapFrame.ScrollContainer.Child then
+        canvas = WorldMapFrame.ScrollContainer.Child
+    end
+
+    if not canvas and WorldMapFrame.ScrollContainer then
+        canvas = WorldMapFrame.ScrollContainer
+    end
+
+    if not canvas and WorldMapButton then canvas = WorldMapButton end
+    if not canvas and WorldMapDetailFrame then canvas = WorldMapDetailFrame end
+    if not canvas then canvas = WorldMapFrame end
+
+    local cw = canvas:GetWidth() or 0
+    local ch = canvas:GetHeight() or 0
+
+    if cw <= 10 or ch <= 10 then
+        if WorldMapFrame.ScrollContainer then
+            cw = WorldMapFrame.ScrollContainer:GetWidth() or 0
+            ch = WorldMapFrame.ScrollContainer:GetHeight() or 0
         end
     end
-    if WorldMapButton then return WorldMapButton end
-    if WorldMapDetailFrame then return WorldMapDetailFrame end
-    return WorldMapFrame
+
+    if cw <= 10 or ch <= 10 then
+        cw = WorldMapFrame:GetWidth() or 1002
+        ch = WorldMapFrame:GetHeight() or 668
+    end
+
+    return canvas, cw, ch
 end
 
 --- Ajusta a ancoragem do botão da guilda no canto superior direito do WorldMapFrame.
@@ -148,9 +349,285 @@ function WorldMapView:reanchorMapButton()
     end
 end
 
+--- Cria ou obtém um pino persistente diretamente no canvas para o jogador remoto
+---@param name string
+---@param canvas table
+---@return table
+function WorldMapView:getOrCreateNamedPin(name, canvas)
+    if not self._pins then self._pins = {} end
+    local pin = self._pins[name]
+    if pin then
+        if pin:GetParent() ~= canvas then
+            pin:SetParent(canvas)
+        end
+        return pin
+    end
+
+    pin = CreateFrame("Button", "GM_RealtimePin_" .. name, canvas)
+    pin:SetSize(26, 26)
+    pin:SetFrameStrata("HIGH")
+    pin:SetFrameLevel(2500)
+    pin:EnableMouse(true)
+
+    -- Glow/Halo pulsante com a cor da classe
+    local glow = pin:CreateTexture(nil, "BACKGROUND", nil, -1)
+    glow:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    glow:SetSize(34, 34)
+    glow:SetPoint("CENTER", pin, "CENTER", 0, 0)
+    glow:SetBlendMode("ADD")
+    pin.glow = glow
+
+    -- Seta direcional GPS atrás do ícone (aponta o rumo exato da bússola)
+    local arrow = pin:CreateTexture(nil, "BORDER", nil, 1)
+    arrow:SetTexture("Interface\\Minimap\\MinimapArrow")
+    arrow:SetSize(30, 30)
+    arrow:SetPoint("CENTER", pin, "CENTER", 0, 0)
+    pin.arrow = arrow
+
+    -- Ícone oficial circular da classe no centro
+    local classIcon = pin:CreateTexture(nil, "ARTWORK", nil, 2)
+    classIcon:SetSize(22, 22)
+    classIcon:SetPoint("CENTER", pin, "CENTER", 0, 0)
+    pin.classIcon = classIcon
+
+    -- Anel / Borda circular metálica ao redor do ícone
+    local border = pin:CreateTexture(nil, "OVERLAY", nil, 3)
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    border:SetSize(46, 46)
+    border:SetPoint("CENTER", pin, "CENTER", 10, -10)
+    pin.border = border
+
+    -- Nome do jogador com sombra forte acima do pino
+    local label = pin:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("BOTTOM", pin, "TOP", 0, 5)
+    label:SetJustifyH("CENTER")
+    label:SetShadowOffset(1, -1)
+    label:SetShadowColor(0, 0, 0, 1)
+    pin.label = label
+
+    pin:SetScript("OnEnter", function(p)
+        if not p.peerData then return end
+        local d = p.peerData
+        local cls = (d.classFile or d.class or "WARRIOR"):upper()
+        local c = CLASS_COLORS[cls] or { r = 0.2, g = 0.8, b = 1.0, hex = "|cffffffff" }
+
+        GameTooltip:SetOwner(p, "ANCHOR_RIGHT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(string.format("%s%s|r", c.hex, d.name), 1, 1, 1)
+
+        if d.guild and d.guild ~= "" then
+            GameTooltip:AddLine(string.format("|cff20ff20<%s>|r", d.guild), 0.2, 1, 0.2)
+        end
+
+        GameTooltip:AddDoubleLine("Nível & Classe:", string.format("|cffffffff%d %s %s|r", d.level or 1, d.race or "", cls), 1, 0.82, 0, 1, 1, 1)
+        GameTooltip:AddDoubleLine("Região:", string.format("|cffffd200%s|r (%.1f, %.1f)", d.zoneName or "Azeroth", (d.x or 0) * 100, (d.y or 0) * 100), 1, 0.82, 0, 1, 1, 1)
+
+        local now = GetTime and GetTime() or 0
+        local diff = math.max(0, math.floor(now - (d.lastSeen or now)))
+        local seenStr = (diff < 3) and "|cff20ff20Ao vivo|r" or string.format("Há %d s", diff)
+        GameTooltip:AddDoubleLine("Sinal do AddOn:", seenStr, 0.7, 0.7, 0.7, 1, 1, 1)
+
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("|cffaaaaaaClique com o botão esquerdo para sussurrar|r", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("|cff00ff00GuildManager • Sincronização em Tempo Real|r", 0.5, 0.5, 0.5)
+        GameTooltip:Show()
+    end)
+
+    pin:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    pin:SetScript("OnClick", function(p, btn)
+        if (btn == "LeftButton" or not btn) and p.peerData and p.peerData.name then
+            if ChatFrame_OpenChat then
+                ChatFrame_OpenChat("/w " .. p.peerData.name .. " ")
+            end
+        end
+    end)
+
+    self._pins[name] = pin
+    return pin
+end
+
+--- Garante e atualiza o badge de membros online no topo do WorldMapFrame oficial
+function WorldMapView:ensureRealtimeBadge()
+    if self._realtimeBadge or not WorldMapFrame then return end
+
+    local badgeBtn = CreateFrame("Button", "GM_WorldMapPeerBadge", WorldMapFrame, "UIPanelButtonTemplate")
+    badgeBtn:SetSize(140, 22)
+    badgeBtn:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -180, -2)
+    badgeBtn:SetFrameStrata("HIGH")
+    badgeBtn:SetFrameLevel(3000)
+    badgeBtn:SetText("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Membros (0)|r")
+
+    badgeBtn:SetScript("OnClick", function()
+        local locService = _G.GM and _G.GM.locationService
+        local peers = locService and locService:getPeers() or {}
+        local peerList = {}
+        for _, p in pairs(peers) do
+            table.insert(peerList, p)
+        end
+
+        if #peerList == 1 and peerList[1].mapID and WorldMapFrame and WorldMapFrame.SetMapID then
+            local targetMapID = peerList[1].mapID
+            local currentMapID = GetCurrentWorldMapID()
+            if targetMapID ~= currentMapID then
+                WorldMapFrame:SetMapID(targetMapID)
+                return
+            end
+        end
+
+        self:togglePanel()
+    end)
+
+    badgeBtn:SetScript("OnEnter", function(btn)
+        local locService = _G.GM and _G.GM.locationService
+        local peers = locService and locService:getPeers() or {}
+        local viewMapID = GetCurrentWorldMapID()
+
+        GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine("|TInterface\\Icons\\INV_Misc_GroupNeedMore:16:16:0:0|t |cffffd200Membros com GuildManager|r", 1, 1, 1)
+        GameTooltip:AddLine("|cff888888Posições sincronizadas em tempo real:|r", 0.7, 0.7, 0.7)
+
+        local hasAny = false
+        for name, p in pairs(peers) do
+            if not (locService and locService.isSelf and locService:isSelf(p.name)) then
+                hasAny = true
+                local cls = (p.classFile or p.class or "WARRIOR"):upper()
+                local c = CLASS_COLORS[cls] or { hex = "|cffffffff" }
+                local isHere = (p.mapID == viewMapID)
+                local statusStr = isHere and "|cff20ff20Nesta Zona|r" or string.format("|cffffd200%s|r", p.zoneName or "Azeroth")
+
+                GameTooltip:AddDoubleLine(
+                    string.format("%s%s|r (Nv %d %s)", c.hex, p.name, p.level or 1, p.race or ""),
+                    string.format("%s (%.1f, %.1f)", statusStr, (p.x or 0) * 100, (p.y or 0) * 100),
+                    1, 1, 1, 1, 1, 1
+                )
+            end
+        end
+
+        if not hasAny then
+            GameTooltip:AddLine("|cffaaaaaaNenhum outro membro conectado no momento.|r", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine("|cff55ff55Dica: Use /gmloc test para simular um membro no mapa!|r", 0.3, 0.9, 0.3)
+        else
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("|cff00ff00Clique para abrir a zona do membro ou painel lateral|r", 0.2, 0.8, 0.2)
+        end
+
+        GameTooltip:Show()
+    end)
+
+    badgeBtn:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
+    self._realtimeBadge = badgeBtn
+end
+
+--- Atualiza o texto do badge superior com a contagem ao vivo
+function WorldMapView:updateRealtimeBadge()
+    self:ensureRealtimeBadge()
+    if not self._realtimeBadge then return end
+
+    local locService = _G.GM and _G.GM.locationService
+    local count = locService and locService:getPeerCount() or 0
+    if count > 0 then
+        self._realtimeBadge:SetText(string.format("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cff20ff20Membros (%d)|r", count))
+    else
+        self._realtimeBadge:SetText("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Membros (0)|r")
+    end
+end
+
+--- Atualiza a renderização contínua de todos os pinos de jogadores remotos no mapa oficial da Blizzard
+function WorldMapView:updateRealtimePins()
+    if not WorldMapFrame or not WorldMapFrame:IsShown() then return end
+
+    local locService = _G.GM and _G.GM.locationService
+    if not locService then return end
+
+    local canvas, cw, ch = self:getMapCanvas()
+    if not canvas or cw <= 10 or ch <= 10 then return end
+
+    local viewMapID = GetCurrentWorldMapID()
+    if not viewMapID then return end
+
+    local peers = locService:getPeers() or {}
+
+    for name, peer in pairs(peers) do
+        if not (locService and locService.isSelf and locService:isSelf(peer.name)) then
+            local rx, ry = TranslateCoordsToViewMap(peer.mapID, peer.x, peer.y, viewMapID)
+            local pin = self:getOrCreateNamedPin(name, canvas)
+            pin.peerData = peer
+
+            if rx and ry then
+                pin:ClearAllPoints()
+                pin:SetPoint("CENTER", canvas, "TOPLEFT", rx * cw, -ry * ch)
+
+                local cls = (peer.classFile or peer.class or "WARRIOR"):upper()
+                local c = CLASS_COLORS[cls] or { r = 0.2, g = 0.8, b = 1.0, hex = "|cffffffff" }
+
+                pin.arrow:SetVertexColor(c.r or 1, c.g or 1, c.b or 1, 0.95)
+                pin.glow:SetVertexColor(c.r or 1, c.g or 1, c.b or 1, 0.75)
+
+                ApplyClassIcon(pin.classIcon, cls)
+
+                if pin.arrow.SetRotation then
+                    pcall(pin.arrow.SetRotation, pin.arrow, peer.facing or 0)
+                end
+
+                pin.label:SetText(string.format("%s%s|r", c.hex or "|cffffffff", peer.name))
+                pin:Show()
+            else
+                pin:Hide()
+            end
+        end
+    end
+
+    -- Esconde pinos de jogadores que não estão mais conectados
+    if self._pins then
+        for name, pin in pairs(self._pins) do
+            if not peers[name] then
+                pin:Hide()
+            end
+        end
+    end
+
+    self:updateRealtimeBadge()
+end
+
+--- Cria frame filho de atualização contínua a 20 FPS (0.05s) para renderização ultra-suave
+function WorldMapView:initUpdateFrame()
+    if self._updateFrame or not WorldMapFrame then return end
+
+    local updateFrame = CreateFrame("Frame", "GM_WorldMapUpdateFrame", WorldMapFrame)
+    updateFrame:SetAllPoints(WorldMapFrame)
+    updateFrame:Show()
+
+    updateFrame:SetScript("OnShow", function()
+        self:updateRealtimePins()
+    end)
+
+    local ticker = 0
+    updateFrame:SetScript("OnUpdate", function(_, elapsed)
+        ticker = ticker + elapsed
+        if ticker >= 0.05 then
+            ticker = 0
+            self:updateRealtimePins()
+        end
+    end)
+
+    self._updateFrame = updateFrame
+end
+
 --- Inicializa os componentes visuais vinculados à tela nativa de mapa (WorldMapFrame).
 function WorldMapView:initWorldMapUI()
-    if self._mapButton or not WorldMapFrame then
+    if not WorldMapFrame then return end
+
+    self:initUpdateFrame()
+    self:ensureRealtimeBadge()
+
+    if self._mapButton then
         return
     end
 
@@ -213,6 +690,20 @@ function WorldMapView:initWorldMapUI()
         GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMRIGHT")
         GameTooltip:AddLine("|cffffd200GuildManager - Membros na Região|r")
         GameTooltip:AddLine("Exibe a lista de membros da guilda presentes nesta região do mapa.", 1, 1, 1, true)
+
+        local locService = _G.GM and _G.GM.locationService
+        local addonUsers = locService and locService:getGuildAddonUsers() or {}
+        if #addonUsers > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(string.format("|cff00ff00Membros com o AddOn Ativo (%d):|r", #addonUsers), 1, 1, 1)
+            for _, u in ipairs(addonUsers) do
+                local clsHex = (CLASS_COLORS and CLASS_COLORS[u.class] and CLASS_COLORS[u.class].hex) or "|cffffffff"
+                local selfTag = u.isSelf and " |cff00ff00(Você)|r" or ""
+                local zoneStr = (u.zone and u.zone ~= "") and (" - |cff00e5ff" .. u.zone .. "|r") or ""
+                GameTooltip:AddLine(string.format("  • %s%s|r%s (Lvl %d)%s", clsHex, u.name, selfTag, u.level or 1, zoneStr), 1, 1, 1)
+            end
+        end
+
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("|cff00ff00Clique para abrir/fechar o painel lateral e ver a lista completa.|r", 0.8, 0.8, 0.8)
         GameTooltip:Show()
@@ -463,7 +954,6 @@ function WorldMapView:adjustPanelPosition()
     local mapRight = WorldMapFrame:GetRight() or 0
     local screenWidth = GetScreenWidth() or 1920
 
-    -- Se houver espaço à direita do WorldMapFrame, acopla externamente; caso contrário, acopla por dentro.
     if (mapRight + 275) <= screenWidth then
         panel:SetPoint("TOPLEFT", WorldMapFrame, "TOPRIGHT", 2, 0)
         panel:SetPoint("BOTTOMLEFT", WorldMapFrame, "BOTTOMRIGHT", 2, 0)
@@ -519,7 +1009,6 @@ function WorldMapView:showPanel()
         self._onScanCallback()
     else
         self:refreshVisibleRows()
-        self:plotMemberPins()
     end
 end
 
@@ -579,16 +1068,8 @@ function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
 
     self:updateButton(#self._membersData, isContinent, isWorld)
 
-    -- Plota os pinos no mapa se habilitado nas opções
-    local showPins = true
-    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showMapPins") == false then
-        showPins = false
-    end
-    if showPins then
-        self:plotMemberPins()
-    else
-        self:clearPins()
-    end
+    -- Atualiza os pinos em tempo real no mapa
+    self:updateRealtimePins()
 
     -- Atualiza as linhas da lista lateral se o painel estiver aberto
     if self._isPanelOpen then
@@ -665,26 +1146,17 @@ end
 --- Limpa e desativa todos os pinos de membros no mapa nativo.
 function WorldMapView:clearPins()
     if self._pins then
-        for _, pin in ipairs(self._pins) do
+        for _, pin in pairs(self._pins) do
             pin:Hide()
             pin:ClearAllPoints()
-            pin.memberData = nil
-        end
-    end
-    -- Oculta e limpa quaisquer botões de pino criados em sessões anteriores
-    for i = 1, 100 do
-        local globalPin = _G["GM_MapPin_" .. i]
-        if globalPin then
-            globalPin:Hide()
-            globalPin:ClearAllPoints()
-            globalPin.memberData = nil
+            pin.peerData = nil
         end
     end
 end
 
---- Os pinos no mapa estão desativados: apenas mantém os pinos limpos.
+--- Mantém os pinos atualizados ou limpos conforme o estado.
 function WorldMapView:plotMemberPins()
-    self:clearPins()
+    self:updateRealtimePins()
 end
 
 --- Define o callback acionado quando o usuário clica em "Escanear Mapa".

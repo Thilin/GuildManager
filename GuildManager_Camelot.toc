@@ -24,6 +24,7 @@ Services/GuildRosterService.lua
 Services/GroupService.lua
 Services/EventService.lua
 Services/SettingsService.lua
+Services/LocationService.lua
 
 Views/MemberView.lua
 Views/LogView.lua

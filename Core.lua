@@ -41,8 +41,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local settingsView = SettingsView:new()
         local settingsController = SettingsController:new(settingsService, settingsView, memberService, guildRosterService, logService, minimapButton)
 
+        local locationService = LocationService:new(memberService)
         local worldMapView = WorldMapView:new()
-        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView)
+        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
 
         local chatMentionView = ChatMentionView:new()
         local chatMentionController = ChatMentionController:new(memberService, guildRosterService, chatMentionView)
@@ -71,11 +72,13 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.settingsView = settingsView
         GM.settingsController = settingsController
         GM.minimapButton = minimapButton
+        GM.locationService = locationService
         GM.worldMapView = worldMapView
         GM.worldMapController = worldMapController
         GM.chatMentionView = chatMentionView
         GM.chatMentionController = chatMentionController
 
+        locationService:initHooks()
         memberController:initHooks()
         logController:initHooks()
         auditController:initHooks()
@@ -85,11 +88,24 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         worldMapController:initHooks()
         chatMentionController:initHooks()
 
+        SLASH_GUILDMANAGER_LOC1 = "/gmloc"
+        SlashCmdList["GUILDMANAGER_LOC"] = function(msg)
+            local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
+            if arg == "test" or arg == "peer" then
+                if locationService then
+                    locationService:toggleTestPeer()
+                end
+            else
+                local count = locationService and locationService:getPeerCount() or 0
+                print(string.format("|cff00ff00[GuildManager]|r Posições em tempo real ativas. Membros conectados: |cffffff00%d|r. Digite |cffffff00/gmloc test|r para alternar um membro simulado.", count))
+            end
+        end
+
         if logRepository.cleanDuplicateKickAndLeaveLogs then
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r ou |cffffff00/gmconfig|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r ou |cffffff00/gmconfig|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

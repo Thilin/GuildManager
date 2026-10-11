@@ -238,6 +238,11 @@ function MemberController:initHooks()
                 _G.GM.settingsController:toggle()
                 return
             end
+        elseif arg == "testpeer" or arg == "test" or arg == "loc" then
+            if _G.GM and _G.GM.locationService then
+                _G.GM.locationService:toggleTestPeer()
+                return
+            end
         end
 
         if IsInGuild and IsInGuild() then

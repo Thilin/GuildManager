@@ -2,6 +2,7 @@
 ---@field private _memberService MemberService
 ---@field private _guildRosterService GuildRosterService
 ---@field private _worldMapView WorldMapView
+---@field private _locationService LocationService|nil
 ---@field private _lastMapID number|nil
 ---@field private _updateTicker table|nil
 ---@field private _eventFrame table|nil
@@ -12,12 +13,14 @@ WorldMapController.__index = WorldMapController
 ---@param memberService MemberService @Serviço de gerenciamento de membros
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
 ---@param worldMapView WorldMapView @Camada de visualização no mapa nativo
+---@param locationService LocationService|nil @Serviço de geolocalização em tempo real
 ---@return WorldMapController
-function WorldMapController:new(memberService, guildRosterService, worldMapView)
+function WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
     local instance = setmetatable({}, self)
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService
     instance._worldMapView = worldMapView
+    instance._locationService = locationService
     instance._lastMapID = nil
     instance._updateTicker = nil
     instance._eventFrame = nil
@@ -350,9 +353,19 @@ function WorldMapController:initHooks()
         end
     end)
 
+    -- Registra listener do LocationService para atualizar pinos imediatamente ao receber dados
+    if self._locationService and self._locationService.registerListener then
+        self._locationService:registerListener(function()
+            if WorldMapFrame and WorldMapFrame:IsShown() and self._worldMapView then
+                self._worldMapView:updateRealtimePins()
+            end
+        end)
+    end
+
     -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel e varre os membros da região
     WorldMapFrame:HookScript("OnShow", function()
         self._worldMapView:initWorldMapUI()
+        self._worldMapView:updateRealtimePins()
 
         local showBtn = true
         local autoScan = true
@@ -381,11 +394,24 @@ function WorldMapController:initHooks()
                 C_Timer.After(0.1, function()
                     if WorldMapFrame and WorldMapFrame:IsShown() then
                         self:scanCurrentZone()
+                        self._worldMapView:updateRealtimePins()
                     end
                 end)
             end
         end
     end)
+
+    -- Hook nas mudanças de mapa oficial para reposicionamento instantâneo
+    if WorldMapFrame.OnMapChanged then
+        pcall(hooksecurefunc, WorldMapFrame, "OnMapChanged", function()
+            if self._worldMapView then self._worldMapView:updateRealtimePins() end
+        end)
+    end
+    if WorldMapFrame.SetMapID then
+        pcall(hooksecurefunc, WorldMapFrame, "SetMapID", function()
+            if self._worldMapView then self._worldMapView:updateRealtimePins() end
+        end)
+    end
 
     -- Hook do WorldMapFrame OnHide: interrompe atualizações periódicas e garante limpeza de pinos
     WorldMapFrame:HookScript("OnHide", function()
@@ -405,6 +431,7 @@ function WorldMapController:initHooks()
     eventFrame:SetScript("OnEvent", function(_, event)
         if WorldMapFrame and WorldMapFrame:IsShown() then
             self:scanCurrentZone()
+            self._worldMapView:updateRealtimePins()
         end
     end)
 
@@ -414,6 +441,7 @@ function WorldMapController:initHooks()
     if WorldMapFrame:IsShown() then
         self._worldMapView:initWorldMapUI()
         self._worldMapView:showPanel()
+        self._worldMapView:updateRealtimePins()
         self:scanCurrentZone()
     end
 end
