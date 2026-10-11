@@ -727,10 +727,6 @@ function LogService:logMemberLeveled(member, newLevel, oldLevel, timestamp, date
 
     self._repository:save(newLog)
 
-    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.notifyMemberLevelUp ~= false then
-        print(string.format("|cff00ff00[GuildManager]|r 🌟 |cffffff00%s|r subiu para o nível |cff00ff00%d|r! Parabéns!", memberName, targetLevel))
-    end
-
     return newLog, true
 end
 

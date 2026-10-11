@@ -37,6 +37,19 @@ function AgendaController:initHooks()
     -- Callback de criação de evento
     if self._agendaView.setOnCreateEventCallback then
         self._agendaView:setOnCreateEventCallback(function(title, eventType, dateStr, timeStr, desc)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                return false, "Apenas Oficiais ou o Líder da Guilda têm permissão para criar eventos da agenda."
+            end
+
             if not self._eventService then return false, "Serviço de agenda indisponível." end
             local event, err = self._eventService:createEvent(title, eventType, dateStr, timeStr, desc)
             if event then
@@ -50,6 +63,19 @@ function AgendaController:initHooks()
     -- Callback de atualização de evento
     if self._agendaView.setOnUpdateEventCallback then
         self._agendaView:setOnUpdateEventCallback(function(id, title, eventType, dateStr, timeStr, desc)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                return false, "Apenas Oficiais ou o Líder da Guilda têm permissão para editar eventos da agenda."
+            end
+
             if not self._eventService then return false, "Serviço de agenda indisponível." end
             local event, err = self._eventService:updateEvent(id, title, eventType, dateStr, timeStr, desc)
             if event then
@@ -63,6 +89,20 @@ function AgendaController:initHooks()
     -- Callback de exclusão de evento
     if self._agendaView.setOnDeleteEventCallback then
         self._agendaView:setOnDeleteEventCallback(function(id)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir eventos da agenda.")
+                return false
+            end
+
             if not self._eventService then return false end
             local ok = self._eventService:deleteEvent(id)
             if ok then
@@ -116,6 +156,20 @@ function AgendaController:initHooks()
     -- Callback de agendar aniversário a partir do card de aniversariantes
     if self._agendaView.setOnCreateBirthdayEventCallback then
         self._agendaView:setOnCreateBirthdayEventCallback(function(member)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos de aniversário na agenda.")
+                return
+            end
+
             if not self._eventService then return end
             local event, err = self._eventService:createBirthdayEventForMember(member)
             if event then
@@ -223,6 +277,10 @@ function AgendaController:refreshAgenda()
     end
     if self._agendaView.setGuildMembers then
         self._agendaView:setGuildMembers(guildMembers)
+    end
+
+    if self._agendaView.updatePermissions then
+        self._agendaView:updatePermissions()
     end
 end
 

@@ -1066,3 +1066,16 @@ function MemberService:unlinkMemberOnGuildLeave(memberName)
     return hadAlts or modifiedOther
 end
 
+--- Verifica se o jogador local possui cargo de Oficial ou Líder da Guilda.
+---@return boolean
+function MemberService:isPlayerOfficerOrLeader()
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        return _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    end
+    if IsInGuild and not IsInGuild() then return false end
+    if IsGuildLeader and IsGuildLeader() then return true end
+    if CanEditOfficerNote and CanEditOfficerNote() then return true end
+    if C_GuildInfo and C_GuildInfo.CanEditOfficerNote and C_GuildInfo.CanEditOfficerNote() then return true end
+    return false
+end
+

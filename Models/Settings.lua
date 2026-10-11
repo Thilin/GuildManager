@@ -40,7 +40,7 @@ local DEFAULTS = {
     autoAssignGroupRole = true,       -- Sugerir função automaticamente baseado na classe do jogador
 
     -- Auditoria & Alertas
-    notifyMemberLevelUp = true,       -- Avisar no chat local quando um membro subir de nível
+    notifyMemberLevelUp = false,      -- Avisar no chat local quando um membro subir de nível (desativado por padrão)
     logRejoin = true,                 -- Registrar logs de retorno à guilda (membros que já saíram)
 }
 
@@ -100,7 +100,7 @@ function GMSettings:isShowMapPins() return self._showMapPins ~= false end
 function GMSettings:isHighlightSelfOnMap() return self._highlightSelfOnMap ~= false end
 
 function GMSettings:isAutoAssignGroupRole() return self._autoAssignGroupRole ~= false end
-function GMSettings:isNotifyMemberLevelUp() return self._notifyMemberLevelUp ~= false end
+function GMSettings:isNotifyMemberLevelUp() return self._notifyMemberLevelUp == true end
 function GMSettings:isLogRejoin() return self._logRejoin ~= false end
 
 -- Setters

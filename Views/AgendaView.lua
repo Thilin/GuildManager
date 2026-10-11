@@ -251,6 +251,7 @@ end
 
 function AgendaView:show()
     if self._frame then
+        self:updatePermissions()
         self._frame:Show()
     end
 end
@@ -258,6 +259,27 @@ end
 function AgendaView:hide()
     if self._frame then
         self._frame:Hide()
+    end
+end
+
+--- Atualiza a permissão visual do botão de criação de eventos conforme o cargo do jogador.
+function AgendaView:updatePermissions()
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    if self._newEventBtn then
+        self._newEventBtn:EnableMouse(true)
+        if canOfficer then
+            self._newEventBtn:SetAlpha(1.0)
+        else
+            self._newEventBtn:SetAlpha(0.55)
+        end
     end
 end
 
@@ -668,9 +690,47 @@ function AgendaView:createLeftPanel()
     newEventBtn:SetSize(126, 22)
     newEventBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
     newEventBtn:SetText("+ Novo Evento")
+    newEventBtn:SetScript("OnEnter", function(btn)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Novo Evento da Guilda|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar eventos.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para criar um novo evento na agenda.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    newEventBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     newEventBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
+            return
+        end
         self:openEventModal(nil)
     end)
+    self._newEventBtn = newEventBtn
 
     -- Barra de ferramentas com Filtros por tipo e Caixa de Busca
     local toolbar = CreateFrame("Frame", nil, leftPanel, template)
@@ -1013,15 +1073,68 @@ function AgendaView:renderEvents()
 
         local currentEventId = ev:getId()
 
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        card.editBtn:EnableMouse(true)
+        card.deleteBtn:EnableMouse(true)
+        if canOfficer then
+            card.editBtn:SetAlpha(1.0)
+            card.deleteBtn:SetAlpha(1.0)
+        else
+            card.editBtn:SetAlpha(0.55)
+            card.deleteBtn:SetAlpha(0.55)
+        end
+
+        card.editBtn:SetScript("OnEnter", function(btn)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Editar Evento|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar eventos.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para editar este evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end)
+        card.editBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+        card.deleteBtn:SetScript("OnEnter", function(btn)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Excluir Evento|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem excluir eventos.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para excluir este evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end)
+        card.deleteBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
         card.inviteBtn:SetScript("OnClick", function()
             self:openInviteeModal(ev)
         end)
 
         card.editBtn:SetScript("OnClick", function()
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem editar eventos da agenda.")
+                return
+            end
             self:openEventModal(ev)
         end)
 
         card.deleteBtn:SetScript("OnClick", function()
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir eventos da agenda.")
+                return
+            end
             local confirm = true
             if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("confirmEventDelete") == false then
                 confirm = false
@@ -1146,7 +1259,40 @@ function AgendaView:renderBirthdays()
         card.detailText:SetText(string.format("|cffffd200Data: %s|r%s", item.birthday or "--/--", rk))
         card.countdownText:SetText(item.daysText or "")
 
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        card.scheduleBtn:EnableMouse(true)
+        if canOfficer then
+            card.scheduleBtn:SetAlpha(1.0)
+        else
+            card.scheduleBtn:SetAlpha(0.55)
+        end
+
+        card.scheduleBtn:SetScript("OnEnter", function(btn)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Agendar Comemoração|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem agendar comemorações de aniversário.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para criar um evento na agenda para este aniversário.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end)
+        card.scheduleBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
         card.scheduleBtn:SetScript("OnClick", function()
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
+                return
+            end
             if self._onCreateBirthdayEventCallback and item.member then
                 self._onCreateBirthdayEventCallback(item.member)
             else
@@ -1380,7 +1526,45 @@ function AgendaView:createEventModal()
     saveBtn:SetText("Salvar Evento")
     modal.saveBtn = saveBtn
 
+    saveBtn:SetScript("OnEnter", function(btn)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Salvar Evento|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar ou salvar eventos.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para confirmar e salvar o evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    saveBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
     saveBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            errText:SetText("Apenas Oficiais ou o Líder da Guilda podem salvar eventos.")
+            return
+        end
         local tVal = titleEB:GetText() or ""
         local dVal = dateEB:GetText() or ""
         local hVal = timeEB:GetText() or "20:00"
@@ -1428,6 +1612,20 @@ end
 ---@param event Event|nil
 ---@param prefill table|nil
 function AgendaView:openEventModal(event, prefill)
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    if not canOfficer then
+        print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar ou gerenciar eventos da agenda.")
+        return
+    end
+
     if not self._eventModal then return end
     local modal = self._eventModal
 

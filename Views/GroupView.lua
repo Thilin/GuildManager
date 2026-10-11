@@ -68,6 +68,7 @@ function GroupView:new()
     instance._columns = {}
     instance._groups = {}
     instance._guildMembers = {}
+    instance._createButtons = {}
     instance._currentDetailGroupId = nil
 
     -- Callbacks
@@ -790,9 +791,47 @@ function GroupView:createThreeColumns()
         createBtn:SetSize(62, 22)
         createBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
         createBtn:SetText("+ Criar")
+        createBtn:SetScript("OnEnter", function(btn)
+            local canOfficer = false
+            if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if GameTooltip then
+                GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+                GameTooltip:AddLine(string.format("|cffffd200Criar Grupo (%s)|r", def.title), 1, 1, 1)
+                if not canOfficer then
+                    GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar grupos.|r", 1, 0.3, 0.3, true)
+                else
+                    GameTooltip:AddLine("|cff00ff00Clique para criar um novo grupo.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+                end
+                GameTooltip:Show()
+            end
+        end)
+        createBtn:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
         createBtn:SetScript("OnClick", function()
+            local canOfficer = false
+            if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos.")
+                return
+            end
             self:openCreateModal(def.type)
         end)
+        table.insert(self._createButtons, createBtn)
 
         -- ScrollFrame para os cards de grupos
         local scrollFrame = CreateFrame("ScrollFrame", "GM_GroupScroll_" .. def.type, col, "UIPanelScrollFrameTemplate")
@@ -1222,7 +1261,45 @@ function GroupView:createModals()
     delGroupBtn:SetSize(120, 24)
     delGroupBtn:SetPoint("LEFT", inviteAllBtn, "RIGHT", 10, 0)
     delGroupBtn:SetText("Excluir Grupo")
+    delGroupBtn:SetScript("OnEnter", function(btn)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Excluir Grupo|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem excluir grupos.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para excluir este grupo da guilda.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    delGroupBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     delGroupBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir grupos.")
+            return
+        end
+
         if detailModal.currentGroup and self._onDeleteGroupCallback then
             local gId = detailModal.currentGroup:getId()
             local gName = detailModal.currentGroup:getName() or "este grupo"
@@ -1251,6 +1328,7 @@ function GroupView:createModals()
             end
         end
     end)
+    detailModal.delGroupBtn = delGroupBtn
 
     local closeDetailBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
     closeDetailBtn:SetSize(100, 24)
@@ -1445,7 +1523,44 @@ function GroupView:createModals()
     cSaveBtn:SetSize(130, 24)
     cSaveBtn:SetPoint("BOTTOMRIGHT", createModal, "BOTTOMRIGHT", -16, 16)
     cSaveBtn:SetText("Criar Grupo")
+    cSaveBtn:SetScript("OnEnter", function(btn)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("|cffffd200Criar Grupo|r", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar grupos.|r", 1, 0.3, 0.3, true)
+            else
+                GameTooltip:AddLine("|cff00ff00Clique para confirmar a criação deste grupo.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    cSaveBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     cSaveBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            cErrorText:SetText("Apenas Oficiais ou o Líder da Guilda podem criar grupos.")
+            return
+        end
         local nameVal = cNameEB:GetText()
         if not nameVal or nameVal:match("^%s*$") then
             cErrorText:SetText("Por favor, informe o nome do grupo.")
@@ -1752,6 +1867,19 @@ function GroupView:openGroupDetailModal(group)
     -- Renderiza membros
     self:renderDetailMembers(group)
 
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+    if m.delGroupBtn then
+        m.delGroupBtn:EnableMouse(true)
+        m.delGroupBtn:SetAlpha(canOfficer and 1.0 or 0.55)
+    end
+
     m:Show()
     if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN or 839) end
 end
@@ -2019,6 +2147,20 @@ function GroupView:autoSelectRoleForClass(roleButtons, classToken, setCallback)
 end
 
 function GroupView:openCreateModal(groupType)
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    if not canOfficer then
+        print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos.")
+        return
+    end
+
     local m = self._createModal
     if not m then return end
 
@@ -2223,14 +2365,37 @@ end
 function GroupView:setGroups(groups)
     self._groups = groups or {}
     self:renderGroups()
+    self:updateCreatePermissions()
 end
 
 function GroupView:setGuildMembers(members)
     self._guildMembers = members or {}
 end
 
+--- Atualiza o estado dos botões de criação de grupos conforme o cargo de Oficial ou Líder da Guilda.
+function GroupView:updateCreatePermissions()
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    for _, btn in ipairs(self._createButtons or {}) do
+        btn:EnableMouse(true)
+        if canOfficer then
+            btn:SetAlpha(1.0)
+        else
+            btn:SetAlpha(0.55)
+        end
+    end
+end
+
 function GroupView:show()
     if not self._frame then self:createUI() end
+    self:updateCreatePermissions()
     self._frame:Show()
 end
 

@@ -58,19 +58,28 @@ function MemberController:initHooks()
                 return
             end
 
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
             if updatedFields.customNote ~= nil then
                 member:setCustomNote(updatedFields.customNote)
             end
             if updatedFields.birthday ~= nil then
                 member:setBirthday(updatedFields.birthday)
             end
-            if updatedFields.dateJoin ~= nil then
+            if canOfficer and updatedFields.dateJoin ~= nil then
                 member:setDateJoin(updatedFields.dateJoin)
             end
             if updatedFields.isMain ~= nil then
                 member:setMain(updatedFields.isMain)
             end
-            if updatedFields.recruiter ~= nil then
+            if canOfficer and updatedFields.recruiter ~= nil then
                 member:setRecruiter(updatedFields.recruiter)
                 if self._logService then
                     self._logService:updateRecruiterForMember(member:getName(), updatedFields.recruiter)

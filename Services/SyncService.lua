@@ -53,6 +53,7 @@ function SyncService:new(memberService, locationService)
     instance._channelNumber = nil
     instance._eventFrame = nil
     instance._lastRetransmitTick = 0
+    instance._syncChatFrame = nil
 
     return instance
 end
@@ -164,14 +165,92 @@ function SyncService:touchPeer(peerName)
     end
 end
 
+--- Localiza ou cria a aba de chat dedicada para as mensagens de sincronização.
+--- NUNCA retorna DEFAULT_CHAT_FRAME ou ChatFrame1, garantindo que as mensagens de sync não apareçam na janela padrão.
+--- Procura por uma aba chamada "GuildManager" (ou "Sync" / "Sincronização") ou cria uma nova aba "GuildManager".
+---@return table|nil
+function SyncService:getSyncChatFrame()
+    if self._syncChatFrame and self._syncChatFrame.AddMessage and self._syncChatFrame ~= DEFAULT_CHAT_FRAME and self._syncChatFrame ~= _G.ChatFrame1 then
+        return self._syncChatFrame
+    end
+
+    local numWindows = NUM_CHAT_WINDOWS or 10
+
+    -- 1. Procura se o usuário já possui uma aba de chat dedicada criada (GuildManager, Sync, GM Sync, Sincronização)
+    for i = 1, numWindows do
+        local cf = _G["ChatFrame" .. i]
+        if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 then
+            local name = GetChatWindowInfo(i)
+            if name and (name == "GuildManager" or name == "Sync" or name == "GM Sync" or name == "Sincronização" or name == "Sincronizacao") then
+                self._syncChatFrame = cf
+                return cf
+            end
+        end
+    end
+
+    -- 2. Tenta criar automaticamente a aba dedicada "GuildManager" usando a API oficial da Blizzard
+    if FCF_OpenNewWindow then
+        local ok, newFrame = pcall(FCF_OpenNewWindow, "GuildManager")
+        if ok and newFrame and newFrame.AddMessage and newFrame ~= DEFAULT_CHAT_FRAME and newFrame ~= _G.ChatFrame1 then
+            -- Remove grupos de mensagens convencionais (Say, Yell, Guild, Whispers etc.) para manter a aba limpa e exclusiva
+            if ChatFrame_RemoveAllMessageGroups then
+                pcall(ChatFrame_RemoveAllMessageGroups, newFrame)
+            end
+            if ChatFrame_RemoveAllChannels then
+                pcall(ChatFrame_RemoveAllChannels, newFrame)
+            end
+            newFrame:AddMessage("|cff00ff00[GuildManager]|r Aba de sincronização criada com sucesso! Todas as notificações de sincronização serão exibidas aqui.")
+            self._syncChatFrame = newFrame
+            return newFrame
+        end
+    end
+
+    -- 3. Fallback: Procura qualquer outra aba existente diferente da janela padrão (ChatFrame1 / DEFAULT_CHAT_FRAME)
+    for i = 2, numWindows do
+        local cf = _G["ChatFrame" .. i]
+        if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 and cf.AddMessage then
+            local name = GetChatWindowInfo(i)
+            if name and name ~= "" then
+                self._syncChatFrame = cf
+                return cf
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Imprime a mensagem de sincronização exclusivamente na aba dedicada (nunca na janela padrão de chat).
+---@param msg string
+function SyncService:printSyncNotification(msg)
+    if not msg or msg == "" then return end
+    local targetFrame = self:getSyncChatFrame()
+    if targetFrame and targetFrame.AddMessage then
+        targetFrame:AddMessage(msg)
+
+        -- Se a aba de sincronização não estiver atualmente aberta/selecionada na tela, faz a aba piscar para alertar o usuário
+        local selected = SELECTED_CHAT_FRAME or (FCF_GetCurrentChatFrame and FCF_GetCurrentChatFrame())
+        if targetFrame ~= selected then
+            if FCF_StartAlertFlash then
+                pcall(FCF_StartAlertFlash, targetFrame)
+            else
+                local tab = targetFrame.GetName and _G[targetFrame:GetName() .. "Tab"]
+                if tab and UIFrameFlash then
+                    pcall(UIFrameFlash, tab, 0.25, 0.25, 2.5, true, 0.1, 0.1)
+                end
+            end
+        end
+    end
+end
+
 --- Disparado quando é identificado que um membro da guilda que usa o Addon acabou de logar / conectar.
---- Notifica o usuário no chat e inicia imediatamente a sincronização dos dados customizados com ele.
+--- Notifica o usuário na aba de sync e inicia imediatamente a sincronização dos dados customizados com ele.
 ---@param peerName string
 function SyncService:onPeerLoggedIn(peerName)
     if not peerName or peerName == "" or self:isSelf(peerName) then return end
     local cName = cleanName(peerName)
 
-    print(string.format("|cff00ff00[GuildManager]|r Membro com o AddOn detectado online: |cffffff00%s|r. Sincronizando dados customizados...", cName))
+    self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Membro com o AddOn detectado online: |cffffff00%s|r. Sincronizando dados customizados...", cName))
 
     -- Dispara a sincronização de todos os membros que possuem dados customizados com o novo colega
     self:syncWithPeer(cName)
@@ -333,16 +412,42 @@ function SyncService:broadcastMemberCustomData(member, force)
 
     self._pendingOutbox[updateId] = updateData
 
-    -- Envia NA HORA para todos os outros usuários do Addon via fila de transmissão
-    self:sendUpdatePacket(updateData)
+    -- Envia NA HORA para todos os outros usuários do Addon
+    self:sendUpdatePacket(updateData, true)
+
+    if not force then
+        local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Você"
+        local fieldsList = {}
+        if birthday and birthday ~= "" then
+            table.insert(fieldsList, string.format("Aniversário (%s)", birthday))
+        end
+        if dateJoin and dateJoin ~= "" then
+            table.insert(fieldsList, string.format("Data de Entrada (%s)", dateJoin))
+        end
+        if recruiter and recruiter ~= "" then
+            table.insert(fieldsList, string.format("Recrutador (%s)", recruiter))
+        end
+        if altsCsv and altsCsv ~= "" then
+            table.insert(fieldsList, "Alts Vinculados")
+        end
+
+        local infoY = "dados de " .. memberName
+        if #fieldsList > 0 then
+            infoY = table.concat(fieldsList, ", ") .. " de " .. memberName
+        end
+
+        self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Jogador |cffffff00%s|r sincronizou informação |cffffff00%s|r.", myName, infoY))
+    end
 
     return true
 end
 
 --- Enfileira o pacote de dados formatado para transmissão segura através dos canais suportados.
+--- Se immediate for true, envia imediatamente através da API nativa da Blizzard.
 --- Formato do payload: DATA~updateId~memberName~dateJoin~birthday~recruiter~altsCsv~isMain~timestamp
 ---@param updateData table
-function SyncService:sendUpdatePacket(updateData)
+---@param immediate boolean|nil
+function SyncService:sendUpdatePacket(updateData, immediate)
     if not updateData then return end
 
     local payload = string.format("DATA~%s~%s~%s~%s~%s~%s~%s~%d",
@@ -356,11 +461,35 @@ function SyncService:sendUpdatePacket(updateData)
         updateData.timestamp or 0
     )
 
-    -- 1. Canal de Guilda
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
+
+    if immediate and Send then
+        -- Envio imediato direto
+        if IsInRaid and IsInRaid() then
+            pcall(Send, SYNC_PREFIX, payload, "RAID")
+        elseif IsInGroup and IsInGroup() then
+            pcall(Send, SYNC_PREFIX, payload, "PARTY")
+        end
+
+        if IsInGuild and IsInGuild() then
+            pcall(Send, SYNC_PREFIX, payload, "GUILD")
+        end
+
+        if chNum and chNum > 0 then
+            pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+        end
+    end
+
+    -- Enfileira também na fila compassada para garantir redundância e entrega contínua
+    if IsInRaid and IsInRaid() then
+        self:enqueuePacket(payload, "RAID")
+    elseif IsInGroup and IsInGroup() then
+        self:enqueuePacket(payload, "PARTY")
+    end
+
     self:enqueuePacket(payload, "GUILD")
 
-    -- 2. Canal global reservado do AddOn (AJShare) caso ativo
-    local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
     if chNum and chNum > 0 then
         self:enqueuePacket(payload, "CHANNEL", chNum)
     end
@@ -381,6 +510,12 @@ function SyncService:sendAckPacket(updateId, memberName)
 
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
     if not Send then return end
+
+    if IsInRaid and IsInRaid() then
+        pcall(Send, SYNC_PREFIX, payload, "RAID")
+    elseif IsInGroup and IsInGroup() then
+        pcall(Send, SYNC_PREFIX, payload, "PARTY")
+    end
 
     if IsInGuild and IsInGuild() then
         pcall(Send, SYNC_PREFIX, payload, "GUILD")
@@ -478,17 +613,17 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         -- Aplica os 4 dados customizados requisitados:
         -- 1. Data de Entrada
-        if dateJoin ~= "" then
+        if dateJoin and dateJoin ~= "" then
             member:setDateJoin(dateJoin)
         end
 
         -- 2. Aniversário
-        if birthday ~= "" then
+        if birthday and birthday ~= "" then
             member:setBirthday(birthday)
         end
 
         -- 3. Recrutador
-        if recruiter ~= "" then
+        if recruiter and recruiter ~= "" then
             member:setRecruiter(recruiter)
         end
 
@@ -510,9 +645,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         local isMainBool = (isMainStr == "1")
         self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool)
 
-        -- Persiste no banco de dados local via repositório
-        if self._memberService and self._memberService._repository then
-            self._memberService._repository:save(member)
+        -- Persiste no banco de dados local com normalização e sem retransmissão circular
+        if self._memberService then
+            self._memberService:saveMember(member, true)
 
             -- Mantém a reciprocidade da família de alts se houver lista
             if #altsList > 0 and self._memberService.syncAltFamily then
@@ -527,6 +662,33 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         -- Atualiza telas da interface em tempo real se estiverem visíveis
         self:refreshActiveViews(mClean)
+
+        -- Exibe no chat local a notificação requerida quando alguém envia informação pra sincronizar
+        local isNewUpdate = not self._processedUpdateIds[updateId]
+        self._processedUpdateIds[updateId] = GetTime and GetTime() or 0
+
+        if isNewUpdate then
+            local fieldsList = {}
+            if birthday and birthday ~= "" then
+                table.insert(fieldsList, string.format("Aniversário (%s)", birthday))
+            end
+            if dateJoin and dateJoin ~= "" then
+                table.insert(fieldsList, string.format("Data de Entrada (%s)", dateJoin))
+            end
+            if recruiter and recruiter ~= "" then
+                table.insert(fieldsList, string.format("Recrutador (%s)", recruiter))
+            end
+            if altsCsv and altsCsv ~= "" then
+                table.insert(fieldsList, "Alts Vinculados")
+            end
+
+            local infoY = "dados de " .. mClean
+            if #fieldsList > 0 then
+                infoY = table.concat(fieldsList, ", ") .. " de " .. mClean
+            end
+
+            self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Jogador |cffffff00%s|r sincronizou informação |cffffff00%s|r.", senderClean, infoY))
+        end
 
         -- SEMPRE responde com ACK ao emissor informando que o receptor recebeu
         self:sendAckPacket(updateId, mClean)
@@ -627,9 +789,9 @@ function SyncService:forceSyncAll()
         for _, p in ipairs(activePeers) do
             table.insert(peerNames, p.name)
         end
-        print(string.format("|cff00ff00[GuildManager]|r Sincronização manual iniciada! |cffffff00%d|r membro(s) com dados customizados para |cffffff00%d|r colega(s) online: |cff00ffff%s|r.", count, #activePeers, table.concat(peerNames, ", ")))
+        self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Sincronização manual iniciada! |cffffff00%d|r membro(s) com dados customizados para |cffffff00%d|r colega(s) online: |cff00ffff%s|r.", count, #activePeers, table.concat(peerNames, ", ")))
     else
-        print(string.format("|cff00ff00[GuildManager]|r Sincronização manual iniciada para |cffffff00%d|r membro(s). Nenhum outro membro com o AddOn online no momento (os dados serão sincronizados automaticamente assim que um membro logar).", count))
+        self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Sincronização manual iniciada para |cffffff00%d|r membro(s). Nenhum outro membro com o AddOn online no momento (os dados serão sincronizados automaticamente assim que um membro logar).", count))
     end
 
     return count
@@ -656,7 +818,7 @@ function SyncService:simulateTestPeerAck()
         end
     end
 
-    print(string.format("|cff00ff00[GuildManager]|r Peer de teste '%s' confirmou recebimento de %d pacote(s) pendente(s).", testPeer, count))
+    self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Peer de teste '%s' confirmou recebimento de %d pacote(s) pendente(s).", testPeer, count))
     return true
 end
 
@@ -702,6 +864,9 @@ function SyncService:initHooks()
                 self._myFullName = (r and r ~= "") and (n .. "-" .. r) or n
             end
         end
+
+        -- Garante que a aba de chat dedicada para sincronização seja inicializada
+        self:getSyncChatFrame()
 
         -- Ao logar / entrar no mundo, aguarda 2.5s para os canais de chat estarem conectados
         -- e então anuncia a presença e solicita sincronização

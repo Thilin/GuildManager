@@ -37,6 +37,19 @@ function GroupController:initHooks()
     -- Callback de criação de grupo
     if self._groupView.setOnCreateGroupCallback then
         self._groupView:setOnCreateGroupCallback(function(name, groupType, leaderName, leaderRole, note)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                return false, "Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos."
+            end
+
             if not self._groupService then return false, "Serviço de grupos indisponível." end
             local group, err = self._groupService:createGroup(name, groupType, leaderName, leaderRole, note)
             if group then
@@ -50,6 +63,20 @@ function GroupController:initHooks()
     -- Callback de exclusão de grupo
     if self._groupView.setOnDeleteGroupCallback then
         self._groupView:setOnDeleteGroupCallback(function(groupId)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para excluir grupos.")
+                return
+            end
+
             if not self._groupService then return end
             self._groupService:deleteGroup(groupId)
             self:refreshGroups()

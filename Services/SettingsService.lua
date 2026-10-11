@@ -21,6 +21,7 @@ function SettingsService:new(db, logRepository, memberService, guildRosterServic
     if type(instance._db.settings) ~= "table" then
         instance._db.settings = {}
     end
+    instance._db.settings.notifyMemberLevelUp = false
 
     instance._logRepository = logRepository
     instance._memberService = memberService

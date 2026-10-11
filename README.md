@@ -1,8 +1,8 @@
 # GuildManager
 
-[X] janela com informações de membros: classe, raça, nivel, cargo, dia de entrada, status, zona, nota publica e oficial, aniversário, nota interna, lista de alts vinculados, tag de main/alt e recrutador
+[X] janela com informações de membros: classe, raça, nivel, cargo, dia de entrada, status, zona, nota publica e oficial, aniversário, nota interna, lista de alts vinculados, tag de main/alt e recrutador (edição de Recrutador e Data de Entrada restrita a Oficial ou Líder da Guilda)
 
-[X] tela de auditoria: mostra as informações do personagem em forma de lista.
+[X] tela de auditoria: mostra as informações do personagem em forma de lista (edição de Recrutador e Data de Entrada restrita a Oficial ou Líder da Guilda).
 
 [X] log de subir nivel
 
@@ -21,13 +21,13 @@
 [X] log de alteraçao de notas. Todo membro quando é recrutado, tem o valor padrão de notas da Blizzard. O Addon deve ser capaz de registrar toda vez que alguém registrar um valor novo para as notas, tanto de oficial quanto nota publica, porém não registrar a nota com valor padrão da Blizzard. Se o valor for alterado para "vazio" (string vazia), deve registrar como "vazio".
 [X] poder scanear o mapa para ver se mais alguém da guilda está pelo mapa, incluindo a sua localização
 [X] poder mencionar um player no chat da guilda e o nome dele ficar destacado quando mencionado seguido de uma leve notificação (autocomplete com @ e chat piscando com alerta)
-[X] tela para gerenciamento de grupos
+[X] tela para gerenciamento de grupos de Masmorra, Raides e Diversos (criação restrita a Oficial ou Líder da Guilda)
 
 [X] tela para ajustar configuraçoes do addon
 
-[X] criar uma tela de agenda para mostrar aniversários e outros eventos da guilda. Os eventos devem ser possiveis adicionar, excluir e alterar e também ser possível convidar membros para o evento pelo próprio addon. a agenda tenha um layout organizado e em em uma parte da tela da agenda precisa ter a lista dos próximos aniversariantes da guilda. É preciso criar um model de eventos contendo essas informações.
+[X] criar uma tela de agenda para mostrar aniversários e outros eventos da guilda. Os eventos devem ser possiveis adicionar, excluir e alterar e também ser possível convidar membros para o evento pelo próprio addon. a agenda tenha um layout organizado e em em uma parte da tela da agenda precisa ter a lista dos próximos aniversariantes da guilda. É preciso criar um model de eventos contendo essas informações (criação e edição restritas a Oficial ou Líder da Guilda).
 
-[X] compartilhar informações com outro membro da guilda que use o addon (sincronização P2P automática de Entrada, Aniversário, Alts Vinculados e Recrutador; retransmissão contínua com confirmação ACK até todos receberem; sincronização automática ao identificar login de membro com o Addon; e opção de forçar sincronização manual via /gmsync, /gm sync, Configurações e tela de Auditoria)
+[X] compartilhar informações com outro membro da guilda que use o addon (sincronização P2P automática de Entrada, Aniversário, Alts Vinculados e Recrutador; retransmissão contínua com confirmação ACK até todos receberem; sincronização automática ao identificar login de membro com o Addon; opção de forçar sincronização manual via /gmsync, /gm sync, Configurações e tela de Auditoria; e exibição de avisos de sincronização em aba de chat dedicada "GuildManager", sem poluir a janela de chat padrão)
 [] mostrar quais membros podem fazer quais receitas de cada profissão
 
 PÓS LANÇAMENTO DO WOW FOREVER

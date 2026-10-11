@@ -827,13 +827,9 @@ function SettingsView:createSettingsColumns()
     cbNotifyRecruit:SetPoint("TOPLEFT", cbOffline, "BOTTOMLEFT", 0, -2)
     self._widgets.notifyNewRecruit = cbNotifyRecruit
 
-    local cbNotifyLevel = createCheckbox(rChild, "Avisar no chat local quando um membro subir de nível", "Aviso de Nível", "Envia mensagem no chat local quando um colega de guilda ganha nível.")
-    cbNotifyLevel:SetPoint("TOPLEFT", cbNotifyRecruit, "BOTTOMLEFT", 0, -2)
-    self._widgets.notifyMemberLevelUp = cbNotifyLevel
-
     -- --- SEÇÃO 8: REGISTRO DE EVENTOS (LOGS) ---
     local s8Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s8Header:SetPoint("TOPLEFT", cbNotifyLevel, "BOTTOMLEFT", 2, -12)
+    s8Header:SetPoint("TOPLEFT", cbNotifyRecruit, "BOTTOMLEFT", 2, -12)
     s8Header:SetText("|cffffd2008. REGISTRO DE EVENTOS (LOGS)|r")
 
     local s8Sep = rChild:CreateTexture(nil, "ARTWORK")
@@ -1111,7 +1107,6 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.autoScanRoster:SetChecked(settings:isAutoScanRoster())
     self._widgets.showOfflineMembers:SetChecked(settings:isShowOfflineMembers())
     self._widgets.notifyNewRecruit:SetChecked(settings:isNotifyNewRecruit())
-    self._widgets.notifyMemberLevelUp:SetChecked(settings:isNotifyMemberLevelUp())
 
     -- Logs
     self._widgets.logLevelUp:SetChecked(settings:isLogLevelUp())
@@ -1153,7 +1148,7 @@ function SettingsView:gatherFormData()
         autoScanRoster = w.autoScanRoster:GetChecked() == true,
         showOfflineMembers = w.showOfflineMembers:GetChecked() == true,
         notifyNewRecruit = w.notifyNewRecruit:GetChecked() == true,
-        notifyMemberLevelUp = w.notifyMemberLevelUp:GetChecked() == true,
+        notifyMemberLevelUp = false,
         logLevelUp = w.logLevelUp:GetChecked() == true,
         logPromoteDemote = w.logPromoteDemote:GetChecked() == true,
         logNotes = w.logNotes:GetChecked() == true,

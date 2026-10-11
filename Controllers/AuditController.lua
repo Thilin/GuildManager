@@ -38,7 +38,16 @@ function AuditController:initHooks()
                 return
             end
 
-            if fields.dateJoin ~= nil then
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanEditOfficerNote and CanEditOfficerNote() then
+                canOfficer = true
+            end
+
+            if canOfficer and fields.dateJoin ~= nil then
                 member:setDateJoin(fields.dateJoin)
             end
             if fields.birthday ~= nil then
@@ -47,7 +56,7 @@ function AuditController:initHooks()
             if fields.customNote ~= nil then
                 member:setCustomNote(fields.customNote)
             end
-            if fields.recruiter ~= nil then
+            if canOfficer and fields.recruiter ~= nil then
                 local oldRecruiter = member:getRecruiter() or ""
                 member:setRecruiter(fields.recruiter)
                 if oldRecruiter ~= fields.recruiter and self._logService and self._logService.updateRecruiterForMember then

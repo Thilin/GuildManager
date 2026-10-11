@@ -195,3 +195,71 @@ end
 function GuildRosterService:getActiveRosterNames()
     return self._activeRosterNames
 end
+
+--- Verifica se o jogador local possui cargo de Oficial ou Líder da Guilda.
+--- Considera:
+--- 1. Líder da guilda nativo da Blizzard (IsGuildLeader).
+--- 2. Permissão nativa da Blizzard para editar notas de oficial (CanEditOfficerNote).
+--- 3. Cargo no roster nativo ou MemberService com rankIndex <= 1 ou nome contendo oficial/lider/mestre.
+---@return boolean
+function GuildRosterService:isPlayerOfficerOrLeader()
+    if IsInGuild and not IsInGuild() then
+        return false
+    end
+
+    -- 1. Líder da guilda nativo (Guild Master)
+    if IsGuildLeader and IsGuildLeader() then
+        return true
+    end
+
+    -- 2. Permissão nativa para notas de oficiais (benchmark de cargos de oficial no WoW)
+    if CanEditOfficerNote and CanEditOfficerNote() then
+        return true
+    end
+    if C_GuildInfo and C_GuildInfo.CanEditOfficerNote and C_GuildInfo.CanEditOfficerNote() then
+        return true
+    end
+
+    -- 3. Verificação no banco de membros / roster local pelo nome do jogador
+    local myName = UnitName and UnitName("player")
+    if myName and myName ~= "" then
+        local myClean = myName:match("^[^-]+") or myName
+        myClean = myClean:match("^%s*(.-)%s*$") or myClean
+        local myLower = myClean:lower()
+
+        if self._memberService and self._memberService.getMember then
+            local me = self._memberService:getMember(myClean)
+            if me then
+                local rIdx = me:getRankIndex()
+                if rIdx and rIdx <= 1 then
+                    return true
+                end
+                local rName = (me:getRankName() or ""):lower()
+                if rName:find("oficial") or rName:find("officer") or rName:find("lider") or rName:find("líder") or rName:find("mestre") then
+                    return true
+                end
+            end
+        end
+
+        local numMembers = GetNumGuildMembers and GetNumGuildMembers() or 0
+        for i = 1, numMembers do
+            local name, rankName, rankIndex = GetGuildRosterInfo(i)
+            if name then
+                local cName = name:match("^[^-]+") or name
+                cName = cName:match("^%s*(.-)%s*$") or cName
+                if cName:lower() == myLower then
+                    if rankIndex and rankIndex <= 1 then
+                        return true
+                    end
+                    local rLower = (rankName or ""):lower()
+                    if rLower:find("oficial") or rLower:find("officer") or rLower:find("lider") or rLower:find("líder") or rLower:find("mestre") then
+                        return true
+                    end
+                    break
+                end
+            end
+        end
+    end
+
+    return false
+end

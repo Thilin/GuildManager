@@ -684,7 +684,23 @@ function AuditView:createUI()
                     local currentVal = cellTxt:GetText() or ""
                     GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", currentVal), 0.85, 0.85, 0.85, true)
                     GameTooltip:AddLine(" ")
-                    GameTooltip:AddLine("|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
+                    if (colId == "dateJoin" or colId == "recruiter") then
+                        local canOfficer = false
+                        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+                            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+                        elseif IsGuildLeader and IsGuildLeader() then
+                            canOfficer = true
+                        elseif CanEditOfficerNote and CanEditOfficerNote() then
+                            canOfficer = true
+                        end
+                        if not canOfficer then
+                            GameTooltip:AddLine("|cffff4444(Apenas Oficiais ou o Líder da Guilda podem editar)|r", 1, 0.3, 0.3)
+                        else
+                            GameTooltip:AddLine("|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
+                        end
+                    else
+                        GameTooltip:AddLine("|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
+                    end
                     GameTooltip:Show()
                 end
             end)
@@ -1313,13 +1329,88 @@ function AuditView:createEditModal()
     styleModalBox(dateJoinEB)
     modal.dateJoinEB = dateJoinEB
 
+    local function showDateJoinModalTooltip(target)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(target, "ANCHOR_TOP")
+        GameTooltip:AddLine("|cffffd200Data de Entrada|r", 1, 1, 1)
+        local curVal = dateJoinEB:GetText() or ""
+        GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", curVal ~= "" and curVal or "(Não informado)"), 0.85, 0.85, 0.85)
+        GameTooltip:AddLine(" ")
+
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar este campo.|r", 1, 0.3, 0.3, true)
+        else
+            GameTooltip:AddLine("|cff00ff00Clique para editar.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+        end
+        GameTooltip:Show()
+    end
+
+    dateJoinEB:SetScript("OnEnter", function(eb) showDateJoinModalTooltip(eb) end)
+    dateJoinEB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    dateJoinEB:HookScript("OnEditFocusGained", function(eb)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+        if not canOfficer then
+            eb:ClearFocus()
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.")
+        end
+    end)
+
     local dateJoinTodayBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     dateJoinTodayBtn:SetPoint("LEFT", dateJoinEB, "RIGHT", 6, 0)
     dateJoinTodayBtn:SetSize(64, 22)
     dateJoinTodayBtn:SetText("Hoje")
+    dateJoinTodayBtn:SetScript("OnEnter", function(btn)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+        GameTooltip:AddLine("|cffffd200Definir Data de Hoje|r", 1, 1, 1)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+        if not canOfficer then
+            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.|r", 1, 0.3, 0.3, true)
+        else
+            GameTooltip:AddLine("|cff00ff00Clique para preencher com a data de hoje.|r", 0.2, 1.0, 0.2)
+        end
+        GameTooltip:Show()
+    end)
+    dateJoinTodayBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     dateJoinTodayBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+        if not canOfficer then
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.")
+            return
+        end
         dateJoinEB:SetText(getTodayString())
     end)
+    modal.dateJoinTodayBtn = dateJoinTodayBtn
 
     -- 2. CAMPO: RECRUTADOR
     local recruiterLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1332,13 +1423,88 @@ function AuditView:createEditModal()
     styleModalBox(recruiterEB)
     modal.recruiterEB = recruiterEB
 
+    local function showRecruiterModalTooltip(target)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(target, "ANCHOR_TOP")
+        GameTooltip:AddLine("|cffffd200Recrutador|r", 1, 1, 1)
+        local curVal = recruiterEB:GetText() or ""
+        GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", curVal ~= "" and curVal or "(Não informado)"), 0.85, 0.85, 0.85)
+        GameTooltip:AddLine(" ")
+
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar este campo.|r", 1, 0.3, 0.3, true)
+        else
+            GameTooltip:AddLine("|cff00ff00Clique para digitar o nome do recrutador.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+        end
+        GameTooltip:Show()
+    end
+
+    recruiterEB:SetScript("OnEnter", function(eb) showRecruiterModalTooltip(eb) end)
+    recruiterEB:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    recruiterEB:HookScript("OnEditFocusGained", function(eb)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+        if not canOfficer then
+            eb:ClearFocus()
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.")
+        end
+    end)
+
     local recruiterSelfBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     recruiterSelfBtn:SetPoint("LEFT", recruiterEB, "RIGHT", 6, 0)
     recruiterSelfBtn:SetSize(64, 22)
     recruiterSelfBtn:SetText("Eu")
+    recruiterSelfBtn:SetScript("OnEnter", function(btn)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+        GameTooltip:AddLine("|cffffd200Definir Meu Nome|r", 1, 1, 1)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+        if not canOfficer then
+            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.|r", 1, 0.3, 0.3, true)
+        else
+            GameTooltip:AddLine("|cff00ff00Clique para preencher com o seu nome.|r", 0.2, 1.0, 0.2)
+        end
+        GameTooltip:Show()
+    end)
+    recruiterSelfBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     recruiterSelfBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+        if not canOfficer then
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.")
+            return
+        end
         recruiterEB:SetText(getPlayerName())
     end)
+    modal.recruiterSelfBtn = recruiterSelfBtn
 
     -- 3. CAMPO: ANIVERSÁRIO
     local birthdayLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1442,13 +1608,64 @@ function AuditView:openEditModal(member, fieldToFocus)
     modal.birthdayEB:SetText(member:getBirthday() or "")
     modal.customNoteEB:SetText(member:getCustomNote() or "")
 
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    if modal.dateJoinEB then
+        modal.dateJoinEB:EnableMouse(true)
+        if canOfficer then
+            modal.dateJoinEB:SetTextColor(1, 1, 1)
+        else
+            modal.dateJoinEB:ClearFocus()
+            modal.dateJoinEB:SetTextColor(0.55, 0.55, 0.55)
+        end
+    end
+
+    if modal.dateJoinTodayBtn then
+        modal.dateJoinTodayBtn:EnableMouse(true)
+        if canOfficer then
+            modal.dateJoinTodayBtn:SetAlpha(1.0)
+        else
+            modal.dateJoinTodayBtn:SetAlpha(0.55)
+        end
+    end
+
+    if modal.recruiterEB then
+        modal.recruiterEB:EnableMouse(true)
+        if canOfficer then
+            modal.recruiterEB:SetTextColor(1, 1, 1)
+        else
+            modal.recruiterEB:ClearFocus()
+            modal.recruiterEB:SetTextColor(0.55, 0.55, 0.55)
+        end
+    end
+
+    if modal.recruiterSelfBtn then
+        modal.recruiterSelfBtn:EnableMouse(true)
+        if canOfficer then
+            modal.recruiterSelfBtn:SetAlpha(1.0)
+        else
+            modal.recruiterSelfBtn:SetAlpha(0.55)
+        end
+    end
+
     modal:Show()
 
-    -- Foca automaticamente no campo que foi clicado
-    if fieldToFocus == "dateJoin" then
+    -- Foca automaticamente no campo que foi clicado (se o usuário não puder editar dateJoin/recruiter, foca no aniversário)
+    if (fieldToFocus == "dateJoin" or fieldToFocus == "recruiter") and not canOfficer then
+        fieldToFocus = "birthday"
+    end
+
+    if fieldToFocus == "dateJoin" and canOfficer then
         modal.dateJoinEB:SetFocus()
         modal.dateJoinEB:HighlightText()
-    elseif fieldToFocus == "recruiter" then
+    elseif fieldToFocus == "recruiter" and canOfficer then
         modal.recruiterEB:SetFocus()
         modal.recruiterEB:HighlightText()
     elseif fieldToFocus == "birthday" then
@@ -1466,8 +1683,28 @@ function AuditView:saveModalChanges()
     local modal = self._editModal
     if not member or not modal then return end
 
-    local newDateJoin = (modal.dateJoinEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
-    local newRecruiter = (modal.recruiterEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    local origDateJoin = member:getDateJoin() or ""
+    local origRecruiter = member:getRecruiter() or ""
+
+    local newDateJoin = origDateJoin
+    if canOfficer then
+        newDateJoin = (modal.dateJoinEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
+    end
+
+    local newRecruiter = origRecruiter
+    if canOfficer then
+        newRecruiter = (modal.recruiterEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
+    end
+
     local newBirthday = (modal.birthdayEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
     local newCustomNote = (modal.customNoteEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
 
@@ -1481,15 +1718,18 @@ function AuditView:saveModalChanges()
     if self._onSaveCallback then
         self._onSaveCallback(member, fields)
     else
-        member:setDateJoin(newDateJoin)
-        local oldRec = member:getRecruiter() or ""
-        member:setRecruiter(newRecruiter)
+        if canOfficer then
+            member:setDateJoin(newDateJoin)
+            local oldRec = member:getRecruiter() or ""
+            member:setRecruiter(newRecruiter)
+
+            if oldRec ~= newRecruiter and _G.GM and _G.GM.logService and _G.GM.logService.updateRecruiterForMember then
+                _G.GM.logService:updateRecruiterForMember(member:getName(), newRecruiter)
+            end
+        end
+
         member:setBirthday(newBirthday)
         member:setCustomNote(newCustomNote)
-
-        if oldRec ~= newRecruiter and _G.GM and _G.GM.logService and _G.GM.logService.updateRecruiterForMember then
-            _G.GM.logService:updateRecruiterForMember(member:getName(), newRecruiter)
-        end
 
         if _G.GM and _G.GM.memberService and _G.GM.memberService.saveMember then
             _G.GM.memberService:saveMember(member)
