@@ -354,6 +354,56 @@ function AuditView:createUI()
     end
     self._tableInset = tableInset
 
+    -- Botão de Sincronização P2P manual no topo direito da tabela
+    local syncBtn = CreateFrame("Button", "GM_AuditSyncBtn", frame, template)
+    syncBtn:SetSize(120, 22)
+    syncBtn:SetPoint("BOTTOMRIGHT", tableInset, "TOPRIGHT", 0, 4)
+    if syncBtn.SetBackdrop then
+        syncBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        syncBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
+        syncBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+    end
+    local syncText = syncBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    syncText:SetPoint("CENTER", syncBtn, "CENTER", 0, 0)
+    syncText:SetText("|cffffd200Sincronizar P2P|r")
+    syncBtn.text = syncText
+
+    syncBtn:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
+            btn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], 0.95)
+        end
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
+            GameTooltip:AddLine("|cffffd200Forçar Sincronização P2P|r")
+            GameTooltip:AddLine("Transmite na hora todos os dados customizados (Entrada, Aniversário, Alts e Recrutador) para todos os outros membros da guilda que usam o Addon.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    syncBtn:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+            btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
+        end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    syncBtn:SetScript("OnClick", function()
+        if _G.GM and _G.GM.syncService and _G.GM.syncService.forceSyncAll then
+            _G.GM.syncService:forceSyncAll()
+            if syncBtn.text then
+                syncBtn.text:SetText("|cff00ff00Sincronizando...|r")
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(2.0, function()
+                        if syncBtn and syncBtn.text then
+                            syncBtn.text:SetText("|cffffd200Sincronizar P2P|r")
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+    self._syncBtn = syncBtn
+
     -- Rolagem com a roda do mouse sobre a área de tabela
     tableInset:EnableMouseWheel(true)
     tableInset:SetScript("OnMouseWheel", function(_, delta)

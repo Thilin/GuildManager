@@ -42,6 +42,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local settingsController = SettingsController:new(settingsService, settingsView, memberService, guildRosterService, logService, minimapButton)
 
         local locationService = LocationService:new(memberService)
+        local syncService = SyncService:new(memberService, locationService)
+        memberService:setSyncService(syncService)
+
         local worldMapView = WorldMapView:new()
         local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
 
@@ -55,6 +58,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.logController = logController
         GM.memberRepository = memberRepository
         GM.memberService = memberService
+        GM.syncService = syncService
         GM.guildRosterService = guildRosterService
         GM.memberView = memberView
         GM.memberController = memberController
@@ -79,6 +83,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.chatMentionController = chatMentionController
 
         locationService:initHooks()
+        syncService:initHooks()
         memberController:initHooks()
         logController:initHooks()
         auditController:initHooks()
@@ -101,11 +106,43 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             end
         end
 
+        SLASH_GUILDMANAGER_SYNC1 = "/gmsync"
+        SlashCmdList["GUILDMANAGER_SYNC"] = function(msg)
+            local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
+            if arg == "test" or arg == "ack" then
+                if syncService then
+                    syncService:simulateTestPeerAck()
+                end
+            elseif arg == "status" then
+                local status = syncService and syncService:getStatus() or { pendingCount = 0, queueCount = 0, activePeerCount = 0, activePeers = {} }
+                print(string.format("|cff00ff00[GuildManager]|r Sincronização P2P: |cffffff00%d|r membro(s) com Addon online, |cffffff00%d|r na fila de envio, |cffffff00%d|r aguardando confirmação (ACK).", status.activePeerCount, status.queueCount, status.pendingCount))
+                if #status.activePeers > 0 then
+                    local names = {}
+                    for _, p in ipairs(status.activePeers) do
+                        table.insert(names, p.name)
+                    end
+                    print("|cffaaaaaaMembros com Addon online:|r " .. table.concat(names, ", "))
+                end
+                if status.pendingCount > 0 then
+                    print("|cffaaaaaa(Retransmitindo pacotes em segundo plano até que todos confirmem o recebimento)|r")
+                end
+            elseif arg == "help" or arg == "ajuda" then
+                print("|cff00ff00[GuildManager]|r Comandos de Sincronização:")
+                print("  |cffffff00/gmsync|r ou |cffffff00/gm sync|r : Força a sincronização manual de todos os dados customizados.")
+                print("  |cffffff00/gmsync status|r : Exibe o status da fila e membros online com o Addon.")
+                print("  |cffffff00/gmsync test|r : Simula confirmação de recebimento (ACK) de teste.")
+            else
+                if syncService then
+                    syncService:forceSyncAll()
+                end
+            end
+        end
+
         if logRepository.cleanDuplicateKickAndLeaveLogs then
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r ou |cffffff00/gmconfig|r para abrir.")
+        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r ou |cffffff00/gmconfig|r para abrir.")
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

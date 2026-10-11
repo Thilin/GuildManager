@@ -243,6 +243,11 @@ function MemberController:initHooks()
                 _G.GM.locationService:toggleTestPeer()
                 return
             end
+        elseif arg == "sync" or arg == "sincronizar" then
+            if SlashCmdList["GUILDMANAGER_SYNC"] then
+                SlashCmdList["GUILDMANAGER_SYNC"]("force")
+                return
+            end
         end
 
         if IsInGuild and IsInGuild() then

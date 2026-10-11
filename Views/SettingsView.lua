@@ -79,6 +79,7 @@ function SettingsView:new()
     instance._onResetCallback = nil
     instance._onPurgeLogsCallback = nil
     instance._onForceScanCallback = nil
+    instance._onForceSyncCallback = nil
 
     instance:createUI()
 
@@ -89,6 +90,7 @@ function SettingsView:setOnSaveCallback(cb) self._onSaveCallback = cb end
 function SettingsView:setOnResetCallback(cb) self._onResetCallback = cb end
 function SettingsView:setOnPurgeLogsCallback(cb) self._onPurgeLogsCallback = cb end
 function SettingsView:setOnForceScanCallback(cb) self._onForceScanCallback = cb end
+function SettingsView:setOnForceSyncCallback(cb) self._onForceSyncCallback = cb end
 
 --- Helper para estilizar caixas EditBox.
 local function styleBox(eb)
@@ -927,6 +929,16 @@ function SettingsView:createSettingsColumns()
     resetAllBtn:SetScript("OnClick", function()
         if self._onResetCallback then
             self._onResetCallback()
+        end
+    end)
+
+    local forceSyncBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
+    forceSyncBtn:SetSize(170, 22)
+    forceSyncBtn:SetPoint("LEFT", resetAllBtn, "RIGHT", 10, 0)
+    forceSyncBtn:SetText("Forçar Sincronização P2P")
+    forceSyncBtn:SetScript("OnClick", function()
+        if self._onForceSyncCallback then
+            self._onForceSyncCallback()
         end
     end)
 end

@@ -7,15 +7,39 @@ MemberService.__index = MemberService
 --- Construtor do serviço de membros.
 ---@param repository MemberRepository @Instância do repositório de membros
 ---@param logService LogService|nil @Instância opcional do serviço de logs
+---@param repository MemberRepository @Instância do repositório de membros
+---@param logService LogService|nil @Instância opcional do serviço de logs
+---@param syncService SyncService|nil @Instância opcional do serviço de sincronização P2P
 ---@return MemberService
-function MemberService:new(repository, logService)
+function MemberService:new(repository, logService, syncService)
     local instance = setmetatable({}, self)
     instance._repository = repository
     instance._logService = logService
+    instance._syncService = syncService
     instance._pendingRecruiters = {}
     instance._recentlyJoinedMembers = {}
     instance._missingRosterScans = {}
     return instance
+end
+
+--- Define ou atualiza o serviço de sincronização P2P.
+---@param syncService SyncService
+function MemberService:setSyncService(syncService)
+    self._syncService = syncService
+end
+
+--- Obtém o serviço de sincronização.
+---@return SyncService|nil
+function MemberService:getSyncService()
+    return self._syncService
+end
+
+--- Notifica que os dados customizados de um membro foram alterados e transmite na hora.
+---@param member Member
+function MemberService:notifyCustomDataChanged(member)
+    if member and self._syncService and self._syncService.broadcastMemberCustomData then
+        self._syncService:broadcastMemberCustomData(member)
+    end
 end
 
 --- Define ou atualiza o serviço de logs.
@@ -740,11 +764,16 @@ function MemberService:getAllMembers()
     return self._repository:findAll()
 end
 
---- Salva um membro diretamente através do repositório.
+--- Salva um membro diretamente através do repositório e transmite atualizações de dados customizados.
 ---@param member Member
+---@param skipSync boolean|nil @Se verdadeiro, não retransmite via SyncService (útil para dados recebidos da rede)
 ---@return boolean
-function MemberService:saveMember(member)
-    return self._repository:save(member)
+function MemberService:saveMember(member, skipSync)
+    local ok = self._repository:save(member)
+    if ok and not skipSync and self._syncService and self._syncService.broadcastMemberCustomData then
+        self._syncService:broadcastMemberCustomData(member)
+    end
+    return ok
 end
 
 --- Retorna todas as entidades Member pertencentes ao mesmo grupo de alts do membro fornecido (incluindo o próprio membro).
@@ -851,6 +880,13 @@ function MemberService:syncAltFamily(memberNames, mainName)
         self._repository:save(m)
     end
 
+    -- Notifica o SyncService para transmitir a família atualizada na hora para todos os outros pares
+    if self._syncService and self._syncService.broadcastMemberCustomData then
+        for _, m in ipairs(members) do
+            self._syncService:broadcastMemberCustomData(m)
+        end
+    end
+
     return true
 end
 
@@ -890,6 +926,9 @@ function MemberService:unlinkAltFromFamily(currentMember, altToRemoveName)
         removedMember:setAlts({})
         removedMember:setMain(true)
         self._repository:save(removedMember)
+        if self._syncService and self._syncService.broadcastMemberCustomData then
+            self._syncService:broadcastMemberCustomData(removedMember)
+        end
     end
 
     -- Sincroniza os membros restantes

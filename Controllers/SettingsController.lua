@@ -120,6 +120,17 @@ function SettingsController:setupCallbacks()
         end
         view:showStatus("Varredura solicitada ao servidor da Blizzard.", false)
     end)
+
+    view:setOnForceSyncCallback(function()
+        if _G.GM and _G.GM.syncService and _G.GM.syncService.forceSyncAll then
+            local count = _G.GM.syncService:forceSyncAll()
+            local status = _G.GM.syncService:getStatus()
+            local msg = string.format("Sincronização P2P iniciada! %d membro(s) para %d colega(s) online.", count, status.activePeerCount)
+            view:showStatus(msg, false)
+        else
+            view:showStatus("Serviço de sincronização não disponível.", true)
+        end
+    end)
 end
 
 --- Registra comandos de barra (slash commands) para abrir as configurações.
