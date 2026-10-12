@@ -1,8 +1,8 @@
-## Interface: 16001
-## Title: Guild Manager
+## Interface: 16001, 11506
+## Title: Guild Manager Forever
 ## Notes: Gerenciador de guilda com rastreamento avançado de membros, notas e histórico.
 ## Author: Thilin
-## Version: 0.1
+## Version: 1.0
 ## SavedVariables: GM_DB
 
 Database/Database.lua
