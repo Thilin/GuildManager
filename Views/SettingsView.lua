@@ -3,6 +3,8 @@
 SettingsView = {}
 SettingsView.__index = SettingsView
 
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 local DIALOG_BACKDROP = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -55,17 +57,17 @@ local PALETTE = {
 }
 
 local SOUND_OPTIONS = {
-    { id = "whisper", label = "Sussurro", soundId = 3081 },
-    { id = "raid",    label = "Alerta Raide", soundId = 8959 },
-    { id = "ready",   label = "Ready Check", soundId = 8960 },
-    { id = "coin",    label = "Moeda", soundId = 120 },
+    { id = "whisper", key = "SOUND_WHISPER", soundId = 3081 },
+    { id = "raid",    key = "SOUND_RAID",    soundId = 8959 },
+    { id = "ready",   key = "SOUND_READY",   soundId = 8960 },
+    { id = "coin",    key = "SOUND_COIN",    soundId = 120 },
 }
 
 local LOOKAHEAD_OPTIONS = {
-    { days = 7,  label = "7 Dias" },
-    { days = 14, label = "14 Dias" },
-    { days = 30, label = "30 Dias" },
-    { days = 60, label = "60 Dias" },
+    { days = 7 },
+    { days = 14 },
+    { days = 30 },
+    { days = 60 },
 }
 
 --- Construtor da View de Configurações.
@@ -118,7 +120,7 @@ local function styleBox(eb)
     eb:SetScript("OnEnterPressed", function(box) box:ClearFocus() end)
 end
 
---- Helper para criar checkboxes no padrão Blizzard.
+--- Helper para criar checkboxes no padrão Blizzard reativos à localização.
 local function createCheckbox(parent, labelText, tooltipTitle, tooltipDesc)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     cb:SetSize(22, 22)
@@ -126,22 +128,30 @@ local function createCheckbox(parent, labelText, tooltipTitle, tooltipDesc)
     txt:SetPoint("LEFT", cb, "RIGHT", 4, 0)
     txt:SetText(labelText)
     cb.label = txt
+    cb.tooltipTitle = tooltipTitle
+    cb.tooltipDesc = tooltipDesc
 
-    if tooltipTitle then
-        cb:SetScript("OnEnter", function(f)
+    cb:SetScript("OnEnter", function(f)
+        if f.tooltipTitle then
             GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("|cffffd200" .. tooltipTitle .. "|r")
-            if tooltipDesc then
-                GameTooltip:AddLine(tooltipDesc, 1, 1, 1, true)
+            GameTooltip:AddLine("|cffffd200" .. f.tooltipTitle .. "|r")
+            if f.tooltipDesc then
+                GameTooltip:AddLine(f.tooltipDesc, 1, 1, 1, true)
             end
             GameTooltip:Show()
-        end)
-        cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
+        end
+    end)
+    cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    cb:SetScript("OnClick", function(f)
+    cb:SetScript("OnClick", function()
         if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or 856) end
     end)
+
+    function cb:updateTexts(newLabel, newTitle, newDesc)
+        if newLabel and self.label then self.label:SetText(newLabel) end
+        if newTitle ~= nil then self.tooltipTitle = newTitle end
+        if newDesc ~= nil then self.tooltipDesc = newDesc end
+    end
 
     return cb
 end
@@ -189,11 +199,13 @@ function SettingsView:createUI()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", gearIcon, "RIGHT", 8, 0)
-    title:SetText("|cffffd200CONFIGURAÇÕES DO GUILDMANAGER|r")
+    title:SetText(L["SETTINGS_TITLE"])
+    self._title = title
 
     local subTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subTitle:SetPoint("LEFT", title, "RIGHT", 12, 0)
-    subTitle:SetText("|cffaaaaaaPersonalize opções visuais, alertas, histórico e dados da guilda|r")
+    subTitle:SetText(L["SETTINGS_SUBTITLE"])
+    self._subTitle = subTitle
 
     local sep = frame:CreateTexture(nil, "ARTWORK")
     sep:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -44)
@@ -209,7 +221,7 @@ function SettingsView:createUI()
     self:createFooter()
 end
 
---- Cria as abas laterais (Auditoria, Logs, Grupos, Configurações).
+--- Cria as abas laterais (Auditoria, Logs, Grupos, Agenda, Configurações).
 function SettingsView:createSideTabs()
     local frame = self._frame
     if not frame then return end
@@ -232,14 +244,15 @@ function SettingsView:createSideTabs()
     auditIcon:SetVertexColor(0.65, 0.65, 0.65)
 
     tabAudit:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         auditIcon:SetVertexColor(1.0, 1.0, 1.0)
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Auditoria de Membros.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAudit:SetScript("OnLeave", function(btn)
@@ -282,14 +295,15 @@ function SettingsView:createSideTabs()
     logsIcon:SetVertexColor(0.65, 0.65, 0.65)
 
     tabLogs:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         logsIcon:SetVertexColor(1.0, 1.0, 1.0)
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Logs da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabLogs:SetScript("OnLeave", function(btn)
@@ -332,14 +346,15 @@ function SettingsView:createSideTabs()
     groupsIcon:SetVertexColor(0.65, 0.65, 0.65)
 
     tabGroups:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Gerenciamento de Grupos|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Grupos.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabGroups:SetScript("OnLeave", function(btn)
@@ -388,14 +403,15 @@ function SettingsView:createSideTabs()
     tabAgenda.icon = agendaIcon
 
     tabAgenda:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Agenda da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Agenda e Eventos da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAgenda:SetScript("OnLeave", function(btn)
@@ -445,10 +461,11 @@ function SettingsView:createSideTabs()
     sGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
 
     tabSettings:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Configurações do Addon|r")
-        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Personalização de comportamento, alertas, minimapa e dados da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine("|cff888888" .. curL["CURRENT_TAB"] .. "|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabSettings:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -489,7 +506,8 @@ function SettingsView:createTopSummaryBox()
     -- Campo de Lema / Subtítulo customizado da guilda
     local tagLabel = topBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     tagLabel:SetPoint("RIGHT", topBox, "RIGHT", -335, 0)
-    tagLabel:SetText("|cffffd200Lema / Mensagem:|r")
+    tagLabel:SetText(L["SETTINGS_TAGLINE_LABEL"])
+    self._widgets.tagLabel = tagLabel
 
     local tagEB = CreateFrame("EditBox", nil, topBox, template)
     tagEB:SetPoint("LEFT", tagLabel, "RIGHT", 8, 0)
@@ -498,6 +516,43 @@ function SettingsView:createTopSummaryBox()
     self._widgets.guildTagline = tagEB
 
     self._topBox = topBox
+end
+
+--- Seleciona e troca o idioma da interface em tempo real
+---@param lang string @"enUS" ou "ptBR"
+function SettingsView:selectLanguage(lang)
+    if lang ~= "enUS" and lang ~= "ptBR" then lang = "enUS" end
+    self._widgets.selectedLanguage = lang
+    self:updateLanguageButtonsVisual(self._widgets.langButtons, lang)
+
+    if _G.GM and _G.GM.SetLocale then
+        _G.GM.SetLocale(lang)
+    end
+
+    self:updateLocale()
+
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local msg = (lang == "ptBR") and curL["SETTINGS_LANG_CHANGED_PT"] or curL["SETTINGS_LANG_CHANGED_EN"]
+    self:showStatus(msg, false)
+end
+
+--- Atualiza visual dos botões de seleção de idioma
+function SettingsView:updateLanguageButtonsVisual(buttons, activeLang)
+    if not buttons then return end
+    for lang, btn in pairs(buttons) do
+        local isActive = (lang == activeLang)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
+                btn:SetBackdropBorderColor(PALETTE.ACTIVE_TAB_BORDER[1], PALETTE.ACTIVE_TAB_BORDER[2], PALETTE.ACTIVE_TAB_BORDER[3], 1.0)
+                btn.txt:SetTextColor(1.0, 0.85, 0.20)
+            else
+                btn:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.80)
+                btn:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.85)
+                btn.txt:SetTextColor(0.80, 0.80, 0.80)
+            end
+        end
+    end
 end
 
 --- Cria as duas colunas estruturadas de configurações.
@@ -509,7 +564,7 @@ function SettingsView:createSettingsColumns()
     local colHeight = 440
 
     -- =========================================================================
-    -- COLUNA ESQUERDA: Interface, Chat & Minimapa
+    -- COLUNA ESQUERDA: Interface, Idioma, Chat & Minimapa
     -- =========================================================================
     local leftCol = CreateFrame("Frame", nil, frame, template)
     leftCol:SetPoint("TOPLEFT", self._topBox, "BOTTOMLEFT", 0, -6)
@@ -526,13 +581,14 @@ function SettingsView:createSettingsColumns()
 
     local lChild = CreateFrame("Frame", nil, lScroll)
     lChild:SetWidth(colWidth - 30)
-    lChild:SetHeight(480)
+    lChild:SetHeight(520)
     lScroll:SetScrollChild(lChild)
 
-    -- --- SEÇÃO 1: APRESENTAÇÃO & INTERFACE ---
+    -- --- SEÇÃO 1: APRESENTAÇÃO, IDIOMA & INTERFACE ---
     local s1Header = lChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s1Header:SetPoint("TOPLEFT", lChild, "TOPLEFT", 4, -4)
-    s1Header:SetText("|cffffd2001. APRESENTAÇÃO & INTERFACE|r")
+    s1Header:SetText(L["SETTINGS_S1_HEADER"])
+    self._widgets.s1Header = s1Header
 
     local s1Sep = lChild:CreateTexture(nil, "ARTWORK")
     s1Sep:SetPoint("TOPLEFT", s1Header, "BOTTOMLEFT", 0, -3)
@@ -540,16 +596,52 @@ function SettingsView:createSettingsColumns()
     s1Sep:SetHeight(1)
     s1Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
+    -- Seletor de Idioma
+    local langLabel = lChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    langLabel:SetPoint("TOPLEFT", s1Sep, "BOTTOMLEFT", 2, -6)
+    langLabel:SetText(L["SETTINGS_LANG_LABEL"])
+    self._widgets.langLabel = langLabel
+
+    local langEnBtn = CreateFrame("Button", nil, lChild, template)
+    langEnBtn:SetSize(115, 22)
+    langEnBtn:SetPoint("TOPLEFT", langLabel, "BOTTOMLEFT", 0, -4)
+    if langEnBtn.SetBackdrop then langEnBtn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+    local enTxt = langEnBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    enTxt:SetPoint("CENTER", langEnBtn, "CENTER", 0, 0)
+    enTxt:SetText("English (US)")
+    langEnBtn.txt = enTxt
+    langEnBtn:SetScript("OnClick", function()
+        self:selectLanguage("enUS")
+    end)
+
+    local langPtBtn = CreateFrame("Button", nil, lChild, template)
+    langPtBtn:SetSize(115, 22)
+    langPtBtn:SetPoint("LEFT", langEnBtn, "RIGHT", 10, 0)
+    if langPtBtn.SetBackdrop then langPtBtn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+    local ptTxt = langPtBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    ptTxt:SetPoint("CENTER", langPtBtn, "CENTER", 0, 0)
+    ptTxt:SetText("Português (BR)")
+    langPtBtn.txt = ptTxt
+    langPtBtn:SetScript("OnClick", function()
+        self:selectLanguage("ptBR")
+    end)
+
+    self._widgets.langButtons = {
+        enUS = langEnBtn,
+        ptBR = langPtBtn,
+    }
+
     local tabDefLabel = lChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    tabDefLabel:SetPoint("TOPLEFT", s1Sep, "BOTTOMLEFT", 2, -6)
-    tabDefLabel:SetText("Aba inicial padrão ao abrir o Addon:")
+    tabDefLabel:SetPoint("TOPLEFT", langEnBtn, "BOTTOMLEFT", 0, -8)
+    tabDefLabel:SetText(L["SETTINGS_DEFAULT_TAB_LABEL"])
+    self._widgets.tabDefLabel = tabDefLabel
 
     local tabDefs = {
-        { id = "audit",    label = "Auditoria" },
-        { id = "logs",     label = "Logs" },
-        { id = "groups",   label = "Grupos" },
-        { id = "agenda",   label = "Agenda" },
-        { id = "settings", label = "Opções" },
+        { id = "audit",    key = "TAB_AUDIT" },
+        { id = "logs",     key = "TAB_LOGS" },
+        { id = "groups",   key = "TAB_GROUPS" },
+        { id = "agenda",   key = "TAB_AGENDA" },
+        { id = "settings", key = "TAB_SETTINGS" },
     }
     local tabButtons = {}
     for i, tDef in ipairs(tabDefs) do
@@ -559,8 +651,9 @@ function SettingsView:createSettingsColumns()
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        txt:SetText(tDef.label)
+        txt:SetText(L[tDef.key] or tDef.id)
         btn.txt = txt
+        btn.key = tDef.key
         btn:SetScript("OnClick", function()
             self._widgets.selectedDefaultTab = tDef.id
             self:updateTabSelectionButtons(tabButtons, tDef.id)
@@ -569,14 +662,15 @@ function SettingsView:createSettingsColumns()
     end
     self._widgets.tabButtons = tabButtons
 
-    local cbTime24 = createCheckbox(lChild, "Formato 24 horas no relógio dos registros (ex: 21:45)", "Formato de Horário", "Exibe horários no formato 24 horas ou no formato AM/PM.")
+    local cbTime24 = createCheckbox(lChild, L["SETTINGS_TIME_24H"], L["SETTINGS_TIME_24H_TIP_TITLE"], L["SETTINGS_TIME_24H_TIP_DESC"])
     cbTime24:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", 0, -32)
     self._widgets.timeFormat24 = cbTime24
 
     -- --- SEÇÃO 2: CHAT & MENÇÕES (@) ---
     local s2Header = lChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s2Header:SetPoint("TOPLEFT", cbTime24, "BOTTOMLEFT", 2, -12)
-    s2Header:SetText("|cffffd2002. CHAT DA GUILDA & MENÇÕES (@)|r")
+    s2Header:SetText(L["SETTINGS_S2_HEADER"])
+    self._widgets.s2Header = s2Header
 
     local s2Sep = lChild:CreateTexture(nil, "ARTWORK")
     s2Sep:SetPoint("TOPLEFT", s2Header, "BOTTOMLEFT", 0, -3)
@@ -584,21 +678,22 @@ function SettingsView:createSettingsColumns()
     s2Sep:SetHeight(1)
     s2Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbChatMentions = createCheckbox(lChild, "Ativar menções no chat da guilda (@Nome com autocomplete)", "Menções no Chat", "Permite digitar @ no chat da guilda para abrir a lista de membros e destacar nomes em dourado.")
+    local cbChatMentions = createCheckbox(lChild, L["SETTINGS_CHAT_MENTIONS"], L["SETTINGS_CHAT_MENTIONS_TIP_TITLE"], L["SETTINGS_CHAT_MENTIONS_TIP_DESC"])
     cbChatMentions:SetPoint("TOPLEFT", s2Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.enableChatMentions = cbChatMentions
 
-    local cbMentionSound = createCheckbox(lChild, "Tocar aviso sonoro quando eu for mencionado no chat", "Alerta Sonoro", "Executa um efeito de som imediato quando outro membro marcar seu nome no chat da guilda.")
+    local cbMentionSound = createCheckbox(lChild, L["SETTINGS_MENTION_SOUND"], L["SETTINGS_MENTION_SOUND_TIP_TITLE"], L["SETTINGS_MENTION_SOUND_TIP_DESC"])
     cbMentionSound:SetPoint("TOPLEFT", cbChatMentions, "BOTTOMLEFT", 0, -2)
     self._widgets.enableMentionSound = cbMentionSound
 
-    local cbMentionFlash = createCheckbox(lChild, "Piscar a janela/aba de chat ao receber menção", "Alerta Visual", "Aplica uma animação visual pulsante na janela de chat onde você foi mencionado.")
+    local cbMentionFlash = createCheckbox(lChild, L["SETTINGS_MENTION_FLASH"], L["SETTINGS_MENTION_FLASH_TIP_TITLE"], L["SETTINGS_MENTION_FLASH_TIP_DESC"])
     cbMentionFlash:SetPoint("TOPLEFT", cbMentionSound, "BOTTOMLEFT", 0, -2)
     self._widgets.enableMentionFlash = cbMentionFlash
 
     local soundLabel = lChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     soundLabel:SetPoint("TOPLEFT", cbMentionFlash, "BOTTOMLEFT", 4, -6)
-    soundLabel:SetText("Efeito sonoro da menção:")
+    soundLabel:SetText(L["SETTINGS_SOUND_CHOICE_LABEL"])
+    self._widgets.soundLabel = soundLabel
 
     local soundButtons = {}
     for i, sDef in ipairs(SOUND_OPTIONS) do
@@ -608,8 +703,9 @@ function SettingsView:createSettingsColumns()
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        txt:SetText(sDef.label)
+        txt:SetText(L[sDef.key] or sDef.id)
         btn.txt = txt
+        btn.key = sDef.key
         btn:SetScript("OnClick", function()
             self._widgets.selectedMentionSound = sDef.id
             self:updateSoundButtons(soundButtons, sDef.id)
@@ -622,7 +718,7 @@ function SettingsView:createSettingsColumns()
     local testSoundBtn = CreateFrame("Button", nil, lChild, "UIPanelButtonTemplate")
     testSoundBtn:SetSize(64, 18)
     testSoundBtn:SetPoint("LEFT", soundButtons["coin"], "RIGHT", 6, 0)
-    testSoundBtn:SetText("Testar")
+    testSoundBtn:SetText(L["TEST"])
     testSoundBtn:SetScript("OnClick", function()
         local cur = self._widgets.selectedMentionSound or "whisper"
         for _, s in ipairs(SOUND_OPTIONS) do
@@ -632,11 +728,13 @@ function SettingsView:createSettingsColumns()
             end
         end
     end)
+    self._widgets.testSoundBtn = testSoundBtn
 
     -- --- SEÇÃO 3: BOTÃO DO MINIMAPA ---
     local s3Header = lChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s3Header:SetPoint("TOPLEFT", soundLabel, "BOTTOMLEFT", 0, -30)
-    s3Header:SetText("|cffffd2003. BOTÃO DO MINIMAPA|r")
+    s3Header:SetText(L["SETTINGS_S3_HEADER"])
+    self._widgets.s3Header = s3Header
 
     local s3Sep = lChild:CreateTexture(nil, "ARTWORK")
     s3Sep:SetPoint("TOPLEFT", s3Header, "BOTTOMLEFT", 0, -3)
@@ -644,13 +742,13 @@ function SettingsView:createSettingsColumns()
     s3Sep:SetHeight(1)
     s3Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbMinimap = createCheckbox(lChild, "Exibir botão do GuildManager ao redor do minimapa", "Botão do Minimapa", "Mostra o ícone flutuante do GuildManager na borda do Minimapa.")
+    local cbMinimap = createCheckbox(lChild, L["SETTINGS_MINIMAP_BTN"], L["SETTINGS_MINIMAP_BTN_TIP_TITLE"], L["SETTINGS_MINIMAP_BTN_TIP_DESC"])
     cbMinimap:SetPoint("TOPLEFT", s3Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.showMinimapButton = cbMinimap
 
     local sliderLabel = lChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     sliderLabel:SetPoint("TOPLEFT", cbMinimap, "BOTTOMLEFT", 4, -6)
-    sliderLabel:SetText("Posição Orbital do Minimapa: 215°")
+    sliderLabel:SetText(string.format(L["SETTINGS_MINIMAP_POS_LABEL"], 215))
     self._widgets.sliderLabel = sliderLabel
 
     local posSlider = CreateFrame("Slider", "GM_MinimapPosSlider", lChild, "OptionsSliderTemplate")
@@ -666,7 +764,8 @@ function SettingsView:createSettingsColumns()
 
     posSlider:SetScript("OnValueChanged", function(_, val)
         val = math.floor(val)
-        sliderLabel:SetText(string.format("Posição Orbital do Minimapa: %d°", val))
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        sliderLabel:SetText(string.format(curL["SETTINGS_MINIMAP_POS_LABEL"] or "Minimap: %d°", val))
         if _G.GM and _G.GM.minimapButton and _G.GM.minimapButton.updatePosition then
             _G.GM.minimapButton:updatePosition(val)
         end
@@ -676,15 +775,17 @@ function SettingsView:createSettingsColumns()
     local resetPosBtn = CreateFrame("Button", nil, lChild, "UIPanelButtonTemplate")
     resetPosBtn:SetSize(90, 20)
     resetPosBtn:SetPoint("LEFT", posSlider, "RIGHT", 12, 0)
-    resetPosBtn:SetText("Padrão (215°)")
+    resetPosBtn:SetText(L["SETTINGS_MINIMAP_DEFAULT_BTN"])
     resetPosBtn:SetScript("OnClick", function()
         posSlider:SetValue(215)
     end)
+    self._widgets.resetPosBtn = resetPosBtn
 
     -- --- SEÇÃO 4: MAPA MUNDIAL & RASTREAMENTO ---
     local s4Header = lChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s4Header:SetPoint("TOPLEFT", sliderLabel, "BOTTOMLEFT", -4, -34)
-    s4Header:SetText("|cffffd2004. MAPA MUNDIAL & RASTREAMENTO|r")
+    s4Header:SetText(L["SETTINGS_S4_HEADER"])
+    self._widgets.s4Header = s4Header
 
     local s4Sep = lChild:CreateTexture(nil, "ARTWORK")
     s4Sep:SetPoint("TOPLEFT", s4Header, "BOTTOMLEFT", 0, -3)
@@ -692,19 +793,19 @@ function SettingsView:createSettingsColumns()
     s4Sep:SetHeight(1)
     s4Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbWorldMapBtn = createCheckbox(lChild, "Exibir botão do GuildManager no cabeçalho do Mapa", "Botão no Mapa", "Mostra o botão de resumo da guilda na barra superior direita do mapa mundial.")
+    local cbWorldMapBtn = createCheckbox(lChild, L["SETTINGS_MAP_BTN"], L["SETTINGS_MAP_BTN_TIP_TITLE"], L["SETTINGS_MAP_BTN_TIP_DESC"])
     cbWorldMapBtn:SetPoint("TOPLEFT", s4Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.showWorldMapButton = cbWorldMapBtn
 
-    local cbAutoScanMap = createCheckbox(lChild, "Escanear membros da guilda ao abrir o mapa mundial", "Varredura Automática", "Atualiza a lista de membros e suas posições sempre que você abre o mapa.")
+    local cbAutoScanMap = createCheckbox(lChild, L["SETTINGS_MAP_AUTOSCAN"], L["SETTINGS_MAP_AUTOSCAN_TIP_TITLE"], L["SETTINGS_MAP_AUTOSCAN_TIP_DESC"])
     cbAutoScanMap:SetPoint("TOPLEFT", cbWorldMapBtn, "BOTTOMLEFT", 0, -2)
     self._widgets.autoScanWorldMap = cbAutoScanMap
 
-    local cbShowMapPins = createCheckbox(lChild, "Exibir marcadores e painel de membros na zona", "Marcadores no Mapa", "Exibe marcadores e o painel expansível de membros da guilda no mapa.")
+    local cbShowMapPins = createCheckbox(lChild, L["SETTINGS_MAP_PINS"], L["SETTINGS_MAP_PINS_TIP_TITLE"], L["SETTINGS_MAP_PINS_TIP_DESC"])
     cbShowMapPins:SetPoint("TOPLEFT", cbAutoScanMap, "BOTTOMLEFT", 0, -2)
     self._widgets.showMapPins = cbShowMapPins
 
-    local cbHighlightSelf = createCheckbox(lChild, "Destacar o próprio jogador na listagem da região", "Destacar a Si Mesmo", "Exibe seu personagem no topo da lista com identificação e destaque dourado.")
+    local cbHighlightSelf = createCheckbox(lChild, L["SETTINGS_MAP_HIGHLIGHT"], L["SETTINGS_MAP_HIGHLIGHT_TIP_TITLE"], L["SETTINGS_MAP_HIGHLIGHT_TIP_DESC"])
     cbHighlightSelf:SetPoint("TOPLEFT", cbShowMapPins, "BOTTOMLEFT", 0, -2)
     self._widgets.highlightSelfOnMap = cbHighlightSelf
 
@@ -732,7 +833,8 @@ function SettingsView:createSettingsColumns()
     -- --- SEÇÃO 5: AGENDA & EVENTOS DA GUILDA ---
     local s5Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s5Header:SetPoint("TOPLEFT", rChild, "TOPLEFT", 4, -4)
-    s5Header:SetText("|cffffd2005. AGENDA & EVENTOS DA GUILDA|r")
+    s5Header:SetText(L["SETTINGS_S5_HEADER"])
+    self._widgets.s5Header = s5Header
 
     local s5Sep = rChild:CreateTexture(nil, "ARTWORK")
     s5Sep:SetPoint("TOPLEFT", s5Header, "BOTTOMLEFT", 0, -3)
@@ -740,21 +842,22 @@ function SettingsView:createSettingsColumns()
     s5Sep:SetHeight(1)
     s5Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbBdayLogin = createCheckbox(rChild, "Avisar no chat sobre aniversariantes do dia ao conectar", "Aniversariantes de Hoje", "Exibe lembrete no chat local caso haja colegas de guilda fazendo aniversário no dia atual.")
+    local cbBdayLogin = createCheckbox(rChild, L["SETTINGS_NOTIFY_BDAY_LOGIN"], L["SETTINGS_NOTIFY_BDAY_TIP_TITLE"], L["SETTINGS_NOTIFY_BDAY_TIP_DESC"])
     cbBdayLogin:SetPoint("TOPLEFT", s5Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.notifyBirthdaysOnLogin = cbBdayLogin
 
-    local cbEventLogin = createCheckbox(rChild, "Avisar no chat sobre eventos da guilda agendados para hoje", "Eventos de Hoje", "Notifica no chat local sobre eventos de raide, masmorra ou comemorações hoje.")
+    local cbEventLogin = createCheckbox(rChild, L["SETTINGS_NOTIFY_EVENT_LOGIN"], L["SETTINGS_NOTIFY_EVENT_TIP_TITLE"], L["SETTINGS_NOTIFY_EVENT_TIP_DESC"])
     cbEventLogin:SetPoint("TOPLEFT", cbBdayLogin, "BOTTOMLEFT", 0, -2)
     self._widgets.notifyUpcomingEvents = cbEventLogin
 
-    local cbConfirmEvent = createCheckbox(rChild, "Solicitar confirmação ao excluir eventos da agenda", "Segurança da Agenda", "Exige confirmação antes de remover qualquer evento registrado.")
+    local cbConfirmEvent = createCheckbox(rChild, L["SETTINGS_CONFIRM_EVENT_DELETE"], L["SETTINGS_CONFIRM_EVENT_TIP_TITLE"], L["SETTINGS_CONFIRM_EVENT_TIP_DESC"])
     cbConfirmEvent:SetPoint("TOPLEFT", cbEventLogin, "BOTTOMLEFT", 0, -2)
     self._widgets.confirmEventDelete = cbConfirmEvent
 
     local bdayLookaheadLabel = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     bdayLookaheadLabel:SetPoint("TOPLEFT", cbConfirmEvent, "BOTTOMLEFT", 4, -6)
-    bdayLookaheadLabel:SetText("Antecedência de aniversários na lista:")
+    bdayLookaheadLabel:SetText(L["SETTINGS_BDAY_LOOKAHEAD_LABEL"])
+    self._widgets.bdayLookaheadLabel = bdayLookaheadLabel
 
     local lookaheadButtons = {}
     for i, lDef in ipairs(LOOKAHEAD_OPTIONS) do
@@ -764,8 +867,9 @@ function SettingsView:createSettingsColumns()
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        txt:SetText(lDef.label)
+        txt:SetText(string.format(L["SETTINGS_DAYS_FMT"], lDef.days))
         btn.txt = txt
+        btn.days = lDef.days
         btn:SetScript("OnClick", function()
             self._widgets.selectedBirthdayLookaheadDays = lDef.days
             self:updateLookaheadButtons(lookaheadButtons, lDef.days)
@@ -776,7 +880,8 @@ function SettingsView:createSettingsColumns()
 
     local defTimeLabel = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     defTimeLabel:SetPoint("TOPLEFT", bdayLookaheadLabel, "BOTTOMLEFT", 0, -32)
-    defTimeLabel:SetText("Horário padrão sugerido ao criar eventos:")
+    defTimeLabel:SetText(L["SETTINGS_DEFAULT_EVENT_TIME"])
+    self._widgets.defTimeLabel = defTimeLabel
 
     local defTimeEB = CreateFrame("EditBox", "GM_DefaultEventTimeEditBox", rChild)
     defTimeEB:SetSize(70, 20)
@@ -788,7 +893,8 @@ function SettingsView:createSettingsColumns()
     -- --- SEÇÃO 6: GERENCIAMENTO DE GRUPOS ---
     local s6Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s6Header:SetPoint("TOPLEFT", defTimeLabel, "BOTTOMLEFT", 0, -14)
-    s6Header:SetText("|cffffd2006. GERENCIAMENTO DE GRUPOS|r")
+    s6Header:SetText(L["SETTINGS_S6_HEADER"])
+    self._widgets.s6Header = s6Header
 
     local s6Sep = rChild:CreateTexture(nil, "ARTWORK")
     s6Sep:SetPoint("TOPLEFT", s6Header, "BOTTOMLEFT", 0, -3)
@@ -796,18 +902,19 @@ function SettingsView:createSettingsColumns()
     s6Sep:SetHeight(1)
     s6Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbConfirmGroup = createCheckbox(rChild, "Solicitar confirmação ao excluir grupos de masmorra/raide", "Segurança de Grupos", "Exige confirmação antes de remover um grupo criado.")
+    local cbConfirmGroup = createCheckbox(rChild, L["SETTINGS_CONFIRM_GROUP_DELETE"], L["SETTINGS_CONFIRM_GROUP_TIP_TITLE"], L["SETTINGS_CONFIRM_GROUP_TIP_DESC"])
     cbConfirmGroup:SetPoint("TOPLEFT", s6Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.confirmGroupDelete = cbConfirmGroup
 
-    local cbAutoRole = createCheckbox(rChild, "Sugerir função automaticamente pela classe ao adicionar", "Função Automática", "Define Tanque, Cura ou Dano automaticamente com base na classe do personagem.")
+    local cbAutoRole = createCheckbox(rChild, L["SETTINGS_AUTO_ROLE"], L["SETTINGS_AUTO_ROLE_TIP_TITLE"], L["SETTINGS_AUTO_ROLE_TIP_DESC"])
     cbAutoRole:SetPoint("TOPLEFT", cbConfirmGroup, "BOTTOMLEFT", 0, -2)
     self._widgets.autoAssignGroupRole = cbAutoRole
 
     -- --- SEÇÃO 7: AUDITORIA & ROSTER DE MEMBROS ---
     local s7Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s7Header:SetPoint("TOPLEFT", cbAutoRole, "BOTTOMLEFT", 2, -12)
-    s7Header:SetText("|cffffd2007. AUDITORIA & ROSTER DE MEMBROS|r")
+    s7Header:SetText(L["SETTINGS_S7_HEADER"])
+    self._widgets.s7Header = s7Header
 
     local s7Sep = rChild:CreateTexture(nil, "ARTWORK")
     s7Sep:SetPoint("TOPLEFT", s7Header, "BOTTOMLEFT", 0, -3)
@@ -815,22 +922,23 @@ function SettingsView:createSettingsColumns()
     s7Sep:SetHeight(1)
     s7Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbAutoScan = createCheckbox(rChild, "Varredura automática ao conectar e em eventos da guilda", "Auto Varredura", "Sincroniza membros e cargos da guilda automaticamente em segundo plano.")
+    local cbAutoScan = createCheckbox(rChild, L["SETTINGS_AUTO_SCAN"], L["SETTINGS_AUTO_SCAN_TIP_TITLE"], L["SETTINGS_AUTO_SCAN_TIP_DESC"])
     cbAutoScan:SetPoint("TOPLEFT", s7Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.autoScanRoster = cbAutoScan
 
-    local cbOffline = createCheckbox(rChild, "Exibir membros desconectados na auditoria por padrão", "Membros Offline", "Mantém os membros offline visíveis na lista de auditoria.")
+    local cbOffline = createCheckbox(rChild, L["SETTINGS_SHOW_OFFLINE"], L["SETTINGS_SHOW_OFFLINE_TIP_TITLE"], L["SETTINGS_SHOW_OFFLINE_TIP_DESC"])
     cbOffline:SetPoint("TOPLEFT", cbAutoScan, "BOTTOMLEFT", 0, -2)
     self._widgets.showOfflineMembers = cbOffline
 
-    local cbNotifyRecruit = createCheckbox(rChild, "Avisar no chat local quando um novo jogador for recrutado", "Aviso de Recrutamento", "Envia mensagem informativa amigável no chat quando novos membros entram.")
+    local cbNotifyRecruit = createCheckbox(rChild, L["SETTINGS_NOTIFY_RECRUIT"], L["SETTINGS_NOTIFY_RECRUIT_TIP_TITLE"], L["SETTINGS_NOTIFY_RECRUIT_TIP_DESC"])
     cbNotifyRecruit:SetPoint("TOPLEFT", cbOffline, "BOTTOMLEFT", 0, -2)
     self._widgets.notifyNewRecruit = cbNotifyRecruit
 
     -- --- SEÇÃO 8: REGISTRO DE EVENTOS (LOGS) ---
     local s8Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s8Header:SetPoint("TOPLEFT", cbNotifyRecruit, "BOTTOMLEFT", 2, -12)
-    s8Header:SetText("|cffffd2008. REGISTRO DE EVENTOS (LOGS)|r")
+    s8Header:SetText(L["SETTINGS_S8_HEADER"])
+    self._widgets.s8Header = s8Header
 
     local s8Sep = rChild:CreateTexture(nil, "ARTWORK")
     s8Sep:SetPoint("TOPLEFT", s8Header, "BOTTOMLEFT", 0, -3)
@@ -838,35 +946,36 @@ function SettingsView:createSettingsColumns()
     s8Sep:SetHeight(1)
     s8Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
-    local cbLvl = createCheckbox(rChild, "Registrar quando membros subirem de nível", "Log de Nível", "Grava registro histórico quando qualquer membro da guilda ganha um nível.")
+    local cbLvl = createCheckbox(rChild, L["SETTINGS_LOG_LEVEL"], L["SETTINGS_LOG_LEVEL_TIP_TITLE"], L["SETTINGS_LOG_LEVEL_TIP_DESC"])
     cbLvl:SetPoint("TOPLEFT", s8Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.logLevelUp = cbLvl
 
-    local cbPromote = createCheckbox(rChild, "Registrar promoções e rebaixamentos de cargo", "Log de Cargos", "Grava quando alguém tem cargo alterado, identificando quem alterou.")
+    local cbPromote = createCheckbox(rChild, L["SETTINGS_LOG_PROMOTE"], L["SETTINGS_LOG_PROMOTE_TIP_TITLE"], L["SETTINGS_LOG_PROMOTE_TIP_DESC"])
     cbPromote:SetPoint("TOPLEFT", cbLvl, "BOTTOMLEFT", 0, -2)
     self._widgets.logPromoteDemote = cbPromote
 
-    local cbNotes = createCheckbox(rChild, "Registrar alterações em notas públicas e de oficial", "Log de Notas", "Grava modificações de notas personalizadas da guilda.")
+    local cbNotes = createCheckbox(rChild, L["SETTINGS_LOG_NOTES"], L["SETTINGS_LOG_NOTES_TIP_TITLE"], L["SETTINGS_LOG_NOTES_TIP_DESC"])
     cbNotes:SetPoint("TOPLEFT", cbPromote, "BOTTOMLEFT", 0, -2)
     self._widgets.logNotes = cbNotes
 
-    local cbJoinLeave = createCheckbox(rChild, "Registrar entradas, saídas e expulsões da guilda", "Log de Admissão/Saída", "Grava entradas, saídas voluntárias e expulsões de jogadores.")
+    local cbJoinLeave = createCheckbox(rChild, L["SETTINGS_LOG_JOIN_LEAVE"], L["SETTINGS_LOG_JOIN_LEAVE_TIP_TITLE"], L["SETTINGS_LOG_JOIN_LEAVE_TIP_DESC"])
     cbJoinLeave:SetPoint("TOPLEFT", cbNotes, "BOTTOMLEFT", 0, -2)
     self._widgets.logJoinLeave = cbJoinLeave
 
-    local cbRejoin = createCheckbox(rChild, "Registrar retorno à guilda (jogadores que já saíram)", "Log de Reingresso", "Grava quando um membro que já fez parte da guilda retorna, mantendo histórico prévio.")
+    local cbRejoin = createCheckbox(rChild, L["SETTINGS_LOG_REJOIN"], L["SETTINGS_LOG_REJOIN_TIP_TITLE"], L["SETTINGS_LOG_REJOIN_TIP_DESC"])
     cbRejoin:SetPoint("TOPLEFT", cbJoinLeave, "BOTTOMLEFT", 0, -2)
     self._widgets.logRejoin = cbRejoin
 
     local retLabel = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     retLabel:SetPoint("TOPLEFT", cbRejoin, "BOTTOMLEFT", 4, -6)
-    retLabel:SetText("Retenção máxima de histórico de logs:")
+    retLabel:SetText(L["SETTINGS_RETENTION_LABEL"])
+    self._widgets.retLabel = retLabel
 
     local retentionDefs = {
-        { days = 30,  label = "30 Dias" },
-        { days = 60,  label = "60 Dias" },
-        { days = 90,  label = "90 Dias" },
-        { days = 0,   label = "Ilimitado" },
+        { days = 30 },
+        { days = 60 },
+        { days = 90 },
+        { days = 0, isUnlimited = true },
     }
     local retentionButtons = {}
     for i, rDef in ipairs(retentionDefs) do
@@ -876,8 +985,13 @@ function SettingsView:createSettingsColumns()
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        txt:SetText(rDef.label)
+        if rDef.isUnlimited then
+            txt:SetText(L["SETTINGS_RETENTION_UNLIMITED"])
+        else
+            txt:SetText(string.format(L["SETTINGS_DAYS_FMT"], rDef.days))
+        end
         btn.txt = txt
+        btn.days = rDef.days
         btn:SetScript("OnClick", function()
             self._widgets.selectedRetentionDays = rDef.days
             self:updateRetentionButtons(retentionButtons, rDef.days)
@@ -889,7 +1003,8 @@ function SettingsView:createSettingsColumns()
     -- --- SEÇÃO 9: SEGURANÇA & MANUTENÇÃO ---
     local s9Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     s9Header:SetPoint("TOPLEFT", retLabel, "BOTTOMLEFT", 0, -32)
-    s9Header:SetText("|cffffd2009. SEGURANÇA & MANUTENÇÃO|r")
+    s9Header:SetText(L["SETTINGS_S9_HEADER"])
+    self._widgets.s9Header = s9Header
 
     local s9Sep = rChild:CreateTexture(nil, "ARTWORK")
     s9Sep:SetPoint("TOPLEFT", s9Header, "BOTTOMLEFT", 0, -3)
@@ -901,42 +1016,46 @@ function SettingsView:createSettingsColumns()
     local purgeBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     purgeBtn:SetSize(170, 22)
     purgeBtn:SetPoint("TOPLEFT", s9Sep, "BOTTOMLEFT", 4, -8)
-    purgeBtn:SetText("Limpar Logs Antigos")
+    purgeBtn:SetText(L["SETTINGS_PURGE_BTN"])
     purgeBtn:SetScript("OnClick", function()
         if self._onPurgeLogsCallback then
             self._onPurgeLogsCallback()
         end
     end)
+    self._widgets.purgeBtn = purgeBtn
 
     local forceScanBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     forceScanBtn:SetSize(170, 22)
     forceScanBtn:SetPoint("LEFT", purgeBtn, "RIGHT", 10, 0)
-    forceScanBtn:SetText("Forçar Varredura Agora")
+    forceScanBtn:SetText(L["SETTINGS_FORCE_SCAN_BTN"])
     forceScanBtn:SetScript("OnClick", function()
         if self._onForceScanCallback then
             self._onForceScanCallback()
         end
     end)
+    self._widgets.forceScanBtn = forceScanBtn
 
     local resetAllBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     resetAllBtn:SetSize(170, 22)
     resetAllBtn:SetPoint("TOPLEFT", purgeBtn, "BOTTOMLEFT", 0, -6)
-    resetAllBtn:SetText("Restaurar Padrões")
+    resetAllBtn:SetText(L["SETTINGS_RESET_DEFAULTS_BTN"])
     resetAllBtn:SetScript("OnClick", function()
         if self._onResetCallback then
             self._onResetCallback()
         end
     end)
+    self._widgets.resetAllBtn = resetAllBtn
 
     local forceSyncBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     forceSyncBtn:SetSize(170, 22)
     forceSyncBtn:SetPoint("LEFT", resetAllBtn, "RIGHT", 10, 0)
-    forceSyncBtn:SetText("Forçar Sincronização P2P")
+    forceSyncBtn:SetText(L["SETTINGS_FORCE_SYNC_BTN"])
     forceSyncBtn:SetScript("OnClick", function()
         if self._onForceSyncCallback then
             self._onForceSyncCallback()
         end
     end)
+    self._widgets.forceSyncBtn = forceSyncBtn
 end
 
 --- Cria o rodapé com ações de salvar e fechar.
@@ -951,7 +1070,8 @@ function SettingsView:createFooter()
 
     local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("LEFT", fSep, "BOTTOMLEFT", 4, -18)
-    hint:SetText("|cff666666GuildManager v0.1 • Configurações & Personalização|r")
+    hint:SetText("|cff666666" .. L["SETTINGS_FOOTER_HINT"] .. "|r")
+    self._widgets.footerHint = hint
 
     local statusMsg = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     statusMsg:SetPoint("CENTER", frame, "BOTTOM", -50, 22)
@@ -961,18 +1081,20 @@ function SettingsView:createFooter()
     local saveBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     saveBtn:SetSize(150, 24)
     saveBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -120, 10)
-    saveBtn:SetText("Salvar Informações")
+    saveBtn:SetText(L["SAVE_SETTINGS"])
     saveBtn:SetScript("OnClick", function()
         if self._onSaveCallback then
             self._onSaveCallback(self:gatherFormData())
         end
     end)
+    self._widgets.saveBtn = saveBtn
 
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     closeBtn:SetSize(90, 24)
     closeBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 10)
-    closeBtn:SetText("Fechar")
+    closeBtn:SetText(L["CLOSE"])
     closeBtn:SetScript("OnClick", function() self:hide() end)
+    self._widgets.closeBtn = closeBtn
 end
 
 --- Atualiza a visualização dos botões da aba padrão.
@@ -1047,17 +1169,186 @@ function SettingsView:updateLookaheadButtons(buttons, activeDays)
     end
 end
 
+--- Atualiza dinamicamente todos os textos da interface após mudança de idioma.
+function SettingsView:updateLocale()
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    if not self._frame then return end
+
+    if self._title then self._title:SetText(curL["SETTINGS_TITLE"]) end
+    if self._subTitle then self._subTitle:SetText(curL["SETTINGS_SUBTITLE"]) end
+    if self._widgets.tagLabel then self._widgets.tagLabel:SetText(curL["SETTINGS_TAGLINE_LABEL"]) end
+    if self._widgets.langLabel then self._widgets.langLabel:SetText(curL["SETTINGS_LANG_LABEL"]) end
+
+    -- Seção 1
+    if self._widgets.s1Header then self._widgets.s1Header:SetText(curL["SETTINGS_S1_HEADER"]) end
+    if self._widgets.tabDefLabel then self._widgets.tabDefLabel:SetText(curL["SETTINGS_DEFAULT_TAB_LABEL"]) end
+    if self._widgets.tabButtons then
+        local tabKeys = { audit = "TAB_AUDIT", logs = "TAB_LOGS", groups = "TAB_GROUPS", agenda = "TAB_AGENDA", settings = "TAB_SETTINGS" }
+        for id, btn in pairs(self._widgets.tabButtons) do
+            if tabKeys[id] and btn.txt then btn.txt:SetText(curL[tabKeys[id]] or id) end
+        end
+    end
+    if self._widgets.timeFormat24 then
+        self._widgets.timeFormat24:updateTexts(curL["SETTINGS_TIME_24H"], curL["SETTINGS_TIME_24H_TIP_TITLE"], curL["SETTINGS_TIME_24H_TIP_DESC"])
+    end
+
+    -- Seção 2
+    if self._widgets.s2Header then self._widgets.s2Header:SetText(curL["SETTINGS_S2_HEADER"]) end
+    if self._widgets.enableChatMentions then
+        self._widgets.enableChatMentions:updateTexts(curL["SETTINGS_CHAT_MENTIONS"], curL["SETTINGS_CHAT_MENTIONS_TIP_TITLE"], curL["SETTINGS_CHAT_MENTIONS_TIP_DESC"])
+    end
+    if self._widgets.enableMentionSound then
+        self._widgets.enableMentionSound:updateTexts(curL["SETTINGS_MENTION_SOUND"], curL["SETTINGS_MENTION_SOUND_TIP_TITLE"], curL["SETTINGS_MENTION_SOUND_TIP_DESC"])
+    end
+    if self._widgets.enableMentionFlash then
+        self._widgets.enableMentionFlash:updateTexts(curL["SETTINGS_MENTION_FLASH"], curL["SETTINGS_MENTION_FLASH_TIP_TITLE"], curL["SETTINGS_MENTION_FLASH_TIP_DESC"])
+    end
+    if self._widgets.soundLabel then self._widgets.soundLabel:SetText(curL["SETTINGS_SOUND_CHOICE_LABEL"]) end
+    if self._widgets.soundButtons then
+        local sndKeys = { whisper = "SOUND_WHISPER", raid = "SOUND_RAID", ready = "SOUND_READY", coin = "SOUND_COIN" }
+        for id, btn in pairs(self._widgets.soundButtons) do
+            if sndKeys[id] and btn.txt then btn.txt:SetText(curL[sndKeys[id]] or id) end
+        end
+    end
+    if self._widgets.testSoundBtn then self._widgets.testSoundBtn:SetText(curL["TEST"]) end
+
+    -- Seção 3
+    if self._widgets.s3Header then self._widgets.s3Header:SetText(curL["SETTINGS_S3_HEADER"]) end
+    if self._widgets.showMinimapButton then
+        self._widgets.showMinimapButton:updateTexts(curL["SETTINGS_MINIMAP_BTN"], curL["SETTINGS_MINIMAP_BTN_TIP_TITLE"], curL["SETTINGS_MINIMAP_BTN_TIP_DESC"])
+    end
+    if self._widgets.sliderLabel and self._widgets.minimapSlider then
+        local val = math.floor(self._widgets.minimapSlider:GetValue())
+        self._widgets.sliderLabel:SetText(string.format(curL["SETTINGS_MINIMAP_POS_LABEL"] or "Minimap: %d°", val))
+    end
+    if self._widgets.resetPosBtn then self._widgets.resetPosBtn:SetText(curL["SETTINGS_MINIMAP_DEFAULT_BTN"]) end
+
+    -- Seção 4
+    if self._widgets.s4Header then self._widgets.s4Header:SetText(curL["SETTINGS_S4_HEADER"]) end
+    if self._widgets.showWorldMapButton then
+        self._widgets.showWorldMapButton:updateTexts(curL["SETTINGS_MAP_BTN"], curL["SETTINGS_MAP_BTN_TIP_TITLE"], curL["SETTINGS_MAP_BTN_TIP_DESC"])
+    end
+    if self._widgets.autoScanWorldMap then
+        self._widgets.autoScanWorldMap:updateTexts(curL["SETTINGS_MAP_AUTOSCAN"], curL["SETTINGS_MAP_AUTOSCAN_TIP_TITLE"], curL["SETTINGS_MAP_AUTOSCAN_TIP_DESC"])
+    end
+    if self._widgets.showMapPins then
+        self._widgets.showMapPins:updateTexts(curL["SETTINGS_MAP_PINS"], curL["SETTINGS_MAP_PINS_TIP_TITLE"], curL["SETTINGS_MAP_PINS_TIP_DESC"])
+    end
+    if self._widgets.highlightSelfOnMap then
+        self._widgets.highlightSelfOnMap:updateTexts(curL["SETTINGS_MAP_HIGHLIGHT"], curL["SETTINGS_MAP_HIGHLIGHT_TIP_TITLE"], curL["SETTINGS_MAP_HIGHLIGHT_TIP_DESC"])
+    end
+
+    -- Seção 5
+    if self._widgets.s5Header then self._widgets.s5Header:SetText(curL["SETTINGS_S5_HEADER"]) end
+    if self._widgets.notifyBirthdaysOnLogin then
+        self._widgets.notifyBirthdaysOnLogin:updateTexts(curL["SETTINGS_NOTIFY_BDAY_LOGIN"], curL["SETTINGS_NOTIFY_BDAY_TIP_TITLE"], curL["SETTINGS_NOTIFY_BDAY_TIP_DESC"])
+    end
+    if self._widgets.notifyUpcomingEvents then
+        self._widgets.notifyUpcomingEvents:updateTexts(curL["SETTINGS_NOTIFY_EVENT_LOGIN"], curL["SETTINGS_NOTIFY_EVENT_TIP_TITLE"], curL["SETTINGS_NOTIFY_EVENT_TIP_DESC"])
+    end
+    if self._widgets.confirmEventDelete then
+        self._widgets.confirmEventDelete:updateTexts(curL["SETTINGS_CONFIRM_EVENT_DELETE"], curL["SETTINGS_CONFIRM_EVENT_TIP_TITLE"], curL["SETTINGS_CONFIRM_EVENT_TIP_DESC"])
+    end
+    if self._widgets.bdayLookaheadLabel then self._widgets.bdayLookaheadLabel:SetText(curL["SETTINGS_BDAY_LOOKAHEAD_LABEL"]) end
+    if self._widgets.lookaheadButtons then
+        for days, btn in pairs(self._widgets.lookaheadButtons) do
+            if btn.txt then btn.txt:SetText(string.format(curL["SETTINGS_DAYS_FMT"] or "%d Days", days)) end
+        end
+    end
+    if self._widgets.defTimeLabel then self._widgets.defTimeLabel:SetText(curL["SETTINGS_DEFAULT_EVENT_TIME"]) end
+
+    -- Seção 6
+    if self._widgets.s6Header then self._widgets.s6Header:SetText(curL["SETTINGS_S6_HEADER"]) end
+    if self._widgets.confirmGroupDelete then
+        self._widgets.confirmGroupDelete:updateTexts(curL["SETTINGS_CONFIRM_GROUP_DELETE"], curL["SETTINGS_CONFIRM_GROUP_TIP_TITLE"], curL["SETTINGS_CONFIRM_GROUP_TIP_DESC"])
+    end
+    if self._widgets.autoAssignGroupRole then
+        self._widgets.autoAssignGroupRole:updateTexts(curL["SETTINGS_AUTO_ROLE"], curL["SETTINGS_AUTO_ROLE_TIP_TITLE"], curL["SETTINGS_AUTO_ROLE_TIP_DESC"])
+    end
+
+    -- Seção 7
+    if self._widgets.s7Header then self._widgets.s7Header:SetText(curL["SETTINGS_S7_HEADER"]) end
+    if self._widgets.autoScanRoster then
+        self._widgets.autoScanRoster:updateTexts(curL["SETTINGS_AUTO_SCAN"], curL["SETTINGS_AUTO_SCAN_TIP_TITLE"], curL["SETTINGS_AUTO_SCAN_TIP_DESC"])
+    end
+    if self._widgets.showOfflineMembers then
+        self._widgets.showOfflineMembers:updateTexts(curL["SETTINGS_SHOW_OFFLINE"], curL["SETTINGS_SHOW_OFFLINE_TIP_TITLE"], curL["SETTINGS_SHOW_OFFLINE_TIP_DESC"])
+    end
+    if self._widgets.notifyNewRecruit then
+        self._widgets.notifyNewRecruit:updateTexts(curL["SETTINGS_NOTIFY_RECRUIT"], curL["SETTINGS_NOTIFY_RECRUIT_TIP_TITLE"], curL["SETTINGS_NOTIFY_RECRUIT_TIP_DESC"])
+    end
+
+    -- Seção 8
+    if self._widgets.s8Header then self._widgets.s8Header:SetText(curL["SETTINGS_S8_HEADER"]) end
+    if self._widgets.logLevelUp then
+        self._widgets.logLevelUp:updateTexts(curL["SETTINGS_LOG_LEVEL"], curL["SETTINGS_LOG_LEVEL_TIP_TITLE"], curL["SETTINGS_LOG_LEVEL_TIP_DESC"])
+    end
+    if self._widgets.logPromoteDemote then
+        self._widgets.logPromoteDemote:updateTexts(curL["SETTINGS_LOG_PROMOTE"], curL["SETTINGS_LOG_PROMOTE_TIP_TITLE"], curL["SETTINGS_LOG_PROMOTE_TIP_DESC"])
+    end
+    if self._widgets.logNotes then
+        self._widgets.logNotes:updateTexts(curL["SETTINGS_LOG_NOTES"], curL["SETTINGS_LOG_NOTES_TIP_TITLE"], curL["SETTINGS_LOG_NOTES_TIP_DESC"])
+    end
+    if self._widgets.logJoinLeave then
+        self._widgets.logJoinLeave:updateTexts(curL["SETTINGS_LOG_JOIN_LEAVE"], curL["SETTINGS_LOG_JOIN_LEAVE_TIP_TITLE"], curL["SETTINGS_LOG_JOIN_LEAVE_TIP_DESC"])
+    end
+    if self._widgets.logRejoin then
+        self._widgets.logRejoin:updateTexts(curL["SETTINGS_LOG_REJOIN"], curL["SETTINGS_LOG_REJOIN_TIP_TITLE"], curL["SETTINGS_LOG_REJOIN_TIP_DESC"])
+    end
+    if self._widgets.retLabel then self._widgets.retLabel:SetText(curL["SETTINGS_RETENTION_LABEL"]) end
+    if self._widgets.retentionButtons then
+        for days, btn in pairs(self._widgets.retentionButtons) do
+            if btn.txt then
+                if days == 0 then
+                    btn.txt:SetText(curL["SETTINGS_RETENTION_UNLIMITED"] or "Unlimited")
+                else
+                    btn.txt:SetText(string.format(curL["SETTINGS_DAYS_FMT"] or "%d Days", days))
+                end
+            end
+        end
+    end
+
+    -- Seção 9
+    if self._widgets.s9Header then self._widgets.s9Header:SetText(curL["SETTINGS_S9_HEADER"]) end
+    if self._widgets.purgeBtn then self._widgets.purgeBtn:SetText(curL["SETTINGS_PURGE_BTN"]) end
+    if self._widgets.forceScanBtn then self._widgets.forceScanBtn:SetText(curL["SETTINGS_FORCE_SCAN_BTN"]) end
+    if self._widgets.resetAllBtn then self._widgets.resetAllBtn:SetText(curL["SETTINGS_RESET_DEFAULTS_BTN"]) end
+    if self._widgets.forceSyncBtn then self._widgets.forceSyncBtn:SetText(curL["SETTINGS_FORCE_SYNC_BTN"]) end
+
+    -- Rodapé
+    if self._widgets.footerHint then self._widgets.footerHint:SetText("|cff666666" .. (curL["SETTINGS_FOOTER_HINT"] or "GuildManager") .. "|r") end
+    if self._widgets.saveBtn then self._widgets.saveBtn:SetText(curL["SAVE_SETTINGS"] or "Save Settings") end
+    if self._widgets.closeBtn then self._widgets.closeBtn:SetText(curL["CLOSE"] or "Close") end
+
+    if self._lastStats and self._widgets.gStatsText then
+        self._widgets.gStatsText:SetText(string.format(
+            curL["SETTINGS_STATS_FORMAT"] or "|cffaaaaaaMembers: |cffffff00%d|r  •  Groups: |cffffff00%d|r  •  Logs: |cffffff00%d|r  •  v%s|r",
+            self._lastStats.totalMembers or 0, self._lastStats.totalGroups or 0, self._lastStats.totalLogs or 0, self._lastStats.version or "1.0"
+        ))
+    end
+
+    local curLang = self._widgets.selectedLanguage or (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale()) or "enUS"
+    self:updateLanguageButtonsVisual(self._widgets.langButtons, curLang)
+end
+
 --- Preenche a interface com os valores atuais de Settings e estatísticas.
 ---@param settings GMSettings
 ---@param stats table
 function SettingsView:renderSettings(settings, stats)
     if not self._frame or not settings then return end
 
+    -- Idioma
+    local lang = settings.getLanguage and settings:getLanguage() or "enUS"
+    self._widgets.selectedLanguage = lang
+    self:updateLanguageButtonsVisual(self._widgets.langButtons, lang)
+
     -- Estatísticas da Guilda
     if stats then
+        self._lastStats = stats
         self._widgets.gNameText:SetText(string.format("|cffffd200<%s>|r", stats.guildName or "Guilda"))
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         self._widgets.gStatsText:SetText(string.format(
-            "|cffaaaaaaMembros: |cffffff00%d|r  •  Grupos: |cffffff00%d|r  •  Logs: |cffffff00%d|r  •  v%s|r",
+            curL["SETTINGS_STATS_FORMAT"] or "|cffaaaaaaMembers: |cffffff00%d|r  •  Groups: |cffffff00%d|r  •  Logs: |cffffff00%d|r  •  v%s|r",
             stats.totalMembers or 0, stats.totalGroups or 0, stats.totalLogs or 0, stats.version or "1.0"
         ))
     end
@@ -1083,7 +1374,8 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.showMinimapButton:SetChecked(settings:isShowMinimapButton())
     local mPos = settings:getMinimapPos() or 215
     self._widgets.minimapSlider:SetValue(mPos)
-    self._widgets.sliderLabel:SetText(string.format("Posição Orbital do Minimapa: %d°", mPos))
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    self._widgets.sliderLabel:SetText(string.format(curL["SETTINGS_MINIMAP_POS_LABEL"] or "Minimap: %d°", mPos))
 
     -- Mapa Mundial & Rastreamento
     self._widgets.showWorldMapButton:SetChecked(settings:isShowWorldMapButton())
@@ -1125,6 +1417,7 @@ end
 function SettingsView:gatherFormData()
     local w = self._widgets
     return {
+        language = w.selectedLanguage or "enUS",
         guildTagline = w.guildTagline:GetText() or "",
         defaultTab = w.selectedDefaultTab or "audit",
         timeFormat24 = w.timeFormat24:GetChecked() == true,
@@ -1175,6 +1468,7 @@ end
 function SettingsView:show()
     if not self._frame then self:createUI() end
     self._frame:Show()
+    self:updateLocale()
     if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN or 839) end
 end
 

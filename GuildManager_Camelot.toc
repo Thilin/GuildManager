@@ -6,6 +6,7 @@
 ## SavedVariables: GM_DB
 
 Database/Database.lua
+Locales/Locales.lua
 
 Models/Member.lua
 Models/Log.lua

@@ -1,3 +1,6 @@
+local addonName, addonTable = ...
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 ---@class LogView
 ---@field private _frame table
 ---@field private _logs Log[]
@@ -192,13 +195,14 @@ function LogView:createUI()
     -- Título da Janela
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     titleText:SetPoint("LEFT", factionIcon, "RIGHT", 10, 0)
-    titleText:SetText("|cffffd200REGISTRO DE ATIVIDADES DA GUILDA|r")
+    titleText:SetText(L["LOGS_TITLE"])
     self._titleText = titleText
 
     -- Subtítulo informativo
     local subtitleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitleText:SetPoint("LEFT", titleText, "RIGHT", 12, 0)
-    subtitleText:SetText("|cffaaaaaa(Logs do AddOn)|r")
+    subtitleText:SetText(L["LOGS_SUBTITLE"])
+    self._subtitleText = subtitleText
 
     -- Divisória abaixo do cabeçalho
     local headerSep = frame:CreateTexture(nil, "ARTWORK")
@@ -240,7 +244,7 @@ function LogView:createUI()
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("|cff888888Buscar personagem, cargo...|r")
+    searchHint:SetText(L["LOGS_SEARCH_HINT"])
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -261,16 +265,17 @@ function LogView:createUI()
 
     -- Botões de filtro rápido por tipo de evento
     local filterTabs = {
-        { id = "ALL", label = "Todos" },
-        { id = "JOINED", label = "Recrutamentos" },
-        { id = "REJOINED", label = "Retornos" },
-        { id = "LEVELED", label = "Níveis" },
-        { id = "PROMOTION", label = "Promoções" },
-        { id = "DEMOTION", label = "Rebaixamentos" },
-        { id = "LEFT_KICK", label = "Saídas / Kicks" },
-        { id = "NOTES", label = "Notas" },
-        { id = "OTHER", label = "Outros" },
+        { id = "ALL", key = "LOG_FILTER_ALL" },
+        { id = "JOINED", key = "LOG_FILTER_JOIN" },
+        { id = "REJOINED", key = "LOG_FILTER_REJOIN" },
+        { id = "LEVELED", key = "LOG_FILTER_LEVEL" },
+        { id = "PROMOTION", key = "LOG_FILTER_PROMOTION" },
+        { id = "DEMOTION", key = "LOG_FILTER_DEMOTION" },
+        { id = "LEFT_KICK", key = "LOG_FILTER_LEFT_KICK" },
+        { id = "NOTES", key = "LOG_FILTER_NOTES" },
+        { id = "OTHER", key = "LOG_FILTER_OTHER" },
     }
+    self._filterTabDefs = filterTabs
 
     self._filterButtons = {}
     local prevTab = searchEB
@@ -279,10 +284,11 @@ function LogView:createUI()
         tabBtn:SetHeight(22)
         tabBtn:SetPoint("LEFT", prevTab, "RIGHT", 5, 0)
         tabBtn.tabId = tabData.id
+        tabBtn.tabKey = tabData.key
 
         local btnText = tabBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         btnText:SetPoint("CENTER", tabBtn, "CENTER", 0, 0)
-        btnText:SetText(tabData.label)
+        btnText:SetText(L[tabData.key])
         tabBtn.text = btnText
 
         local textWidth = btnText:GetStringWidth() or 40
@@ -330,11 +336,13 @@ function LogView:createUI()
 
     local col1 = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     col1:SetPoint("LEFT", headerRow, "LEFT", 8, 0)
-    col1:SetText("|cffffd200DATA / HORA|r")
+    col1:SetText(L["LOG_COL_DATE"])
+    self._col1 = col1
 
     local col2 = headerRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     col2:SetPoint("LEFT", headerRow, "LEFT", 150, 0)
-    col2:SetText("|cffffd200MENSAGEM / HISTÓRICO|r")
+    col2:SetText(L["LOG_COL_MESSAGE"])
+    self._col2 = col2
 
     -- Scrollbar lateral
     local scrollBar = CreateFrame("Slider", "GM_LogScrollBar", tableInset, "UIPanelScrollBarTemplate")
@@ -365,7 +373,7 @@ function LogView:createUI()
     -- Mensagem de vazio (Nenhum log encontrado)
     local emptyNotice = tableInset:CreateFontString(nil, "OVERLAY", "GameFontDisable")
     emptyNotice:SetPoint("CENTER", tableInset, "CENTER", 0, -10)
-    emptyNotice:SetText("Nenhum registro de log encontrado.")
+    emptyNotice:SetText(L["LOG_EMPTY_NOTICE"])
     emptyNotice:Hide()
     self._emptyNotice = emptyNotice
 
@@ -506,7 +514,7 @@ function LogView:createUI()
     local refreshBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     refreshBtn:SetSize(90, 22)
     refreshBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 10)
-    refreshBtn:SetText("Atualizar")
+    refreshBtn:SetText(L["REFRESH"])
     refreshBtn:SetScript("OnClick", function()
         if self._onRefreshCallback then
             self._onRefreshCallback()
@@ -567,9 +575,10 @@ function LogView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         auditIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Auditoria de Membros.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -639,10 +648,11 @@ function LogView:createSideTabs()
     tabLogs.glow = logsGlow
 
     tabLogs:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
-        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Histórico completo de eventos, níveis e registros da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine("|cff888888" .. curL["TAB_CURRENT"] .. "|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabLogs:SetScript("OnLeave", function()
@@ -680,9 +690,10 @@ function LogView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Gerenciamento de Grupos|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Grupos (Masmorras, Raides e Diversos).", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -758,9 +769,10 @@ function LogView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Agenda da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Agenda e Eventos da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -827,9 +839,10 @@ function LogView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         settingsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Configurações do Addon|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Opções e Personalização.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -1121,6 +1134,7 @@ end
 function LogView:formatColoredMessage(log)
     if not log then return "" end
 
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     local evt = log:getEvent()
     local name = log:getName() or ""
     local recruiter = log:getRecruiter() or ""
@@ -1128,21 +1142,25 @@ function LogView:formatColoredMessage(log)
     if evt == LogEvent.JOINED or evt == "JOINED" then
         local recruitColored = self:formatColoredName(name, log:getGuid(), log:getClass())
         local recruiterColored
-        if recruiter ~= "" and recruiter ~= "Desconhecido" then
+        if recruiter ~= "" and recruiter ~= "Desconhecido" and recruiter ~= "Unknown" then
             recruiterColored = self:formatColoredName(recruiter, nil, log:getRecruiterClass())
         else
-            recruiterColored = "|cff888888Desconhecido|r"
+            recruiterColored = isEn and "|cff888888Unknown|r" or "|cff888888Desconhecido|r"
         end
-        return string.format("%s |cffa8f0a8foi|r |cff40ff40RECRUTADO|r |cffa8f0a8por|r %s", recruitColored, recruiterColored)
+        if isEn then
+            return string.format("%s |cffa8f0a8was|r |cff40ff40RECRUITED|r |cffa8f0a8by|r %s", recruitColored, recruiterColored)
+        else
+            return string.format("%s |cffa8f0a8foi|r |cff40ff40RECRUTADO|r |cffa8f0a8por|r %s", recruitColored, recruiterColored)
+        end
     end
 
     if evt == LogEvent.REJOINED or evt == "REJOINED" then
         local memberColored = self:formatColoredName(name, log:getGuid(), log:getClass())
         local recruiterColored
-        if recruiter ~= "" and recruiter ~= "Desconhecido" then
+        if recruiter ~= "" and recruiter ~= "Desconhecido" and recruiter ~= "Unknown" then
             recruiterColored = self:formatColoredName(recruiter, nil, log:getRecruiterClass())
         else
-            recruiterColored = "|cff888888Desconhecido|r"
+            recruiterColored = isEn and "|cff888888Unknown|r" or "|cff888888Desconhecido|r"
         end
         local dateLeft = (log.getDateLeft and log:getDateLeft()) or ""
         local dateStr = (dateLeft ~= "") and dateLeft or "N/A"
@@ -1152,13 +1170,22 @@ function LogView:formatColoredMessage(log)
         local timesNum = tonumber(timesLeft) or 1
         if timesNum <= 0 then timesNum = 1 end
 
-        return string.format("%s |cff26ffbfRETORNOU|r |cffa8f0a8à guilda|r |cff888888(Recrutado por: |r%s|cff888888 | Saiu em: |cffffffff%s|r|cff888888 | Último cargo: |cffffff00%s|r|cff888888 | Saídas: |cffff9926%d|r)|r",
-            memberColored, recruiterColored, dateStr, rankStr, timesNum)
+        if isEn then
+            return string.format("%s |cff26ffbfRETURNED|r |cffa8f0a8to the guild|r |cff888888(Recruited by: |r%s|cff888888 | Left on: |cffffffff%s|r|cff888888 | Last rank: |cffffff00%s|r|cff888888 | Leaves: |cffff9926%d|r)|r",
+                memberColored, recruiterColored, dateStr, rankStr, timesNum)
+        else
+            return string.format("%s |cff26ffbfRETORNOU|r |cffa8f0a8à guilda|r |cff888888(Recrutado por: |r%s|cff888888 | Saiu em: |cffffffff%s|r|cff888888 | Último cargo: |cffffff00%s|r|cff888888 | Saídas: |cffff9926%d|r)|r",
+                memberColored, recruiterColored, dateStr, rankStr, timesNum)
+        end
     end
 
     if evt == LogEvent.LEFT or evt == "LEFT" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
-        return string.format("%s |cffff9926SAIU|r |cffffcca0da guilda|r", coloredName)
+        if isEn then
+            return string.format("%s |cffff9926LEFT|r |cffffcca0the guild|r", coloredName)
+        else
+            return string.format("%s |cffff9926SAIU|r |cffffcca0da guilda|r", coloredName)
+        end
     end
 
     if evt == LogEvent.KICK or evt == "KICK" then
@@ -1166,12 +1193,16 @@ function LogView:formatColoredMessage(log)
         local kicker = (log.getKicker and log:getKicker()) or ""
         local kickerClass = (log.getKickerClass and log:getKickerClass()) or ""
         local kickerColored
-        if kicker ~= "" and kicker ~= "Desconhecido" then
+        if kicker ~= "" and kicker ~= "Desconhecido" and kicker ~= "Unknown" then
             kickerColored = self:formatColoredName(kicker, nil, kickerClass)
         else
-            kickerColored = "|cff888888Desconhecido|r"
+            kickerColored = isEn and "|cff888888Unknown|r" or "|cff888888Desconhecido|r"
         end
-        return string.format("%s |cffffa6a6foi|r |cffff4040REMOVIDO|r |cffffa6a6da guilda por|r %s", kickedColored, kickerColored)
+        if isEn then
+            return string.format("%s |cffffa6a6was|r |cffff4040REMOVED|r |cffffa6a6from the guild by|r %s", kickedColored, kickerColored)
+        else
+            return string.format("%s |cffffa6a6foi|r |cffff4040REMOVIDO|r |cffffa6a6da guilda por|r %s", kickedColored, kickerColored)
+        end
     end
 
     if evt == LogEvent.LEVELED or evt == "LEVELED" then
@@ -1179,9 +1210,13 @@ function LogView:formatColoredMessage(log)
         local lvl = (log.getLevel and log:getLevel())
         if not lvl or lvl == 0 or lvl == "" then
             local rawMsg = log:getMessage() or ""
-            lvl = rawMsg:match("n[íi]vel%s+(%d+)") or "?"
+            lvl = rawMsg:match("n[íi]vel%s+(%d+)") or rawMsg:match("level%s+(%d+)") or "?"
         end
-        return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
+        if isEn then
+            return string.format("%s |cffffd91aREACHED|r |cffffe899level|r |cffffffff%s|r", coloredName, tostring(lvl))
+        else
+            return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%s|r", coloredName, tostring(lvl))
+        end
     end
 
     if evt == LogEvent.PROMOTION or evt == "PROMOTION" then
@@ -1189,18 +1224,23 @@ function LogView:formatColoredMessage(log)
         local promoter = (log.getPromoter and log:getPromoter()) or ""
         local promoterClass = (log.getPromoterClass and log:getPromoterClass()) or ""
         local promoterColored
-        if promoter ~= "" and promoter ~= "Desconhecido" then
+        if promoter ~= "" and promoter ~= "Desconhecido" and promoter ~= "Unknown" then
             promoterColored = self:formatColoredName(promoter, nil, promoterClass)
         else
-            promoterColored = "|cff888888Desconhecido|r"
+            promoterColored = isEn and "|cff888888Unknown|r" or "|cff888888Desconhecido|r"
         end
         local newRank = (log.getNewRank and log:getNewRank()) or ""
         local oldRank = (log.getOldRank and log:getOldRank()) or ""
         local rankChangeStr = ""
         if oldRank ~= "" and oldRank ~= newRank then
-            rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
+            rankChangeStr = isEn and string.format(" |cff888888(previous: |cffffffff%s|r)|r", oldRank) or string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
         end
-        return string.format("%s |cffa8f0a8foi|r |cff00e5ffPROMOVIDO|r |cffa8f0a8a|r |cffffff00%s|r |cffa8f0a8por|r %s%s", promotedColored, newRank ~= "" and newRank or "Novo Cargo", promoterColored, rankChangeStr)
+        local fallbackRank = isEn and "New Rank" or "Novo Cargo"
+        if isEn then
+            return string.format("%s |cffa8f0a8was|r |cff00e5ffPROMOTED|r |cffa8f0a8to|r |cffffff00%s|r |cffa8f0a8by|r %s%s", promotedColored, newRank ~= "" and newRank or fallbackRank, promoterColored, rankChangeStr)
+        else
+            return string.format("%s |cffa8f0a8foi|r |cff00e5ffPROMOVIDO|r |cffa8f0a8a|r |cffffff00%s|r |cffa8f0a8por|r %s%s", promotedColored, newRank ~= "" and newRank or fallbackRank, promoterColored, rankChangeStr)
+        end
     end
 
     if evt == LogEvent.DEMOTION or evt == "DEMOTION" then
@@ -1208,18 +1248,23 @@ function LogView:formatColoredMessage(log)
         local demoter = (log.getDemoter and log:getDemoter()) or ""
         local demoterClass = (log.getDemoterClass and log:getDemoterClass()) or ""
         local demoterColored
-        if demoter ~= "" and demoter ~= "Desconhecido" then
+        if demoter ~= "" and demoter ~= "Desconhecido" and demoter ~= "Unknown" then
             demoterColored = self:formatColoredName(demoter, nil, demoterClass)
         else
-            demoterColored = "|cff888888Desconhecido|r"
+            demoterColored = isEn and "|cff888888Unknown|r" or "|cff888888Desconhecido|r"
         end
         local newRank = (log.getNewRank and log:getNewRank()) or ""
         local oldRank = (log.getOldRank and log:getOldRank()) or ""
         local rankChangeStr = ""
         if oldRank ~= "" and oldRank ~= newRank then
-            rankChangeStr = string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
+            rankChangeStr = isEn and string.format(" |cff888888(previous: |cffffffff%s|r)|r", oldRank) or string.format(" |cff888888(anterior: |cffffffff%s|r)|r", oldRank)
         end
-        return string.format("%s |cffffc0a0foi|r |cffff7043REBAIXADO|r |cffffc0a0a|r |cffffff00%s|r |cffffc0a0por|r %s%s", demotedColored, newRank ~= "" and newRank or "Novo Cargo", demoterColored, rankChangeStr)
+        local fallbackRank = isEn and "New Rank" or "Novo Cargo"
+        if isEn then
+            return string.format("%s |cffffc0a0was|r |cffff7043DEMOTED|r |cffffc0a0to|r |cffffff00%s|r |cffffc0a0by|r %s%s", demotedColored, newRank ~= "" and newRank or fallbackRank, demoterColored, rankChangeStr)
+        else
+            return string.format("%s |cffffc0a0foi|r |cffff7043REBAIXADO|r |cffffc0a0a|r |cffffff00%s|r |cffffc0a0por|r %s%s", demotedColored, newRank ~= "" and newRank or fallbackRank, demoterColored, rankChangeStr)
+        end
     end
 
     if evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE" then
@@ -1227,13 +1272,22 @@ function LogView:formatColoredMessage(log)
         local newNote = (log.getNewNote and log:getNewNote()) or ""
         local oldNote = (log.getOldNote and log:getOldNote()) or ""
         if newNote ~= "" or oldNote ~= "" then
-            local newStr = newNote ~= "" and string.format("\"%s\"", newNote) or "vazio"
-            local oldStr = oldNote ~= "" and string.format("\"%s\"", oldNote) or "vazio"
-            return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffa8f0a8alterada para|r |cffb3e5fc%s|r |cff888888(anterior: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+            local emptyStr = isEn and "empty" or "vazio"
+            local newStr = newNote ~= "" and string.format("\"%s\"", newNote) or emptyStr
+            local oldStr = oldNote ~= "" and string.format("\"%s\"", oldNote) or emptyStr
+            if isEn then
+                return string.format("%s |cff40bfffOFFICER NOTE:|r |cffa8f0a8changed to|r |cffb3e5fc%s|r |cff888888(previous: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+            else
+                return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffa8f0a8alterada para|r |cffb3e5fc%s|r |cff888888(anterior: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+            end
         end
         local rawMsg = log:getMessage() or ""
-        rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+de%s+[Oo]ficial:?%s*", "")
-        return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffb3e5fc%s|r", coloredName, rawMsg)
+        rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+de%s+[Oo]ficial:?%s*", ""):gsub("^%s*[Oo]fficer%s+[Nn]ote:?%s*", "")
+        if isEn then
+            return string.format("%s |cff40bfffOFFICER NOTE:|r |cffb3e5fc%s|r", coloredName, rawMsg)
+        else
+            return string.format("%s |cff40bfffNOTA DE OFICIAL:|r |cffb3e5fc%s|r", coloredName, rawMsg)
+        end
     end
 
     if evt == LogEvent.PUBLICNOTE or evt == "PUBLICNOTE" then
@@ -1241,13 +1295,22 @@ function LogView:formatColoredMessage(log)
         local newNote = (log.getNewNote and log:getNewNote()) or ""
         local oldNote = (log.getOldNote and log:getOldNote()) or ""
         if newNote ~= "" or oldNote ~= "" then
-            local newStr = newNote ~= "" and string.format("\"%s\"", newNote) or "vazio"
-            local oldStr = oldNote ~= "" and string.format("\"%s\"", oldNote) or "vazio"
-            return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffa8f0a8alterada para|r |cffe0f7fa%s|r |cff888888(anterior: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+            local emptyStr = isEn and "empty" or "vazio"
+            local newStr = newNote ~= "" and string.format("\"%s\"", newNote) or emptyStr
+            local oldStr = oldNote ~= "" and string.format("\"%s\"", oldNote) or emptyStr
+            if isEn then
+                return string.format("%s |cff73e6ffPUBLIC NOTE:|r |cffa8f0a8changed to|r |cffe0f7fa%s|r |cff888888(previous: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+            else
+                return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffa8f0a8alterada para|r |cffe0f7fa%s|r |cff888888(anterior: |cffffffff%s|r)|r", coloredName, newStr, oldStr)
+            end
         end
         local rawMsg = log:getMessage() or ""
-        rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+[Pp]ública:?%s*", "")
-        return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffe0f7fa%s|r", coloredName, rawMsg)
+        rawMsg = rawMsg:gsub("^%s*[Nn]ota%s+[Pp]ública:?%s*", ""):gsub("^%s*[Pp]ublic%s+[Nn]ote:?%s*", "")
+        if isEn then
+            return string.format("%s |cff73e6ffPUBLIC NOTE:|r |cffe0f7fa%s|r", coloredName, rawMsg)
+        else
+            return string.format("%s |cff73e6ffNOTA PÚBLICA:|r |cffe0f7fa%s|r", coloredName, rawMsg)
+        end
     end
 
     if evt == LogEvent.NAMECHANGE or evt == "NAMECHANGE" then
@@ -1354,9 +1417,58 @@ function LogView:scroll(delta)
     end
 end
 
+--- Atualiza dinamicamente todos os textos da interface para o idioma ativo.
+function LogView:updateLocale()
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not self._frame then return end
+
+    if self._titleText then
+        self._titleText:SetText(L["LOGS_TITLE"])
+    end
+    if self._subtitleText then
+        self._subtitleText:SetText(L["LOGS_SUBTITLE"])
+    end
+    if self._searchEB and self._searchEB.hint then
+        self._searchEB.hint:SetText(L["LOGS_SEARCH_HINT"])
+    end
+    if self._col1 then
+        self._col1:SetText(L["LOG_COL_DATE"])
+    end
+    if self._col2 then
+        self._col2:SetText(L["LOG_COL_MESSAGE"])
+    end
+    if self._emptyNotice then
+        self._emptyNotice:SetText(L["LOG_EMPTY_NOTICE"])
+    end
+    if self._refreshBtn then
+        self._refreshBtn:SetText(L["REFRESH"])
+    end
+
+    -- Atualiza textos e larguras das abas de filtro
+    local prevTab = self._searchEB
+    if self._filterTabDefs and self._filterButtons then
+        for _, tabData in ipairs(self._filterTabDefs) do
+            local tabBtn = self._filterButtons[tabData.id]
+            if tabBtn and tabBtn.text then
+                local label = L[tabData.key] or tabData.id
+                tabBtn.text:SetText(label)
+                local textWidth = tabBtn.text:GetStringWidth() or 40
+                tabBtn:SetWidth(textWidth + 12)
+                tabBtn:ClearAllPoints()
+                tabBtn:SetPoint("LEFT", prevTab, "RIGHT", 5, 0)
+                prevTab = tabBtn
+            end
+        end
+    end
+
+    -- Re-aplica filtros para atualizar mensagens formatadas e rodapé
+    self:applyFilters()
+end
+
 --- Exibe a janela de logs.
 function LogView:show()
     self:createUI()
+    self:updateLocale()
     if self._frame then
         self._frame:Show()
     end

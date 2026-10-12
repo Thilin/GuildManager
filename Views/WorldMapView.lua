@@ -12,6 +12,8 @@
 WorldMapView = {}
 WorldMapView.__index = WorldMapView
 
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 local PALETTE = {
     FRAME_BG = { 0.05, 0.04, 0.02, 0.95 },
     FRAME_BORDER = { 0.60, 0.45, 0.20, 1.0 },
@@ -419,17 +421,18 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
             GameTooltip:AddLine(string.format("|cff20ff20<%s>|r", d.guild), 0.2, 1, 0.2)
         end
 
-        GameTooltip:AddDoubleLine("Nível & Classe:", string.format("|cffffffff%d %s %s|r", d.level or 1, d.race or "", cls), 1, 0.82, 0, 1, 1, 1)
-        GameTooltip:AddDoubleLine("Região:", string.format("|cffffd200%s|r (%.1f, %.1f)", d.zoneName or "Azeroth", (d.x or 0) * 100, (d.y or 0) * 100), 1, 0.82, 0, 1, 1, 1)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        GameTooltip:AddDoubleLine(curL["MAP_PIN_LEVEL_CLASS"] or "Level & Class:", string.format("|cffffffff%d %s %s|r", d.level or 1, d.race or "", cls), 1, 0.82, 0, 1, 1, 1)
+        GameTooltip:AddDoubleLine(curL["MAP_PIN_REGION"] or "Region:", string.format("|cffffd200%s|r (%.1f, %.1f)", d.zoneName or "Azeroth", (d.x or 0) * 100, (d.y or 0) * 100), 1, 0.82, 0, 1, 1, 1)
 
         local now = GetTime and GetTime() or 0
         local diff = math.max(0, math.floor(now - (d.lastSeen or now)))
-        local seenStr = (diff < 3) and "|cff20ff20Ao vivo|r" or string.format("Há %d s", diff)
-        GameTooltip:AddDoubleLine("Sinal do AddOn:", seenStr, 0.7, 0.7, 0.7, 1, 1, 1)
+        local seenStr = (diff < 3) and (curL["MAP_PIN_LIVE"] or "|cff20ff20Live|r") or string.format(curL["MAP_PIN_SEEN_AGO"] or "%d s ago", diff)
+        GameTooltip:AddDoubleLine(curL["MAP_PIN_SIGNAL"] or "AddOn Signal:", seenStr, 0.7, 0.7, 0.7, 1, 1, 1)
 
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffaaaaaaClique com o botão esquerdo para sussurrar|r", 0.6, 0.6, 0.6)
-        GameTooltip:AddLine("|cff00ff00GuildManager • Sincronização em Tempo Real|r", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine(curL["MAP_PIN_LCLICK_WHISPER"] or "|cffaaaaaaLeft-Click to whisper|r", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine(curL["MAP_PIN_SYNC_TITLE"] or "|cff00ff00GuildManager • Real-Time Sync|r", 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
 
@@ -458,7 +461,8 @@ function WorldMapView:ensureRealtimeBadge()
     badgeBtn:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -180, -2)
     badgeBtn:SetFrameStrata("HIGH")
     badgeBtn:SetFrameLevel(3000)
-    badgeBtn:SetText("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Membros (0)|r")
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    badgeBtn:SetText(curL["MAP_BADGE_MEMBERS_ZERO"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Members (0)|r")
 
     badgeBtn:SetScript("OnClick", function()
         local locService = _G.GM and _G.GM.locationService
@@ -481,14 +485,15 @@ function WorldMapView:ensureRealtimeBadge()
     end)
 
     badgeBtn:SetScript("OnEnter", function(btn)
+        local cL = (_G.GM and _G.GM.L) or _G.L or L
         local locService = _G.GM and _G.GM.locationService
         local peers = locService and locService:getPeers() or {}
         local viewMapID = GetCurrentWorldMapID()
 
         GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMLEFT")
         GameTooltip:ClearLines()
-        GameTooltip:AddLine("|TInterface\\Icons\\INV_Misc_GroupNeedMore:16:16:0:0|t |cffffd200Membros com GuildManager|r", 1, 1, 1)
-        GameTooltip:AddLine("|cff888888Posições sincronizadas em tempo real:|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(cL["MAP_BADGE_TOOLTIP_TITLE"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:16:16:0:0|t |cffffd200Members with GuildManager|r", 1, 1, 1)
+        GameTooltip:AddLine(cL["MAP_BADGE_TOOLTIP_DESC"] or "|cff888888Positions synced in real time:|r", 0.7, 0.7, 0.7)
 
         local hasAny = false
         for name, p in pairs(peers) do
@@ -497,7 +502,7 @@ function WorldMapView:ensureRealtimeBadge()
                 local cls = (p.classFile or p.class or "WARRIOR"):upper()
                 local c = CLASS_COLORS[cls] or { hex = "|cffffffff" }
                 local isHere = (p.mapID == viewMapID)
-                local statusStr = isHere and "|cff20ff20Nesta Zona|r" or string.format("|cffffd200%s|r", p.zoneName or "Azeroth")
+                local statusStr = isHere and (cL["MAP_BADGE_IN_THIS_ZONE"] or "|cff20ff20In This Zone|r") or string.format("|cffffd200%s|r", p.zoneName or "Azeroth")
 
                 GameTooltip:AddDoubleLine(
                     string.format("%s%s|r (Nv %d %s)", c.hex, p.name, p.level or 1, p.race or ""),
@@ -508,11 +513,11 @@ function WorldMapView:ensureRealtimeBadge()
         end
 
         if not hasAny then
-            GameTooltip:AddLine("|cffaaaaaaNenhum outro membro conectado no momento.|r", 0.7, 0.7, 0.7)
-            GameTooltip:AddLine("|cff55ff55Dica: Use /gmloc test para simular um membro no mapa!|r", 0.3, 0.9, 0.3)
+            GameTooltip:AddLine(cL["MAP_BADGE_NO_MEMBERS"] or "|cffaaaaaaNo other member online right now.|r", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine(cL["MAP_BADGE_TIP_SIMULATE"] or "|cff55ff55Tip: Use /gmloc test to simulate a member on map!|r", 0.3, 0.9, 0.3)
         else
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("|cff00ff00Clique para abrir a zona do membro ou painel lateral|r", 0.2, 0.8, 0.2)
+            GameTooltip:AddLine(cL["MAP_BADGE_CLICK_HINT"] or "|cff00ff00Click to open member zone or side panel|r", 0.2, 0.8, 0.2)
         end
 
         GameTooltip:Show()
@@ -530,12 +535,13 @@ function WorldMapView:updateRealtimeBadge()
     self:ensureRealtimeBadge()
     if not self._realtimeBadge then return end
 
+    local cL = (_G.GM and _G.GM.L) or _G.L or L
     local locService = _G.GM and _G.GM.locationService
-    local count = locService and locService:getPeerCount() or 0
-    if count > 0 then
-        self._realtimeBadge:SetText(string.format("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cff20ff20Membros (%d)|r", count))
+    local count = (locService and locService.getPeerCount and tonumber(locService:getPeerCount())) or 0
+    if count and count > 0 then
+        self._realtimeBadge:SetText(string.format(cL["MAP_BADGE_MEMBERS"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cff20ff20Members (%d)|r", count))
     else
-        self._realtimeBadge:SetText("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Membros (0)|r")
+        self._realtimeBadge:SetText(cL["MAP_BADGE_MEMBERS_ZERO"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Members (0)|r")
     end
 end
 
@@ -671,7 +677,8 @@ function WorldMapView:initWorldMapUI()
     btnText:SetPoint("LEFT", icon, "RIGHT", 5, 0)
     btnText:SetPoint("RIGHT", mapButton, "RIGHT", -4, 0)
     btnText:SetJustifyH("LEFT")
-    btnText:SetText("|cffffd200Guilda:|r |cff00ff000 na Região|r")
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    btnText:SetText(string.format(curL["MAP_BTN_IN_REGION"] or "|cffffd200Guild:|r %s%d %s|r", "|cff00ff00", 0, curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
     mapButton.text = btnText
 
     local btnHighlight = mapButton:CreateTexture(nil, "HIGHLIGHT")
@@ -680,6 +687,7 @@ function WorldMapView:initWorldMapUI()
     mapButton:SetHighlightTexture(btnHighlight)
 
     mapButton:SetScript("OnEnter", function(btn)
+        local cL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(1.0, 0.95, 0.40, 1.0)
             btn:SetBackdropColor(0.24, 0.16, 0.05, 1.0)
@@ -688,24 +696,24 @@ function WorldMapView:initWorldMapUI()
             btn.glow:SetVertexColor(1.0, 0.95, 0.40, 0.90)
         end
         GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMRIGHT")
-        GameTooltip:AddLine("|cffffd200GuildManager - Membros na Região|r")
-        GameTooltip:AddLine("Exibe a lista de membros da guilda presentes nesta região do mapa.", 1, 1, 1, true)
+        GameTooltip:AddLine(cL["MAP_PANEL_TOOLTIP_HEADER"] or "|cffffd200GuildManager - Members in Region|r")
+        GameTooltip:AddLine(cL["MAP_PANEL_TOOLTIP_DESC"] or "Shows guild members currently present in this map region.", 1, 1, 1, true)
 
         local locService = _G.GM and _G.GM.locationService
         local addonUsers = locService and locService:getGuildAddonUsers() or {}
         if #addonUsers > 0 then
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(string.format("|cff00ff00Membros com o AddOn Ativo (%d):|r", #addonUsers), 1, 1, 1)
+            GameTooltip:AddLine(string.format(cL["MAP_PANEL_TOOLTIP_ACTIVE"] or "|cff00ff00Members with Active AddOn (%d):|r", #addonUsers), 1, 1, 1)
             for _, u in ipairs(addonUsers) do
                 local clsHex = (CLASS_COLORS and CLASS_COLORS[u.class] and CLASS_COLORS[u.class].hex) or "|cffffffff"
-                local selfTag = u.isSelf and " |cff00ff00(Você)|r" or ""
+                local selfTag = u.isSelf and (cL["MAP_PANEL_TOOLTIP_YOU"] or " |cff00ff00(You)|r") or ""
                 local zoneStr = (u.zone and u.zone ~= "") and (" - |cff00e5ff" .. u.zone .. "|r") or ""
                 GameTooltip:AddLine(string.format("  • %s%s|r%s (Lvl %d)%s", clsHex, u.name, selfTag, u.level or 1, zoneStr), 1, 1, 1)
             end
         end
 
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cff00ff00Clique para abrir/fechar o painel lateral e ver a lista completa.|r", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine(cL["MAP_PANEL_TOOLTIP_CLICK"] or "|cff00ff00Click to toggle side panel and view full list.|r", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
 
@@ -740,7 +748,7 @@ function WorldMapView:initWorldMapUI()
     -- Título do Painel
     local headerTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     headerTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -10)
-    headerTitle:SetText("|cffffd200Membros na Região|r")
+    headerTitle:SetText(curL["MAP_PANEL_HEADER"] or "|cffffd200Members in Region|r")
     panel.headerTitle = headerTitle
 
     -- Botão Fechar Painel (X)
@@ -756,13 +764,13 @@ function WorldMapView:initWorldMapUI()
     zoneTitle:SetPoint("TOPLEFT", headerTitle, "BOTTOMLEFT", 0, -4)
     zoneTitle:SetPoint("RIGHT", panel, "RIGHT", -12, 0)
     zoneTitle:SetJustifyH("LEFT")
-    zoneTitle:SetText("|cff00e5ffRegião Atual|r")
+    zoneTitle:SetText(curL["MAP_CURRENT_REGION"] or "|cff00e5ffCurrent Region|r")
     panel.zoneTitle = zoneTitle
 
     -- Contador de membros encontrados
     local countText = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     countText:SetPoint("TOPLEFT", zoneTitle, "BOTTOMLEFT", 0, -2)
-    countText:SetText("|cffaaaaaaMembros encontrados: 0|r")
+    countText:SetText(string.format(curL["MAP_FOUND_COUNT"] or "|cffaaaaaaMembers found: %d|r", 0))
     panel.countText = countText
 
     -- Linha divisória ornamental
@@ -783,7 +791,8 @@ function WorldMapView:initWorldMapUI()
     end
     local scanBtnTxt = scanBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     scanBtnTxt:SetPoint("CENTER", scanBtn, "CENTER", 0, 0)
-    scanBtnTxt:SetText("Escanear Mapa")
+    scanBtnTxt:SetText(curL["MAP_SCAN_BTN"] or "Scan Map")
+    panel.scanBtnTxt = scanBtnTxt
     scanBtn:SetScript("OnEnter", function(b)
         if b.SetBackdropBorderColor then
             b:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
@@ -842,7 +851,7 @@ function WorldMapView:initWorldMapUI()
     -- Mensagem caso não haja nenhum membro na região
     local emptyMsg = listContainer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyMsg:SetPoint("CENTER", listContainer, "CENTER", 0, 0)
-    emptyMsg:SetText("Nenhum membro da guilda\nencontrado nesta região.")
+    emptyMsg:SetText(curL["MAP_EMPTY_MSG"] or "No guild members\nfound in this region.")
     emptyMsg:Hide()
     panel.emptyMsg = emptyMsg
 
@@ -851,7 +860,8 @@ function WorldMapView:initWorldMapUI()
     footer:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 8)
     footer:SetPoint("RIGHT", panel, "RIGHT", -10, 0)
     footer:SetJustifyH("LEFT")
-    footer:SetText("|cff888888Clique no membro para sussurrar com o jogador.|r")
+    footer:SetText(curL["MAP_FOOTER_HINT"] or "|cff888888Click member to whisper.|r")
+    panel.footer = footer
 
     -- Criação dos rows visíveis
     for i = 1, self._maxVisibleRows do
@@ -900,25 +910,26 @@ function WorldMapView:initWorldMapUI()
                 r:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
             end
             if r.memberData then
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
                 local data = r.memberData
                 GameTooltip:SetOwner(r, "ANCHOR_RIGHT")
                 local cHex = (data.class and CLASS_COLORS[data.class] and CLASS_COLORS[data.class].hex) or "|cffffffff"
-                GameTooltip:AddLine(cHex .. (data.name or "Membro") .. "|r")
-                GameTooltip:AddLine(string.format("Nível %d %s", data.level or 1, data.classDisplayName or data.class or ""), 1, 1, 1)
+                GameTooltip:AddLine(cHex .. (data.name or curL["MEMBER"] or "Member") .. "|r")
+                GameTooltip:AddLine(string.format(curL["MAP_ROW_LEVEL_CLASS"] or "Level %d %s", data.level or 1, data.classDisplayName or data.class or ""), 1, 1, 1)
                 if data.rankName and data.rankName ~= "" then
-                    GameTooltip:AddLine(string.format("Cargo: |cffffff00%s|r", data.rankName), 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["MAP_ROW_RANK"] or "Rank: |cffffff00%s|r", data.rankName), 0.9, 0.8, 0.5)
                 end
                 if data.zone and data.zone ~= "" then
-                    GameTooltip:AddLine(string.format("Região: |cffffffff%s|r", data.zone), 0.8, 0.8, 0.8)
+                    GameTooltip:AddLine(string.format(curL["MAP_ROW_ZONE"] or "Region: |cffffffff%s|r", data.zone), 0.8, 0.8, 0.8)
                 end
                 if data.publicNote and data.publicNote ~= "" then
-                    GameTooltip:AddLine("Nota Pública: |cffffffff" .. data.publicNote .. "|r", 0.7, 0.7, 0.7, true)
+                    GameTooltip:AddLine(string.format(curL["MAP_ROW_PUB_NOTE"] or "Public Note: %s", data.publicNote), 0.7, 0.7, 0.7, true)
                 end
                 if data.officerNote and data.officerNote ~= "" then
-                    GameTooltip:AddLine("Nota de Oficial: |cff80d0ff" .. data.officerNote .. "|r", 0.7, 0.7, 0.7, true)
+                    GameTooltip:AddLine(string.format(curL["MAP_ROW_OFF_NOTE"] or "Officer Note: %s", data.officerNote), 0.7, 0.7, 0.7, true)
                 end
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cff00ff00Clique para sussurrar com o jogador.|r", 0.8, 0.8, 0.8)
+                GameTooltip:AddLine(curL["MAP_ROW_WHISPER_HINT"] or "|cff00ff00Click to whisper player.|r", 0.8, 0.8, 0.8)
                 GameTooltip:Show()
             end
         end)
@@ -1035,11 +1046,12 @@ function WorldMapView:updateButton(count, isContinent, isWorld)
     if not self._mapButton then
         self:initWorldMapUI()
     end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local num = tonumber(count) or 0
     local color = num > 0 and "|cff00ff00" or "|cffaaaaaa"
-    local scopeText = isWorld and "no Mundo" or (isContinent and "no Continente" or "na Região")
+    local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
     if self._mapButton and self._mapButton.text then
-        self._mapButton.text:SetText(string.format("|cffffd200Guilda:|r %s%d %s|r", color, num, scopeText))
+        self._mapButton.text:SetText(string.format(curL["MAP_BTN_IN_REGION"] or "|cffffd200Guild:|r %s%d %s|r", color, num, scopeText))
     end
     self:reanchorMapButton()
     self:updateButtonState()
@@ -1051,8 +1063,9 @@ end
 ---@param isContinent boolean|nil @Indica se o mapa atual é um continente
 ---@param isWorld boolean|nil @Indica se o mapa atual é o mundo global
 function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     self._membersData = membersData or {}
-    self._currentZoneName = zoneName or "Região Atual"
+    self._currentZoneName = zoneName or (curL["MAP_CURRENT_REGION"] or "Current Region")
     self._isContinentView = isContinent == true
     self._isWorldView = isWorld == true
 
@@ -1062,8 +1075,8 @@ function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
 
     if self._panel then
         self._panel.zoneTitle:SetText("|cff00e5ff" .. self._currentZoneName .. "|r")
-        local scopeText = isWorld and "no mundo" or (isContinent and "no continente" or "na região")
-        self._panel.countText:SetText(string.format("|cffa8f0a8%d membro(s) %s|r", #self._membersData, scopeText))
+        local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
+        self._panel.countText:SetText(string.format(curL["MAP_FOUND_COUNT_FORMAT"] or "|cffa8f0a8%d member(s) %s|r", #self._membersData, scopeText))
     end
 
     self:updateButton(#self._membersData, isContinent, isWorld)
@@ -1170,3 +1183,45 @@ end
 function WorldMapView:setOnMemberClickCallback(callback)
     self._onMemberClickCallback = callback
 end
+
+--- Atualiza dinamicamente todos os textos da interface do mapa de acordo com o idioma ativo
+function WorldMapView:updateLocale()
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+
+    if self._panel then
+        if self._panel.headerTitle then
+            self._panel.headerTitle:SetText(curL["MAP_PANEL_HEADER"] or "|cffffd200Members in Region|r")
+        end
+        if self._panel.scanBtnTxt then
+            self._panel.scanBtnTxt:SetText(curL["MAP_SCAN_BTN"] or "Scan Map")
+        end
+        if self._panel.emptyMsg then
+            self._panel.emptyMsg:SetText(curL["MAP_EMPTY_MSG"] or "No guild members\nfound in this region.")
+        end
+        if self._panel.footer then
+            self._panel.footer:SetText(curL["MAP_FOOTER_HINT"] or "|cff888888Click member to whisper.|r")
+        end
+        if self._currentZoneName and self._panel.zoneTitle then
+            self._panel.zoneTitle:SetText("|cff00e5ff" .. self._currentZoneName .. "|r")
+        end
+        if self._membersData and self._panel.countText then
+            local isWorld = self._isWorldView
+            local isContinent = self._isContinentView
+            local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
+            self._panel.countText:SetText(string.format(curL["MAP_FOUND_COUNT_FORMAT"] or "|cffa8f0a8%d member(s) %s|r", #self._membersData, scopeText))
+        end
+    end
+
+    if self._membersData then
+        self:updateButton(#self._membersData, self._isContinentView, self._isWorldView)
+    elseif self._mapButton then
+        self:updateButton(0, false, false)
+    end
+
+    self:updateRealtimeBadge()
+
+    if self._isPanelOpen then
+        self:refreshVisibleRows()
+    end
+end
+

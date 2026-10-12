@@ -30,6 +30,9 @@ function SettingsService:new(db, logRepository, memberService, guildRosterServic
 
     -- Carrega entidade GMSettings mesclando com os dados persistidos
     instance._settings = GMSettings:new(instance._db.settings)
+    if _G.GM and _G.GM.SetLocale then
+        _G.GM.SetLocale(instance._settings:getLanguage(), true)
+    end
     -- Garante sincronismo inicial dos dados
     instance:save()
 
@@ -72,6 +75,9 @@ function SettingsService:set(key, val)
         self._settings["_" .. key] = val
     end
     self:save()
+    if key == "language" and _G.GM and _G.GM.SetLocale then
+        _G.GM.SetLocale(val, true)
+    end
     self:notifyListeners(key, val)
 end
 
@@ -87,6 +93,9 @@ function SettingsService:resetToDefaults()
     local defaults = self._settings:getDefaults()
     self._settings = GMSettings:new(defaults)
     self:save()
+    if _G.GM and _G.GM.SetLocale then
+        _G.GM.SetLocale("enUS", true)
+    end
     self:notifyListeners("*", nil)
 end
 

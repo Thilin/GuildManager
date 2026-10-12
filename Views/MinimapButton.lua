@@ -143,13 +143,14 @@ function MinimapButton:createUI()
 
     -- Tooltip explicativo ao passar o mouse
     button:SetScript("OnEnter", function(f)
+        local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         GameTooltip:SetOwner(f, "ANCHOR_LEFT")
-        GameTooltip:AddLine("|cffffd200Guild Manager|r")
-        GameTooltip:AddLine("|cff00ff00Clique com o Botão Esquerdo:|r Abrir Painel Principal")
-        GameTooltip:AddLine("|cffffd200Clique com o Botão Direito:|r Configurações do Addon")
-        GameTooltip:AddLine("|cffaaaaaaComandos: /gm, /gmaudit, /gmlogs, /gmgrupos, /gmagenda|r")
+        GameTooltip:AddLine("|cffffd200" .. L["MINIMAP_TOOLTIP_TITLE"] .. "|r")
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_LCLICK"])
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_RCLICK"])
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_CMDS"])
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffaaaaaaArraste com o botão esquerdo para orbitar a borda do minimapa|r", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_DRAG"], 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
 
@@ -221,5 +222,11 @@ function MinimapButton:toggle()
     end
 end
 
+--- Atualiza a interface do botão do minimapa conforme o idioma ativo
+function MinimapButton:updateLocale()
+    -- O tooltip é avaliado dinamicamente no OnEnter através da tabela de tradução L
+end
+
 -- Exportação/Alias de compatibilidade
 minimapButton = MinimapButton
+

@@ -1,3 +1,6 @@
+local addonName, addonTable = ...
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 ---@class AgendaView
 ---@field private _frame table|nil
 AgendaView = {}
@@ -249,8 +252,75 @@ function AgendaView:isShown()
     return self._frame and self._frame:IsShown()
 end
 
+--- Atualiza dinamicamente todos os textos da interface de agenda.
+function AgendaView:updateLocale()
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not self._frame then return end
+
+    if self._titleText then self._titleText:SetText(L["AGENDA_TITLE"]) end
+    if self._subtitleText then self._subtitleText:SetText(L["AGENDA_SUBTITLE"]) end
+    if self._eventsHeaderTitle then self._eventsHeaderTitle:SetText(L["AGENDA_EVENTS_HEADER"]) end
+    if self._newEventBtn then self._newEventBtn:SetText(L["AGENDA_NEW_EVENT_BTN"]) end
+    if self._emptyEventsText then self._emptyEventsText:SetText(L["AGENDA_EMPTY_EVENTS"]) end
+    if self._birthdaysHeaderTitle then self._birthdaysHeaderTitle:SetText(L["AGENDA_BIRTHDAYS_HEADER"]) end
+    if self._birthdaysHeaderSub then self._birthdaysHeaderSub:SetText("|cffaaaaaa" .. L["AGENDA_BIRTHDAYS_SUB"] .. "|r") end
+    if self._emptyBirthdaysText then self._emptyBirthdaysText:SetText(L["AGENDA_EMPTY_BIRTHDAYS"]) end
+
+    self:updateEventModalLocale()
+    self:updateInviteeModalLocale()
+
+    self:renderEvents()
+    self:renderBirthdays()
+end
+
+--- Atualiza textos da modal de criação/edição de evento.
+function AgendaView:updateEventModalLocale()
+    local modal = self._eventModal
+    if not modal then return end
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    if modal.mTitle then
+        modal.mTitle:SetText(modal.editingEventId and L["EVENT_EDIT_TITLE"] or L["EVENT_CREATE_TITLE"])
+    end
+    if modal.titleLabel then modal.titleLabel:SetText(L["EVENT_TITLE_LABEL"]) end
+    if modal.typeLabel then modal.typeLabel:SetText(L["EVENT_TYPE_LABEL"]) end
+    if modal.dateLabel then modal.dateLabel:SetText(L["EVENT_DATE_LABEL"]) end
+    if modal.timeLabel then modal.timeLabel:SetText(L["EVENT_TIME_LABEL"]) end
+    if modal.descLabel then modal.descLabel:SetText(L["EVENT_DESC_LABEL"]) end
+    if modal.saveBtn then modal.saveBtn:SetText(L["EVENT_SAVE_BTN"]) end
+    if modal.cancelBtn then modal.cancelBtn:SetText(L["CANCEL"]) end
+
+    if modal.typeButtons and modal.typeDefs then
+        for _, tDef in ipairs(modal.typeDefs) do
+            local btn = modal.typeButtons[tDef.id]
+            if btn and btn.bText then
+                btn.bText:SetText(L[tDef.labelKey] or tDef.labelKey)
+            end
+        end
+    end
+end
+
+--- Atualiza textos da modal de gerenciamento de convidados.
+function AgendaView:updateInviteeModalLocale()
+    local modal = self._inviteeModal
+    if not modal then return end
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    if modal.mTitle then modal.mTitle:SetText(L["EVENT_INVITEES_TITLE"]) end
+    if modal.mSubtitle and not modal.currentEvent then
+        modal.mSubtitle:SetText(L["EVENT_INVITEES_SUB"])
+    end
+    if modal.inviteAllBtn then modal.inviteAllBtn:SetText(L["EVENT_INVITE_ONLINE_BTN"] or L["EVENT_INVITE_GROUP_BTN"]) end
+    if modal.addLabel then modal.addLabel:SetText(L["EVENT_ADD_INVITEE_LABEL"]) end
+    if modal.addSearchHint then modal.addSearchHint:SetText(L["EVENT_ADD_INVITEE_SEARCH"]) end
+    if modal.addBtn then modal.addBtn:SetText(L["EVENT_ADD_INVITEE_BTN"]) end
+    if modal.emptyInvText then modal.emptyInvText:SetText(L["EVENT_INVITEES_EMPTY"]) end
+    if modal.bottomCloseBtn then modal.bottomCloseBtn:SetText(L["CLOSE"]) end
+end
+
 function AgendaView:show()
     if self._frame then
+        self:updateLocale()
         self:updatePermissions()
         self._frame:Show()
     end
@@ -372,12 +442,14 @@ function AgendaView:createUI()
     -- Título da Janela
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     titleText:SetPoint("LEFT", factionIcon, "RIGHT", 10, 0)
-    titleText:SetText("|cffffd200AGENDA DA GUILDA|r")
+    titleText:SetText(L["AGENDA_TITLE"])
+    self._titleText = titleText
 
     -- Subtítulo informativo
     local subtitleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitleText:SetPoint("LEFT", titleText, "RIGHT", 12, 0)
-    subtitleText:SetText("|cffaaaaaa(Eventos, Aniversários e Convites da Guilda)|r")
+    subtitleText:SetText(L["AGENDA_SUBTITLE"])
+    self._subtitleText = subtitleText
 
     -- Cria abas laterais (Side Tabs)
     self:createSideTabs()
@@ -420,9 +492,10 @@ function AgendaView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         auditIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Auditoria de Membros.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAudit:SetScript("OnLeave", function(btn)
@@ -471,9 +544,10 @@ function AgendaView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         logsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Logs da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabLogs:SetScript("OnLeave", function(btn)
@@ -522,9 +596,10 @@ function AgendaView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Gerenciamento de Grupos|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Grupos.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabGroups:SetScript("OnLeave", function(btn)
@@ -579,10 +654,11 @@ function AgendaView:createSideTabs()
     agendaGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
 
     tabAgenda:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Agenda da Guilda|r")
-        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Eventos, aniversários e convites de membros.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine("|cff888888" .. curL["TAB_CURRENT"] .. "|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAgenda:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -610,9 +686,10 @@ function AgendaView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         settingsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Configurações do Addon|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Opções e Personalização.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabSettings:SetScript("OnLeave", function(btn)
@@ -679,7 +756,8 @@ function AgendaView:createLeftPanel()
 
     local hTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     hTitle:SetPoint("LEFT", hIcon, "RIGHT", 6, 0)
-    hTitle:SetText("|cffffd200EVENTOS DA GUILDA|r")
+    hTitle:SetText(L["AGENDA_EVENTS_HEADER"])
+    self._eventsHeaderTitle = hTitle
 
     local hCount = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hCount:SetPoint("LEFT", hTitle, "RIGHT", 8, 0)
@@ -689,7 +767,7 @@ function AgendaView:createLeftPanel()
     local newEventBtn = CreateFrame("Button", nil, headerBar, "UIPanelButtonTemplate")
     newEventBtn:SetSize(126, 22)
     newEventBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
-    newEventBtn:SetText("+ Novo Evento")
+    newEventBtn:SetText(L["AGENDA_NEW_EVENT_BTN"])
     newEventBtn:SetScript("OnEnter", function(btn)
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
@@ -824,7 +902,7 @@ function AgendaView:createLeftPanel()
     emptyEventsText:SetPoint("CENTER", leftPanel, "CENTER", 0, -20)
     emptyEventsText:SetWidth(460)
     emptyEventsText:SetJustifyH("CENTER")
-    emptyEventsText:SetText("Nenhum evento agendado.\nClique em |cffffff00+ Novo Evento|r acima para criar um evento.")
+    emptyEventsText:SetText(L["AGENDA_EMPTY_EVENTS"])
     emptyEventsText:Hide()
     self._emptyEventsText = emptyEventsText
 end
@@ -882,11 +960,13 @@ function AgendaView:createRightPanel()
 
     local hTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     hTitle:SetPoint("TOPLEFT", hIcon, "TOPRIGHT", 6, 0)
-    hTitle:SetText("|cffffd200🎂 ANIVERSARIANTES|r")
+    hTitle:SetText(L["AGENDA_BIRTHDAYS_HEADER"])
+    self._birthdaysHeaderTitle = hTitle
 
     local hSub = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hSub:SetPoint("BOTTOMLEFT", hIcon, "BOTTOMRIGHT", 6, 0)
-    hSub:SetText("|cffaaaaaaPróximos da guilda|r")
+    hSub:SetText("|cffaaaaaa" .. L["AGENDA_BIRTHDAYS_SUB"] .. "|r")
+    self._birthdaysHeaderSub = hSub
 
     -- ScrollFrame dos Aniversários
     local scrollFrame = CreateFrame("ScrollFrame", "GM_AgendaBirthdaysScroll", rightPanel, "UIPanelScrollFrameTemplate")
@@ -909,7 +989,7 @@ function AgendaView:createRightPanel()
     emptyBirthdaysText:SetPoint("CENTER", rightPanel, "CENTER", 0, -20)
     emptyBirthdaysText:SetWidth(250)
     emptyBirthdaysText:SetJustifyH("CENTER")
-    emptyBirthdaysText:SetText("Nenhum aniversário cadastrado.\nAdicione a data na tela de membros ou notas da guilda.")
+    emptyBirthdaysText:SetText(L["AGENDA_EMPTY_BIRTHDAYS"])
     emptyBirthdaysText:Hide()
     self._emptyBirthdaysText = emptyBirthdaysText
 end
@@ -1323,6 +1403,7 @@ end
 function AgendaView:createEventModal()
     if self._eventModal then return end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
     local modal = CreateFrame("Frame", "GM_AgendaEventModal", UIParent, template)
     modal:SetSize(450, 460)
@@ -1354,7 +1435,7 @@ function AgendaView:createEventModal()
 
     local mTitle = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     mTitle:SetPoint("TOPLEFT", modal, "TOPLEFT", 18, -16)
-    mTitle:SetText("|cffffd200CRIAR NOVO EVENTO|r")
+    mTitle:SetText(L["EVENT_CREATE_TITLE"])
     modal.mTitle = mTitle
 
     local mSep = modal:CreateTexture(nil, "ARTWORK")
@@ -1366,7 +1447,8 @@ function AgendaView:createEventModal()
     -- Campo: Título
     local titleLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     titleLabel:SetPoint("TOPLEFT", mSep, "BOTTOMLEFT", 4, -10)
-    titleLabel:SetText("|cffffd200Título do Evento:|r |cffff0000*|r")
+    titleLabel:SetText(L["EVENT_TITLE_LABEL"])
+    modal.titleLabel = titleLabel
 
     local titleEB = CreateFrame("EditBox", nil, modal, template)
     titleEB:SetPoint("TOPLEFT", titleLabel, "BOTTOMLEFT", 0, -4)
@@ -1377,17 +1459,19 @@ function AgendaView:createEventModal()
     -- Campo: Tipo de Evento
     local typeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     typeLabel:SetPoint("TOPLEFT", titleEB, "BOTTOMLEFT", 0, -10)
-    typeLabel:SetText("|cffffd200Tipo de Evento:|r")
+    typeLabel:SetText(L["EVENT_TYPE_LABEL"])
+    modal.typeLabel = typeLabel
 
     local typeButtons = {}
     local typeDefs = {
-        { id = "RAID",        label = "Raide" },
-        { id = "DUNGEON",     label = "Masmorra" },
-        { id = "PVP",         label = "JxJ/PvP" },
-        { id = "REUNIAO",     label = "Reunião" },
-        { id = "ANIVERSARIO", label = "Aniversário" },
-        { id = "OUTRO",       label = "Outro" },
+        { id = "RAID",        labelKey = "EVENT_TYPE_RAID" },
+        { id = "DUNGEON",     labelKey = "EVENT_TYPE_DUNGEON" },
+        { id = "PVP",         labelKey = "EVENT_TYPE_PVP" },
+        { id = "REUNIAO",     labelKey = "EVENT_TYPE_MEETING" },
+        { id = "ANIVERSARIO", labelKey = "EVENT_TYPE_BIRTHDAY" },
+        { id = "OUTRO",       labelKey = "EVENT_TYPE_OTHER" },
     }
+    modal.typeDefs = typeDefs
     modal.selectedType = "RAID"
 
     local tStartX = 4
@@ -1406,7 +1490,7 @@ function AgendaView:createEventModal()
         end
         local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        bText:SetText(tDef.label)
+        bText:SetText(tDef.labelKey)
         btn.bText = bText
 
         btn:SetScript("OnClick", function()
@@ -1433,7 +1517,8 @@ function AgendaView:createEventModal()
     -- Linha: Data e Horário (duas colunas perfeitamente alinhadas aos 400px de largura)
     local dateLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     dateLabel:SetPoint("TOPLEFT", tRow1, "BOTTOMLEFT", 0, -10)
-    dateLabel:SetText("|cffffd200Data:|r |cffff0000*|r |cffaaaaaa(DD/MM/AAAA ou MM/dd)|r")
+    dateLabel:SetText(L["EVENT_DATE_LABEL"])
+    modal.dateLabel = dateLabel
 
     local dateEB = CreateFrame("EditBox", nil, modal, template)
     dateEB:SetPoint("TOPLEFT", dateLabel, "BOTTOMLEFT", 0, -4)
@@ -1443,7 +1528,8 @@ function AgendaView:createEventModal()
 
     local timeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     timeLabel:SetPoint("TOPLEFT", dateLabel, "TOPLEFT", 265, 0)
-    timeLabel:SetText("|cffffd200Horário:|r |cffaaaaaa(HH:MM)|r")
+    timeLabel:SetText(L["EVENT_TIME_LABEL"])
+    modal.timeLabel = timeLabel
 
     local timeEB = CreateFrame("EditBox", nil, modal, template)
     timeEB:SetPoint("TOPLEFT", timeLabel, "BOTTOMLEFT", 0, -4)
@@ -1455,7 +1541,8 @@ function AgendaView:createEventModal()
     -- Campo: Descrição (Container com Backdrop clássico evita o colapso nativo de EditBox multiline no motor do WoW)
     local descLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     descLabel:SetPoint("TOPLEFT", dateEB, "BOTTOMLEFT", 0, -10)
-    descLabel:SetText("|cffffd200Descrição e Detalhes do Evento:|r")
+    descLabel:SetText(L["EVENT_DESC_LABEL"])
+    modal.descLabel = descLabel
 
     local descContainer = CreateFrame("Frame", nil, modal, template)
     descContainer:SetPoint("TOPLEFT", descLabel, "BOTTOMLEFT", 0, -4)
@@ -1523,10 +1610,11 @@ function AgendaView:createEventModal()
     local saveBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     saveBtn:SetSize(140, 26)
     saveBtn:SetPoint("BOTTOMLEFT", modal, "BOTTOMLEFT", 20, 16)
-    saveBtn:SetText("Salvar Evento")
+    saveBtn:SetText(L["EVENT_SAVE_BTN"])
     modal.saveBtn = saveBtn
 
     saveBtn:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1538,9 +1626,9 @@ function AgendaView:createEventModal()
 
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Salvar Evento|r", 1, 1, 1)
+            GameTooltip:AddLine("|cffffd200" .. curL["EVENT_SAVE_BTN"] .. "|r", 1, 1, 1)
             if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar ou salvar eventos.|r", 1, 0.3, 0.3, true)
+                GameTooltip:AddLine(curL["EVENT_ERR_OFFICER_ONLY"], 1, 0.3, 0.3, true)
             else
                 GameTooltip:AddLine("|cff00ff00Clique para confirmar e salvar o evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
             end
@@ -1552,6 +1640,7 @@ function AgendaView:createEventModal()
     end)
 
     saveBtn:SetScript("OnClick", function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1562,7 +1651,7 @@ function AgendaView:createEventModal()
         end
 
         if not canOfficer then
-            errText:SetText("Apenas Oficiais ou o Líder da Guilda podem salvar eventos.")
+            errText:SetText(curL["EVENT_ERR_OFFICER_ONLY"])
             return
         end
         local tVal = titleEB:GetText() or ""
@@ -1571,12 +1660,12 @@ function AgendaView:createEventModal()
         local descVal = descEB:GetText() or ""
 
         if tVal:match("^%s*$") then
-            errText:SetText("O título do evento é obrigatório.")
+            errText:SetText(curL["EVENT_ERR_TITLE_REQ"])
             return
         end
 
         if dVal:match("^%s*$") then
-            errText:SetText("A data do evento é obrigatória.")
+            errText:SetText(curL["EVENT_ERR_DATE_REQ"])
             return
         end
 
@@ -1595,23 +1684,26 @@ function AgendaView:createEventModal()
         if ok then
             modal:Hide()
         else
-            errText:SetText(err or "Erro ao salvar evento.")
+            errText:SetText(err or curL["EVENT_ERR_SAVE_FAIL"])
         end
     end)
 
     local cancelBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     cancelBtn:SetSize(100, 26)
     cancelBtn:SetPoint("LEFT", saveBtn, "RIGHT", 10, 0)
-    cancelBtn:SetText("Cancelar")
+    cancelBtn:SetText(L["CANCEL"])
     cancelBtn:SetScript("OnClick", function() modal:Hide() end)
+    modal.cancelBtn = cancelBtn
 
     self._eventModal = modal
+    self:updateEventModalLocale()
 end
 
 --- Abre a modal de criação ou edição de evento.
 ---@param event Event|nil
 ---@param prefill table|nil
 function AgendaView:openEventModal(event, prefill)
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local canOfficer = false
     if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
         canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1622,7 +1714,7 @@ function AgendaView:openEventModal(event, prefill)
     end
 
     if not canOfficer then
-        print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar ou gerenciar eventos da agenda.")
+        print(string.format("|cffff4444[GuildManager]|r %s", L["EVENT_ERR_OFFICER_ONLY"]))
         return
     end
 
@@ -1633,7 +1725,7 @@ function AgendaView:openEventModal(event, prefill)
 
     if event then
         modal.editingEventId = event:getId()
-        modal.mTitle:SetText("|cffffd200EDITAR EVENTO|r")
+        modal.mTitle:SetText(L["EVENT_EDIT_TITLE"])
         modal.titleEB:SetText(event:getTitle() or "")
         modal.dateEB:SetText(event:getDate() or "")
         modal.timeEB:SetText(event:getTime() or "20:00")
@@ -1641,7 +1733,7 @@ function AgendaView:openEventModal(event, prefill)
         modal.selectedType = event:getType() or "OUTRO"
     else
         modal.editingEventId = nil
-        modal.mTitle:SetText("|cffffd200CRIAR NOVO EVENTO|r")
+        modal.mTitle:SetText(L["EVENT_CREATE_TITLE"])
         local p = prefill or {}
         modal.titleEB:SetText(p.title or "")
         modal.dateEB:SetText(p.date or "")
@@ -1650,6 +1742,8 @@ function AgendaView:openEventModal(event, prefill)
         modal.descEB:SetText(p.description or "")
         modal.selectedType = p.type or "RAID"
     end
+
+    self:updateEventModalLocale()
 
     -- Atualiza seleção visual dos botões de tipo
     for tid, btn in pairs(modal.typeButtons or {}) do
@@ -1712,6 +1806,7 @@ function AgendaView:createInviteeModal()
     local mTitle = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     mTitle:SetPoint("TOPLEFT", modal, "TOPLEFT", 18, -16)
     mTitle:SetText("|cffffd200CONVIDADOS DO EVENTO|r")
+    modal.mTitle = mTitle
 
     local mSubtitle = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     mSubtitle:SetPoint("TOPLEFT", mTitle, "BOTTOMLEFT", 0, -4)
@@ -1734,6 +1829,7 @@ function AgendaView:createInviteeModal()
             self._onInviteAllOnlineCallback(modal.currentEvent:getId())
         end
     end)
+    modal.inviteAllBtn = inviteAllBtn
 
     local totalText = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     totalText:SetPoint("LEFT", inviteAllBtn, "RIGHT", 12, 0)
@@ -1743,7 +1839,8 @@ function AgendaView:createInviteeModal()
     -- Linha de Adicionar Convidado com Busca / Autocomplete
     local addLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     addLabel:SetPoint("TOPLEFT", inviteAllBtn, "BOTTOMLEFT", 0, -12)
-    addLabel:SetText("|cffffd200Adicionar Convidado:|r |cffaaaaaa(Digite o nome para buscar na guilda)|r")
+    addLabel:SetText(L["EVENT_ADD_INVITEE_LABEL"])
+    modal.addLabel = addLabel
 
     local addEB = CreateFrame("EditBox", nil, modal, template)
     addEB:SetPoint("TOPLEFT", addLabel, "BOTTOMLEFT", 0, -4)
@@ -1977,15 +2074,16 @@ function AgendaView:createInviteeModal()
 
     local emptyInvText = listContainer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyInvText:SetPoint("CENTER", listContainer, "CENTER", 0, 0)
-    emptyInvText:SetText("Nenhum membro convidado para este evento.")
+    emptyInvText:SetText(L["EVENT_INVITEES_EMPTY"])
     modal.emptyInvText = emptyInvText
 
     -- Botão Fechar inferior
     local bottomCloseBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     bottomCloseBtn:SetSize(100, 24)
     bottomCloseBtn:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -16, 12)
-    bottomCloseBtn:SetText("Fechar")
+    bottomCloseBtn:SetText(L["CLOSE"])
     bottomCloseBtn:SetScript("OnClick", function() modal:Hide() end)
+    modal.bottomCloseBtn = bottomCloseBtn
 
     self._inviteeModal = modal
 end

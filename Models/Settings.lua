@@ -4,6 +4,7 @@ GMSettings = {}
 GMSettings.__index = GMSettings
 
 local DEFAULTS = {
+    language = "enUS",           -- Idioma da interface: "enUS" (Inglês, padrão) ou "ptBR" (Português)
     guildTagline = "",           -- Mensagem ou lema customizado da guilda
     defaultTab = "audit",        -- Aba inicial padrão: "audit", "logs", "groups", "settings"
     timeFormat24 = true,         -- true = 24 Horas (ex: 20:30), false = 12 Horas AM/PM
@@ -69,6 +70,7 @@ function GMSettings:getDefaults()
 end
 
 -- Getters
+function GMSettings:getLanguage() return self._language or "enUS" end
 function GMSettings:getGuildTagline() return self._guildTagline or "" end
 function GMSettings:getDefaultTab() return self._defaultTab or "audit" end
 function GMSettings:isTimeFormat24() return self._timeFormat24 == true end
@@ -104,6 +106,13 @@ function GMSettings:isNotifyMemberLevelUp() return self._notifyMemberLevelUp == 
 function GMSettings:isLogRejoin() return self._logRejoin ~= false end
 
 -- Setters
+function GMSettings:setLanguage(val)
+    if val == "ptBR" or val == "enUS" then
+        self._language = val
+    else
+        self._language = "enUS"
+    end
+end
 function GMSettings:setGuildTagline(val) self._guildTagline = tostring(val or "") end
 function GMSettings:setDefaultTab(val) self._defaultTab = tostring(val or "audit") end
 function GMSettings:setTimeFormat24(val) self._timeFormat24 = (val == true) end

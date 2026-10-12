@@ -1,3 +1,6 @@
+local addonName, addonTable = ...
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 local RACE_TRANSLATION_PT = {
     ["human"] = "Humano",
     ["humano"] = "Humano",
@@ -25,6 +28,8 @@ local RACE_TRANSLATION_PT = {
 
 local function getRaceInPortuguese(race)
     if not race or race == "" then return "" end
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+    if isEn then return race end
     local clean = race:match("^%s*(.-)%s*$"):lower()
     return RACE_TRANSLATION_PT[clean] or race
 end
@@ -344,7 +349,8 @@ function MemberView:createUI()
 
     local secTitle1 = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     secTitle1:SetPoint("TOPLEFT", inset1, "TOPLEFT", 10, -8)
-    secTitle1:SetText("|cffffd200DETALHES DO PERSONAGEM|r")
+    secTitle1:SetText(L["MEMBER_DETAILS_HEADER"])
+    self._secTitle1 = secTitle1
 
     local sep1 = inset1:CreateTexture(nil, "ARTWORK")
     sep1:SetPoint("TOPLEFT", inset1, "TOPLEFT", 8, -24)
@@ -356,7 +362,8 @@ function MemberView:createUI()
     -- Nível
     local levelLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     levelLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 2, -6)
-    levelLabel:SetText("|cffffd200Nível:|r")
+    levelLabel:SetText("|cffffd200" .. L["MEMBER_LEVEL"] .. "|r")
+    self._levelLabel = levelLabel
     local levelVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     levelVal:SetPoint("LEFT", levelLabel, "RIGHT", 6, 0)
     self._levelVal = levelVal
@@ -364,7 +371,8 @@ function MemberView:createUI()
     -- Classe
     local classLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     classLabel:SetPoint("TOPLEFT", levelLabel, "BOTTOMLEFT", 0, -4)
-    classLabel:SetText("|cffffd200Classe:|r")
+    classLabel:SetText("|cffffd200" .. L["MEMBER_CLASS"] .. "|r")
+    self._classLabel = classLabel
     local classVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     classVal:SetPoint("LEFT", classLabel, "RIGHT", 6, 0)
     self._classVal = classVal
@@ -372,7 +380,8 @@ function MemberView:createUI()
     -- Cargo
     local rankLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     rankLabel:SetPoint("TOPLEFT", classLabel, "BOTTOMLEFT", 0, -4)
-    rankLabel:SetText("|cffffd200Cargo:|r")
+    rankLabel:SetText("|cffffd200" .. L["MEMBER_RANK"] .. "|r")
+    self._rankLabel = rankLabel
     local rankVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     rankVal:SetPoint("LEFT", rankLabel, "RIGHT", 6, 0)
     self._rankVal = rankVal
@@ -380,7 +389,8 @@ function MemberView:createUI()
     -- Entrada (Data de entrada do personagem - editável ao clicar)
     local dateJoinLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     dateJoinLabel:SetPoint("TOPLEFT", rankLabel, "BOTTOMLEFT", 0, -4)
-    dateJoinLabel:SetText("|cffffd200Entrada:|r")
+    dateJoinLabel:SetText("|cffffd200" .. L["MEMBER_JOIN_DATE"] .. "|r")
+    self._dateJoinLabel = dateJoinLabel
     local dateJoinEB = CreateFrame("EditBox", nil, inset1, template)
     dateJoinEB:SetPoint("LEFT", dateJoinLabel, "RIGHT", 6, 0)
     dateJoinEB:SetSize(86, 18)
@@ -439,7 +449,8 @@ function MemberView:createUI()
     -- Reputação
     local repLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     repLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 170, -6)
-    repLabel:SetText("|cffffd200Reputação:|r")
+    repLabel:SetText("|cffffd200" .. L["MEMBER_REPUTATION"] .. "|r")
+    self._repLabel = repLabel
     local repVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     repVal:SetPoint("LEFT", repLabel, "RIGHT", 6, 0)
     self._repVal = repVal
@@ -447,7 +458,8 @@ function MemberView:createUI()
     -- Status
     local statusLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     statusLabel:SetPoint("TOPLEFT", repLabel, "BOTTOMLEFT", 0, -4)
-    statusLabel:SetText("|cffffd200Status:|r")
+    statusLabel:SetText("|cffffd200" .. L["MEMBER_STATUS"] .. "|r")
+    self._statusLabel = statusLabel
     local statusVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     statusVal:SetPoint("LEFT", statusLabel, "RIGHT", 6, 0)
     self._statusVal = statusVal
@@ -455,7 +467,8 @@ function MemberView:createUI()
     -- Zona
     local zoneLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     zoneLabel:SetPoint("TOPLEFT", statusLabel, "BOTTOMLEFT", 0, -4)
-    zoneLabel:SetText("|cffffd200Zona:|r")
+    zoneLabel:SetText("|cffffd200" .. L["MEMBER_ZONE"] .. "|r")
+    self._zoneLabel = zoneLabel
     local zoneVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     zoneVal:SetPoint("LEFT", zoneLabel, "RIGHT", 6, 0)
     self._zoneVal = zoneVal
@@ -464,7 +477,8 @@ function MemberView:createUI()
     -- Nota Pública (Container no estilo Note do padrão clássico Blizzard)
     local publicNoteLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     publicNoteLabel:SetPoint("TOPLEFT", dateJoinLabel, "BOTTOMLEFT", 0, -14)
-    publicNoteLabel:SetText("|cffffd200Nota Pública:|r")
+    publicNoteLabel:SetText("|cffffd200" .. L["MEMBER_PUBLIC_NOTE"] .. "|r")
+    self._publicNoteLabel = publicNoteLabel
 
     local publicNoteBox = CreateFrame("Frame", nil, inset1, template)
     publicNoteBox:SetPoint("TOPLEFT", publicNoteLabel, "BOTTOMLEFT", 0, -3)
@@ -487,7 +501,8 @@ function MemberView:createUI()
     -- Nota de Oficial (Container no estilo Officer's Note do padrão clássico Blizzard)
     local officerNoteLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     officerNoteLabel:SetPoint("TOPLEFT", publicNoteBox, "BOTTOMLEFT", 0, -8)
-    officerNoteLabel:SetText("|cffffd200Nota de Oficial:|r")
+    officerNoteLabel:SetText("|cffffd200" .. L["MEMBER_OFFICER_NOTE"] .. "|r")
+    self._officerNoteLabel = officerNoteLabel
 
     local officerNoteBox = CreateFrame("Frame", nil, inset1, template)
     officerNoteBox:SetPoint("TOPLEFT", officerNoteLabel, "BOTTOMLEFT", 0, -3)
@@ -522,7 +537,8 @@ function MemberView:createUI()
 
     local secTitle2 = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     secTitle2:SetPoint("TOPLEFT", inset2, "TOPLEFT", 10, -8)
-    secTitle2:SetText("|cffffd200INFORMAÇÕES ADICIONAIS|r")
+    secTitle2:SetText(L["MEMBER_EXTRA_HEADER"])
+    self._secTitle2 = secTitle2
 
     local sep2 = inset2:CreateTexture(nil, "ARTWORK")
     sep2:SetPoint("TOPLEFT", inset2, "TOPLEFT", 8, -24)
@@ -534,7 +550,8 @@ function MemberView:createUI()
     -- 1. Data de Aniversário (birthDay)
     local birthdayLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     birthdayLabel:SetPoint("TOPLEFT", sep2, "BOTTOMLEFT", 2, -6)
-    birthdayLabel:SetText("|cffffd200Aniversário (MM/DD):|r")
+    birthdayLabel:SetText("|cffffd200" .. L["MEMBER_BIRTHDAY"] .. "|r")
+    self._birthdayLabel = birthdayLabel
 
     local birthdayEB = CreateFrame("EditBox", nil, inset2, template)
     birthdayEB:SetPoint("TOPLEFT", birthdayLabel, "BOTTOMLEFT", 0, -2)
@@ -546,7 +563,8 @@ function MemberView:createUI()
     -- 2. Nota Interna Customizada (customNote) - Altura Ampliada até próximo ao Recrutador (deixando espaçamento)
     local customNoteLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     customNoteLabel:SetPoint("TOPLEFT", birthdayEB, "BOTTOMLEFT", 0, -6)
-    customNoteLabel:SetText("|cffffd200Nota Interna Customizada:|r")
+    customNoteLabel:SetText("|cffffd200" .. L["MEMBER_INTERNAL_NOTE"] .. "|r")
+    self._customNoteLabel = customNoteLabel
 
     -- Container da Nota Interna com Backdrop clássico (evita o colapso nativo do EditBox multiline no motor do WoW)
     local customNoteBox = CreateFrame("Frame", nil, inset2, template)
@@ -637,11 +655,13 @@ function MemberView:createUI()
 
     local altsLabel = altsLabelBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     altsLabel:SetPoint("LEFT", altsLabelBtn, "LEFT", 0, 0)
-    altsLabel:SetText("|cffffd200Alts Vinculados:|r")
+    altsLabel:SetText("|cffffd200" .. L["MEMBER_LINKED_ALTS"] .. "|r")
+    self._altsLabel = altsLabel
 
     local altsManageHint = altsLabelBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     altsManageHint:SetPoint("LEFT", altsLabel, "RIGHT", 4, 0)
-    altsManageHint:SetText("|cffffd200[Gerenciar]|r")
+    altsManageHint:SetText("|cffffd200" .. L["MEMBER_MANAGE_ALTS"] .. "|r")
+    self._altsManageHint = altsManageHint
 
     altsLabelBtn:SetScript("OnClick", function()
         self:toggleAltManager()
@@ -716,7 +736,8 @@ function MemberView:createUI()
 
     local recruiterLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     recruiterLabel:SetPoint("RIGHT", recruiterBtn, "LEFT", -6, 0)
-    recruiterLabel:SetText("|cffffd200Recrutador:|r")
+    recruiterLabel:SetText("|cffffd200" .. L["MEMBER_RECRUITER"] .. "|r")
+    self._recruiterLabel = recruiterLabel
 
     local recruiterLabelHit = CreateFrame("Button", nil, inset2)
     recruiterLabelHit:SetPoint("TOPLEFT", recruiterLabel, "TOPLEFT", 0, 0)
@@ -940,6 +961,33 @@ function MemberView:setOnSaveCallback(callback)
     self._onSaveCallback = callback
 end
 
+--- Atualiza dinamicamente todos os textos da interface do perfil do membro.
+function MemberView:updateLocale()
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not self._frame then return end
+
+    if self._secTitle1 then self._secTitle1:SetText(L["MEMBER_DETAILS_HEADER"]) end
+    if self._levelLabel then self._levelLabel:SetText("|cffffd200" .. L["MEMBER_LEVEL"] .. "|r") end
+    if self._classLabel then self._classLabel:SetText("|cffffd200" .. L["MEMBER_CLASS"] .. "|r") end
+    if self._rankLabel then self._rankLabel:SetText("|cffffd200" .. L["MEMBER_RANK"] .. "|r") end
+    if self._dateJoinLabel then self._dateJoinLabel:SetText("|cffffd200" .. L["MEMBER_JOIN_DATE"] .. "|r") end
+    if self._repLabel then self._repLabel:SetText("|cffffd200" .. L["MEMBER_REPUTATION"] .. "|r") end
+    if self._statusLabel then self._statusLabel:SetText("|cffffd200" .. L["MEMBER_STATUS"] .. "|r") end
+    if self._zoneLabel then self._zoneLabel:SetText("|cffffd200" .. L["MEMBER_ZONE"] .. "|r") end
+    if self._publicNoteLabel then self._publicNoteLabel:SetText("|cffffd200" .. L["MEMBER_PUBLIC_NOTE"] .. "|r") end
+    if self._officerNoteLabel then self._officerNoteLabel:SetText("|cffffd200" .. L["MEMBER_OFFICER_NOTE"] .. "|r") end
+    if self._secTitle2 then self._secTitle2:SetText(L["MEMBER_EXTRA_HEADER"]) end
+    if self._birthdayLabel then self._birthdayLabel:SetText("|cffffd200" .. L["MEMBER_BIRTHDAY"] .. "|r") end
+    if self._customNoteLabel then self._customNoteLabel:SetText("|cffffd200" .. L["MEMBER_INTERNAL_NOTE"] .. "|r") end
+    if self._altsLabel then self._altsLabel:SetText("|cffffd200" .. L["MEMBER_LINKED_ALTS"] .. "|r") end
+    if self._altsManageHint then self._altsManageHint:SetText("|cffffd200" .. L["MEMBER_MANAGE_ALTS"] .. "|r") end
+    if self._recruiterLabel then self._recruiterLabel:SetText("|cffffd200" .. L["MEMBER_RECRUITER"] .. "|r") end
+
+    if self._currentMember and self._frame:IsShown() then
+        self:showMember(self._currentMember, self._isLocked)
+    end
+end
+
 --- Preenche a interface com os dados de uma entidade Member e a exibe.
 --- Ao trocar de membro, salva as alterações do membro anterior automaticamente.
 ---@param member Member @Instância do membro a ser exibido
@@ -1058,11 +1106,13 @@ function MemberView:showMember(member, isLocked)
         local b = math.floor(classColor.b * 255)
         self._classVal:SetText(string.format("|cff%02x%02x%02x%s|r", r, g, b, classDisplay))
     else
-        self._classVal:SetText(classDisplay ~= "" and classDisplay or "Desconhecida")
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+        self._classVal:SetText(classDisplay ~= "" and classDisplay or (isEn and "Unknown" or "Desconhecida"))
     end
 
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     local rankName = member:getRankName() or ""
-    self._rankVal:SetText(rankName ~= "" and rankName or "Membro")
+    self._rankVal:SetText(rankName ~= "" and rankName or (isEn and "Member" or "Membro"))
 
     local repStanding = member:getRepStanding() or 0
     self._repVal:SetText(getReputationText(repStanding))
@@ -1074,13 +1124,13 @@ function MemberView:showMember(member, isLocked)
     end
 
     local zone = member:getZone()
-    self._zoneVal:SetText(zone ~= "" and zone or "Desconhecida")
+    self._zoneVal:SetText(zone ~= "" and zone or (isEn and "Unknown" or "Desconhecida"))
 
     local publicNote = member:getPublicNote()
-    self._publicNoteVal:SetText(publicNote ~= "" and publicNote or "|cff888888(Nenhuma)|r")
+    self._publicNoteVal:SetText(publicNote ~= "" and publicNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
 
     local officerNote = member:getOfficerNote()
-    self._officerNoteVal:SetText(officerNote ~= "" and officerNote or "|cff888888(Nenhuma)|r")
+    self._officerNoteVal:SetText(officerNote ~= "" and officerNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
 
     self:updateAltsVisual()
     self:updateRecruiterButtonVisual()

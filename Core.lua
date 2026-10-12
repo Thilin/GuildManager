@@ -111,6 +111,34 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         worldMapController:initHooks()
         chatMentionController:initHooks()
 
+        -- Registra o listener para atualização de idioma em tempo real ("na hora")
+        if GM.RegisterLocaleListener then
+            GM.RegisterLocaleListener(function(newLang)
+                if settingsView and settingsView.updateLocale then settingsView:updateLocale() end
+                if auditView and auditView.updateLocale then auditView:updateLocale() end
+                if logView and logView.updateLocale then logView:updateLocale() end
+                if groupView and groupView.updateLocale then groupView:updateLocale() end
+                if agendaView and agendaView.updateLocale then agendaView:updateLocale() end
+                if memberView and memberView.updateLocale then memberView:updateLocale() end
+                if worldMapView and worldMapView.updateLocale then worldMapView:updateLocale() end
+                if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
+            end)
+        end
+
+        -- Aplica o idioma persistido (padrão enUS)
+        local initialLang = settingsService:get("language", "enUS")
+        if GM.SetLocale then
+            GM.SetLocale(initialLang, true)
+        end
+        if settingsView and settingsView.updateLocale then settingsView:updateLocale() end
+        if auditView and auditView.updateLocale then auditView:updateLocale() end
+        if logView and logView.updateLocale then logView:updateLocale() end
+        if groupView and groupView.updateLocale then groupView:updateLocale() end
+        if agendaView and agendaView.updateLocale then agendaView:updateLocale() end
+        if memberView and memberView.updateLocale then memberView:updateLocale() end
+        if worldMapView and worldMapView.updateLocale then worldMapView:updateLocale() end
+        if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
+
         SLASH_GUILDMANAGER_LOC1 = "/gmloc"
         SlashCmdList["GUILDMANAGER_LOC"] = function(msg)
             local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
@@ -160,7 +188,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
-        print("|cff00ff00[GuildManager]|r AddOn carregado com sucesso! Digite |cffffff00/gm|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r ou |cffffff00/gmconfig|r para abrir.")
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        local welcomeMsg = curL["WELCOME_LOADED"] or "AddOn loaded successfully! Type |cffffff00/gm|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r or |cffffff00/gmconfig|r to open."
+        print("|cff00ff00[GuildManager]|r " .. welcomeMsg)
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
         self:UnregisterEvent("ADDON_LOADED")

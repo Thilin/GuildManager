@@ -15,6 +15,8 @@
 AuditView = {}
 AuditView.__index = AuditView
 
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 local DIALOG_BACKDROP = {
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -237,13 +239,14 @@ function AuditView:createUI()
     -- Título da Janela
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     titleText:SetPoint("LEFT", factionIcon, "RIGHT", 10, 0)
-    titleText:SetText("|cffffd200AUDITORIA DE MEMBROS DA GUILDA|r")
+    titleText:SetText(L["AUDIT_TITLE"])
     self._titleText = titleText
 
     -- Subtítulo informativo
     local subtitleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitleText:SetPoint("LEFT", titleText, "RIGHT", 12, 0)
-    subtitleText:SetText("|cffaaaaaa(Dados Blizzard + Gestão de Entrada, Recrutador, Aniversário e Notas)|r")
+    subtitleText:SetText(L["AUDIT_SUBTITLE"])
+    self._subtitleText = subtitleText
 
     -- Divisória abaixo do cabeçalho
     local headerSep = frame:CreateTexture(nil, "ARTWORK")
@@ -285,7 +288,7 @@ function AuditView:createUI()
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("|cff888888Buscar personagem, nota, cargo...|r")
+    searchHint:SetText("|cff888888" .. L["AUDIT_SEARCH_HINT"] .. "|r")
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -306,13 +309,13 @@ function AuditView:createUI()
 
     -- Botões de filtro rápido
     local filterTabs = {
-        { id = "ALL", label = "Todos" },
-        { id = "ONLINE", label = "Online" },
-        { id = "MAINS", label = "Apenas Mains" },
-        { id = "WITH_ALTS", label = "Com Alts" },
-        { id = "NO_RECRUITER", label = "Sem Recrutador" },
-        { id = "NO_OFFICER_NOTE", label = "Sem Nota Oficial" },
-        { id = "NO_CUSTOM_NOTE", label = "Sem Nota Interna" },
+        { id = "ALL", key = "FILTER_ALL", label = "Todos" },
+        { id = "ONLINE", key = "FILTER_ONLINE", label = "Online" },
+        { id = "MAINS", key = "FILTER_MAINS", label = "Apenas Mains" },
+        { id = "WITH_ALTS", key = "FILTER_WITH_ALTS", label = "Com Alts" },
+        { id = "NO_RECRUITER", key = "FILTER_NO_RECRUITER", label = "Sem Recrutador" },
+        { id = "NO_OFFICER_NOTE", key = "FILTER_NO_OFFICER_NOTE", label = "Sem Nota Oficial" },
+        { id = "NO_CUSTOM_NOTE", key = "FILTER_NO_CUSTOM_NOTE", label = "Sem Nota Interna" },
     }
 
     self._filterButtons = {}
@@ -325,7 +328,7 @@ function AuditView:createUI()
 
         local btnText = tabBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         btnText:SetPoint("CENTER", tabBtn, "CENTER", 0, 0)
-        btnText:SetText(tabData.label)
+        btnText:SetText(L[tabData.key] or tabData.label)
         tabBtn.text = btnText
 
         local textWidth = btnText:GetStringWidth() or 40
@@ -365,18 +368,19 @@ function AuditView:createUI()
     end
     local syncText = syncBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     syncText:SetPoint("CENTER", syncBtn, "CENTER", 0, 0)
-    syncText:SetText("|cffffd200Sincronizar P2P|r")
+    syncText:SetText("|cffffd200" .. (L["SYNC_P2P_BTN"] or "Sincronizar P2P") .. "|r")
     syncBtn.text = syncText
 
     syncBtn:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
             btn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], 0.95)
         end
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
-            GameTooltip:AddLine("|cffffd200Forçar Sincronização P2P|r")
-            GameTooltip:AddLine("Transmite na hora todos os dados customizados (Entrada, Aniversário, Alts e Recrutador) para todos os outros membros da guilda que usam o Addon.", 1, 1, 1, true)
+            GameTooltip:AddLine("|cffffd200" .. (curL["SYNC_P2P_TOOLTIP"] or "Forçar Sincronização P2P") .. "|r")
+            GameTooltip:AddLine(curL["SYNC_P2P_TOOLTIP_DESC"] or "Transmite na hora todos os dados customizados (Entrada, Aniversário, Alts e Recrutador) para todos os outros membros da guilda que usam o Addon.", 1, 1, 1, true)
             GameTooltip:Show()
         end
     end)
@@ -388,14 +392,16 @@ function AuditView:createUI()
         if GameTooltip then GameTooltip:Hide() end
     end)
     syncBtn:SetScript("OnClick", function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         if _G.GM and _G.GM.syncService and _G.GM.syncService.forceSyncAll then
             _G.GM.syncService:forceSyncAll()
             if syncBtn.text then
-                syncBtn.text:SetText("|cff00ff00Sincronizando...|r")
+                syncBtn.text:SetText("|cff00ff00" .. (curL["SYNCING"] or "Sincronizando...") .. "|r")
                 if C_Timer and C_Timer.After then
                     C_Timer.After(2.0, function()
                         if syncBtn and syncBtn.text then
-                            syncBtn.text:SetText("|cffffd200Sincronizar P2P|r")
+                            local freshL = (_G.GM and _G.GM.L) or _G.L or L
+                            syncBtn.text:SetText("|cffffd200" .. (freshL["SYNC_P2P_BTN"] or "Sincronizar P2P") .. "|r")
                         end
                     end)
                 end
@@ -432,17 +438,21 @@ function AuditView:createUI()
     self._headerContent = headerContent
 
     -- Construção das colunas do cabeçalho
+    self._colHeaderStrings = {}
     for _, col in ipairs(COLUMNS) do
         local colHeader = headerContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         colHeader:SetPoint("LEFT", headerContent, "LEFT", col.x + 4, 0)
         colHeader:SetWidth(col.width - 6)
         colHeader:SetJustifyH(col.align or "LEFT")
 
+        local colKey = "COL_" .. col.id:upper()
+        local colTitle = L[colKey] or col.title
         if col.editable then
-            colHeader:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", col.title))
+            colHeader:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", colTitle))
         else
-            colHeader:SetText(string.format("|cffffd200%s|r", col.title))
+            colHeader:SetText(string.format("|cffffd200%s|r", colTitle))
         end
+        self._colHeaderStrings[col.id] = colHeader
     end
 
     -- ScrollFrame das Linhas (rolagem horizontal vinculada)
@@ -856,7 +866,7 @@ function AuditView:createUI()
     local refreshBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     refreshBtn:SetSize(90, 22)
     refreshBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 10)
-    refreshBtn:SetText("Atualizar")
+    refreshBtn:SetText(L["REFRESH"])
     refreshBtn:SetScript("OnClick", function()
         if self._onRefreshCallback then
             self._onRefreshCallback()
@@ -917,10 +927,11 @@ function AuditView:createSideTabs()
     tabAudit.glow = auditGlow
 
     tabAudit:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
-        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Visualização completa dos membros, cargos, alts e notas de gestão.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine("|cff888888" .. curL["TAB_CURRENT"] .. "|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAudit:SetScript("OnLeave", function()
@@ -958,9 +969,10 @@ function AuditView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         logsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Logs da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -1031,9 +1043,10 @@ function AuditView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Gerenciamento de Grupos|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Grupos (Masmorras, Raides e Diversos).", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -1109,9 +1122,10 @@ function AuditView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Agenda da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Agenda e Eventos da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -1178,9 +1192,10 @@ function AuditView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         settingsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Configurações do Addon|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Opções e Personalização.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
 
@@ -1269,7 +1284,8 @@ function AuditView:createEditModal()
     -- Título da Modal
     local modalTitle = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     modalTitle:SetPoint("TOPLEFT", modal, "TOPLEFT", 18, -16)
-    modalTitle:SetText("|cffffd200EDITAR INFORMAÇÕES DO MEMBRO|r")
+    modalTitle:SetText(L["EDIT_MODAL_TITLE"])
+    modal.titleText = modalTitle
 
     -- Cabeçalho do Membro (Nome colorido, nível, raça, classe, status Main/Alt)
     local memberHeader = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium")
@@ -1320,7 +1336,8 @@ function AuditView:createEditModal()
     -- 1. CAMPO: DATA DE ENTRADA
     local dateJoinLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     dateJoinLabel:SetPoint("TOPLEFT", modalSep, "BOTTOMLEFT", 4, -12)
-    dateJoinLabel:SetText("|cffffd200Data de Entrada:|r |cffaaaaaa(AAAA-MM-DD)|r")
+    dateJoinLabel:SetText("|cffffd200" .. L["EDIT_JOIN_DATE_LABEL"] .. "|r")
+    modal.dateJoinLabel = dateJoinLabel
 
     local dateJoinEB = CreateFrame("EditBox", nil, modal, template)
     dateJoinEB:SetPoint("TOPLEFT", dateJoinLabel, "BOTTOMLEFT", 0, -4)
@@ -1414,7 +1431,8 @@ function AuditView:createEditModal()
     -- 2. CAMPO: RECRUTADOR
     local recruiterLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     recruiterLabel:SetPoint("TOPLEFT", dateJoinEB, "BOTTOMLEFT", 0, -10)
-    recruiterLabel:SetText("|cffffd200Recrutador:|r")
+    recruiterLabel:SetText("|cffffd200" .. L["EDIT_RECRUITER_LABEL"] .. "|r")
+    modal.recruiterLabel = recruiterLabel
 
     local recruiterEB = CreateFrame("EditBox", nil, modal, template)
     recruiterEB:SetPoint("TOPLEFT", recruiterLabel, "BOTTOMLEFT", 0, -4)
@@ -1508,7 +1526,8 @@ function AuditView:createEditModal()
     -- 3. CAMPO: ANIVERSÁRIO
     local birthdayLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     birthdayLabel:SetPoint("TOPLEFT", recruiterEB, "BOTTOMLEFT", 0, -10)
-    birthdayLabel:SetText("|cffffd200Aniversário:|r |cffaaaaaa(DD/MM)|r")
+    birthdayLabel:SetText("|cffffd200" .. L["EDIT_BIRTHDAY_LABEL"] .. "|r")
+    modal.birthdayLabel = birthdayLabel
 
     local birthdayEB = CreateFrame("EditBox", nil, modal, template)
     birthdayEB:SetPoint("TOPLEFT", birthdayLabel, "BOTTOMLEFT", 0, -4)
@@ -1523,7 +1542,8 @@ function AuditView:createEditModal()
     -- 4. CAMPO: NOTA INTERNA
     local customNoteLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     customNoteLabel:SetPoint("TOPLEFT", birthdayEB, "BOTTOMLEFT", 0, -10)
-    customNoteLabel:SetText("|cffffd200Nota Interna:|r |cffaaaaaa(Visível apenas na gestão do AddOn)|r")
+    customNoteLabel:SetText("|cffffd200" .. L["EDIT_CUSTOM_NOTE_LABEL"] .. "|r")
+    modal.customNoteLabel = customNoteLabel
 
     local noteContainer = CreateFrame("Frame", nil, modal, template)
     noteContainer:SetPoint("TOPLEFT", customNoteLabel, "BOTTOMLEFT", 0, -4)
@@ -1564,7 +1584,7 @@ function AuditView:createEditModal()
     local saveBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     saveBtn:SetSize(140, 24)
     saveBtn:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -16, 14)
-    saveBtn:SetText("Salvar Alterações")
+    saveBtn:SetText(L["SAVE"])
     saveBtn:SetScript("OnClick", function()
         self:saveModalChanges()
     end)
@@ -1574,10 +1594,11 @@ function AuditView:createEditModal()
     local cancelBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     cancelBtn:SetSize(90, 24)
     cancelBtn:SetPoint("RIGHT", saveBtn, "LEFT", -8, 0)
-    cancelBtn:SetText("Cancelar")
+    cancelBtn:SetText(L["CANCEL"])
     cancelBtn:SetScript("OnClick", function()
         modal:Hide()
     end)
+    modal.cancelBtn = cancelBtn
 
     self._editModal = modal
 end
@@ -2344,6 +2365,7 @@ end
 function AuditView:show()
     self:createUI()
     if self._frame then
+        self:updateLocale()
         self._frame:Show()
     end
 end
@@ -2362,6 +2384,89 @@ function AuditView:toggle()
         self:hide()
     else
         self:show()
+    end
+end
+
+--- Atualiza dinamicamente os textos da interface após mudança de idioma.
+function AuditView:updateLocale()
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    if not self._frame then return end
+
+    if self._titleText then
+        self._titleText:SetText(curL["AUDIT_TITLE"] or "|cffffd200AUDITORIA DE MEMBROS DA GUILDA|r")
+    end
+    if self._subtitleText then
+        self._subtitleText:SetText(curL["AUDIT_SUBTITLE"] or "|cffaaaaaa(Dados Blizzard + Gestão de Entrada, Recrutador, Aniversário e Notas)|r")
+    end
+    if self._searchEB and self._searchEB.hint then
+        self._searchEB.hint:SetText("|cff888888" .. (curL["AUDIT_SEARCH_HINT"] or "Buscar...") .. "|r")
+    end
+    if self._syncBtn and self._syncBtn.text then
+        self._syncBtn.text:SetText("|cffffd200" .. (curL["SYNC_P2P_BTN"] or "Sincronizar P2P") .. "|r")
+    end
+    if self._refreshBtn then
+        self._refreshBtn:SetText(curL["REFRESH"] or "Atualizar")
+    end
+    if self._emptyNotice then
+        self._emptyNotice:SetText(curL["AUDIT_EMPTY_NOTICE"] or "Nenhum membro encontrado nos critérios selecionados.")
+    end
+
+    -- Atualiza colunas do cabeçalho
+    if self._colHeaderStrings then
+        for _, col in ipairs(COLUMNS) do
+            local fs = self._colHeaderStrings[col.id]
+            if fs then
+                local colKey = "COL_" .. col.id:upper()
+                local title = curL[colKey] or col.title
+                if col.editable then
+                    fs:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", title))
+                else
+                    fs:SetText(string.format("|cffffd200%s|r", title))
+                end
+            end
+        end
+    end
+
+    -- Atualiza botões de filtro rápido
+    local filterKeys = {
+        ALL = "FILTER_ALL",
+        ONLINE = "FILTER_ONLINE",
+        MAINS = "FILTER_MAINS",
+        WITH_ALTS = "FILTER_WITH_ALTS",
+        NO_RECRUITER = "FILTER_NO_RECRUITER",
+        NO_OFFICER_NOTE = "FILTER_NO_OFFICER_NOTE",
+        NO_CUSTOM_NOTE = "FILTER_NO_CUSTOM_NOTE",
+    }
+    if self._filterButtons then
+        for tabId, btn in pairs(self._filterButtons) do
+            local key = filterKeys[tabId]
+            if key and btn.text then
+                btn.text:SetText(curL[key] or tabId)
+                local textWidth = btn.text:GetStringWidth() or 40
+                btn:SetWidth(textWidth + 12)
+            end
+        end
+    end
+
+    -- Atualiza modal de edição se existir
+    if self._editModal then
+        if self._editModal.titleText then self._editModal.titleText:SetText(curL["EDIT_MODAL_TITLE"] or "Editar Informações do Membro") end
+        if self._editModal.dateJoinLabel then self._editModal.dateJoinLabel:SetText("|cffffd200" .. (curL["EDIT_JOIN_DATE_LABEL"] or "Data de Entrada:") .. "|r") end
+        if self._editModal.recruiterLabel then self._editModal.recruiterLabel:SetText("|cffffd200" .. (curL["EDIT_RECRUITER_LABEL"] or "Recrutador:") .. "|r") end
+        if self._editModal.birthdayLabel then self._editModal.birthdayLabel:SetText("|cffffd200" .. (curL["EDIT_BIRTHDAY_LABEL"] or "Aniversário:") .. "|r") end
+        if self._editModal.customNoteLabel then self._editModal.customNoteLabel:SetText("|cffffd200" .. (curL["EDIT_CUSTOM_NOTE_LABEL"] or "Nota Interna:") .. "|r") end
+        if self._editModal.saveBtn then self._editModal.saveBtn:SetText(curL["SAVE"] or "Salvar") end
+        if self._editModal.cancelBtn then self._editModal.cancelBtn:SetText(curL["CANCEL"] or "Cancelar") end
+    end
+
+    -- Atualiza rodapé
+    if self._footerText and self._members then
+        self._footerText:SetText(string.format("|cffaaaaaa" .. (curL["TOTAL_MEMBERS"] or "Total: %d") .. "|r", #self._members))
+    end
+
+    -- Re-renderiza linhas visíveis
+    if self.renderRows then
+        self:renderRows()
     end
 end
 

@@ -62,8 +62,10 @@ function SettingsController:setupCallbacks()
         end
 
         -- Notifica no chat do jogador
-        print("|cff00ff00[GuildManager]|r Configurações salvas e aplicadas com sucesso!")
-        view:showStatus("Configurações salvas com sucesso!", false)
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        local savedMsg = curL["SETTINGS_STATUS_SAVED"] or "Settings saved and applied successfully!"
+        print("|cff00ff00[GuildManager]|r " .. savedMsg)
+        view:showStatus(savedMsg, false)
     end)
 
     view:setOnResetCallback(function()
@@ -81,8 +83,10 @@ function SettingsController:setupCallbacks()
             _G.GM.worldMapView._mapButton:Show()
         end
 
-        print("|cffffff00[GuildManager]|r Todas as configurações foram restauradas para o padrão.")
-        view:showStatus("Configurações restauradas para o padrão!", false)
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        local resetMsg = curL["SETTINGS_STATUS_RESTORED"] or "Settings restored to defaults!"
+        print("|cffffff00[GuildManager]|r " .. resetMsg)
+        view:showStatus(resetMsg, false)
     end)
 
     view:setOnPurgeLogsCallback(function()

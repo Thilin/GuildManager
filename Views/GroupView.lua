@@ -1,3 +1,6 @@
+local addonName, addonTable = ...
+local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
 ---@class GroupView
 ---@field private _frame table|nil
 GroupView = {}
@@ -181,12 +184,13 @@ end
 
 --- Retorna o texto formatado da função do membro.
 local function getRoleFormatted(role)
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     if role == GroupRole.TANK or role == "TANK" then
         return "|cff4a90e2[Tank]|r"
     elseif role == GroupRole.HEALER or role == "HEALER" then
-        return "|cff2ecc71[Cura]|r"
+        return isEn and "|cff2ecc71[Healer]|r" or "|cff2ecc71[Cura]|r"
     elseif role == GroupRole.DPS or role == "DPS" then
-        return "|cffe74c3c[Dano]|r"
+        return isEn and "|cffe74c3c[DPS]|r" or "|cffe74c3c[Dano]|r"
     end
     return "|cff888888[-]|r"
 end
@@ -442,12 +446,14 @@ function GroupView:createUI()
     -- Título da Janela
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     titleText:SetPoint("LEFT", factionIcon, "RIGHT", 10, 0)
-    titleText:SetText("|cffffd200GERENCIAMENTO DE GRUPOS DA GUILDA|r")
+    titleText:SetText(L["GROUPS_TITLE"])
+    self._titleText = titleText
 
     -- Subtítulo informativo
     local subtitleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitleText:SetPoint("LEFT", titleText, "RIGHT", 12, 0)
-    subtitleText:SetText("|cffaaaaaa(Masmorras, Raides e Atividades Diversas)|r")
+    subtitleText:SetText(L["GROUPS_SUBTITLE"])
+    self._subtitleText = subtitleText
 
     -- Divisória abaixo do cabeçalho
     local headerSep = frame:CreateTexture(nil, "ARTWORK")
@@ -491,9 +497,10 @@ function GroupView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         auditIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Auditoria da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Auditoria de Membros.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAudit:SetScript("OnLeave", function(btn)
@@ -542,9 +549,10 @@ function GroupView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         logsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Registro de Atividades|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Logs da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabLogs:SetScript("OnLeave", function(btn)
@@ -594,10 +602,11 @@ function GroupView:createSideTabs()
     groupsGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
 
     tabGroups:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Gerenciamento de Grupos|r")
-        GameTooltip:AddLine("|cff888888(Aba atual)|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine("Organização de grupos para Masmorras, Raides e Atividades Diversas.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine("|cff888888" .. curL["TAB_CURRENT"] .. "|r", 0.7, 0.7, 0.7)
+        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabGroups:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -630,9 +639,10 @@ function GroupView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Agenda da Guilda|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Agenda e Eventos da guilda.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabAgenda:SetScript("OnLeave", function(btn)
@@ -681,9 +691,10 @@ function GroupView:createSideTabs()
             btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         settingsIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200Configurações do Addon|r")
-        GameTooltip:AddLine("Clique para alternar para a tela de Opções e Personalização.", 1, 1, 1, true)
+        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
+        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
         GameTooltip:Show()
     end)
     tabSettings:SetScript("OnLeave", function(btn)
@@ -724,6 +735,8 @@ function GroupView:createThreeColumns()
     local columnDefs = {
         {
             type = GroupType.DUNGEON,
+            titleKey = "GROUP_COL_DUNGEONS",
+            subKey = "GROUP_COL_DUNGEONS_SUB",
             title = "MASMORRAS",
             subtitle = "5 Jogadores",
             titleColor = "|cff4a90e2",
@@ -732,6 +745,8 @@ function GroupView:createThreeColumns()
         },
         {
             type = GroupType.RAID,
+            titleKey = "GROUP_COL_RAIDS",
+            subKey = "GROUP_COL_RAIDS_SUB",
             title = "RAIDES",
             subtitle = "10 / 25 / 40 Jogadores",
             titleColor = "|cffff8000",
@@ -740,6 +755,8 @@ function GroupView:createThreeColumns()
         },
         {
             type = GroupType.MISC,
+            titleKey = "GROUP_COL_MISC",
+            subKey = "GROUP_COL_MISC_SUB",
             title = "DIVERSOS",
             subtitle = "PvP / Farm / Eventos",
             titleColor = "|cff00ff88",
@@ -780,17 +797,17 @@ function GroupView:createThreeColumns()
 
         local colTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         colTitle:SetPoint("TOPLEFT", colIcon, "TOPRIGHT", 6, 0)
-        colTitle:SetText(def.titleColor .. def.title .. "|r")
+        colTitle:SetText(def.titleColor .. L[def.titleKey] .. "|r")
 
         local colSub = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         colSub:SetPoint("BOTTOMLEFT", colIcon, "BOTTOMRIGHT", 6, 0)
-        colSub:SetText("|cffaaaaaa" .. def.subtitle .. "|r")
+        colSub:SetText("|cffaaaaaa" .. L[def.subKey] .. "|r")
 
         -- Botão "+ Criar" no header da coluna
         local createBtn = CreateFrame("Button", nil, headerBar, "UIPanelButtonTemplate")
         createBtn:SetSize(62, 22)
         createBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
-        createBtn:SetText("+ Criar")
+        createBtn:SetText(L["GROUP_CREATE_BTN"])
         createBtn:SetScript("OnEnter", function(btn)
             local canOfficer = false
             if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
@@ -802,12 +819,13 @@ function GroupView:createThreeColumns()
             end
 
             if GameTooltip then
+                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                 GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                GameTooltip:AddLine(string.format("|cffffd200Criar Grupo (%s)|r", def.title), 1, 1, 1)
+                GameTooltip:AddLine(string.format("|cffffd200%s (%s)|r", curL["GROUP_CREATE_SUBMIT"], curL[def.titleKey]), 1, 1, 1)
                 if not canOfficer then
-                    GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar grupos.|r", 1, 0.3, 0.3, true)
+                    GameTooltip:AddLine(curL["GROUP_TIP_OFFICER_ONLY"], 1, 0.3, 0.3, true)
                 else
-                    GameTooltip:AddLine("|cff00ff00Clique para criar um novo grupo.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+                    GameTooltip:AddLine(curL["GROUP_TIP_CREATE_CLICK"], 0.2, 1.0, 0.2)
                 end
                 GameTooltip:Show()
             end
@@ -826,7 +844,8 @@ function GroupView:createThreeColumns()
             end
 
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos.")
+                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+                print(string.format("|cffff4444[GuildManager]|r %s", curL["GROUP_ERR_OFFICER_ONLY"]))
                 return
             end
             self:openCreateModal(def.type)
@@ -853,7 +872,7 @@ function GroupView:createThreeColumns()
         emptyText:SetPoint("CENTER", col, "CENTER", 0, -10)
         emptyText:SetWidth(240)
         emptyText:SetJustifyH("CENTER")
-        emptyText:SetText("Nenhum grupo criado.\nClique em |cffffff00+ Criar|r acima.")
+        emptyText:SetText(L["GROUP_EMPTY_COL"])
         emptyText:Hide()
 
         self._columns[def.type] = {
@@ -861,6 +880,9 @@ function GroupView:createThreeColumns()
             scrollFrame = scrollFrame,
             scrollChild = scrollChild,
             emptyText = emptyText,
+            headerTitle = colTitle,
+            headerSub = colSub,
+            createBtn = createBtn,
             def = def,
             cardPool = {},
         }
@@ -979,30 +1001,31 @@ end
 --- Configura o card com APENAS o Nome, a Nota/Horário e o Líder.
 --- O clique abre a tela de gerenciamento de membros.
 function GroupView:setupCard(card, group)
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local leaderName = group:getLeader() or ""
     local note = group:getNote() or ""
     local members = group:getMembers() or {}
 
     -- 1. Nome do Grupo
-    card.title:SetText("|cffffd200" .. (group:getName() or "Grupo") .. "|r")
+    card.title:SetText("|cffffd200" .. (group:getName() or L["NEW_GROUP"]) .. "|r")
 
     -- Quantidade de membros (discreta)
-    card.countText:SetText(string.format("|cff888888(%d memb)|r", #members))
+    card.countText:SetText(string.format(L["GROUP_CARD_MEMBERS_FMT"], #members))
 
     -- 2. Nota / Horário
     if note ~= "" then
         card.noteText:SetText("|cffaaaaaa" .. note .. "|r")
     else
-        card.noteText:SetText("|cff555555(Sem nota/horário)|r")
+        card.noteText:SetText(L["GROUP_NO_NOTE"])
     end
 
     -- 3. Líder do Grupo
     local leaderMember = self:findGuildMember(leaderName)
     local leaderClass = self:resolveMemberClass(leaderName, leaderMember and leaderMember:getClass())
     if leaderName ~= "" then
-        card.leaderText:SetText("|cffffd200Líder:|r " .. getColoredMemberName(leaderName, leaderClass))
+        card.leaderText:SetText(L["GROUP_LEADER_PREFIX"] .. getColoredMemberName(leaderName, leaderClass))
     else
-        card.leaderText:SetText("|cffff4444Sem líder definido|r")
+        card.leaderText:SetText(L["GROUP_NO_LEADER"])
     end
 
     -- Ação de Clique: Abre a tela completa de gerenciamento do grupo!
@@ -1012,19 +1035,20 @@ function GroupView:setupCard(card, group)
 
     -- Tooltip indicando clique para gerenciar
     card:SetScript("OnEnter", function(f)
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         if f.SetBackdropBorderColor then
             f:SetBackdropBorderColor(1.0, 0.85, 0.20, 1.0)
             f:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
         end
         GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
         GameTooltip:AddLine("|cffffd200" .. group:getName() .. "|r")
-        GameTooltip:AddLine("|cffaaaaaaLíder:|r " .. (leaderName ~= "" and leaderName or "Nenhum"))
+        GameTooltip:AddLine("|cffaaaaaa" .. curL["GROUP_LEADER"] .. ":|r " .. (leaderName ~= "" and leaderName or curL["NONE"]))
         if note ~= "" then
-            GameTooltip:AddLine("|cffaaaaaaNota/Horário:|r " .. note)
+            GameTooltip:AddLine("|cffaaaaaa" .. curL["GROUP_NOTE_LABEL_PLAIN"] .. "|r " .. note)
         end
-        GameTooltip:AddLine(string.format("|cffaaaaaaTotal de Membros:|r %d", #members))
+        GameTooltip:AddLine(string.format("|cffaaaaaa%s:|r %d", curL["GROUP_MEMBERS"], #members))
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cff00ff00Clique para abrir e gerenciar este grupo|r", 0.9, 0.9, 0.9)
+        GameTooltip:AddLine(curL["GROUP_CLICK_MANAGE_TIP"], 0.9, 0.9, 0.9)
         GameTooltip:Show()
     end)
 
@@ -1040,6 +1064,7 @@ end
 --- Cria todas as modais da View: Detalhes do Grupo, Novo Grupo, Adicionar Membro, Picker de Líder.
 function GroupView:createModals()
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
     -- =========================================================================
     -- 1. MODAL DE GERENCIAMENTO / DETALHES DO GRUPO (Outra tela ao clicar)
@@ -1080,7 +1105,7 @@ function GroupView:createModals()
 
     local dTitle = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     dTitle:SetPoint("LEFT", dIcon, "RIGHT", 8, 0)
-    dTitle:SetText("|cffffd200GERENCIAR GRUPO|r")
+    dTitle:SetText(L["GROUP_DETAIL_TITLE"])
     detailModal.title = dTitle
 
     local dSub = detailModal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1098,7 +1123,8 @@ function GroupView:createModals()
     -- Campo: Nome do Grupo
     local nameLbl = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     nameLbl:SetPoint("TOPLEFT", dSep, "BOTTOMLEFT", 4, -10)
-    nameLbl:SetText("|cffffd200Nome do Grupo:|r")
+    nameLbl:SetText(L["GROUP_NAME_LABEL_PLAIN"])
+    detailModal.nameLbl = nameLbl
 
     local nameEB = CreateFrame("EditBox", nil, detailModal, template)
     nameEB:SetPoint("TOPLEFT", nameLbl, "BOTTOMLEFT", 0, -3)
@@ -1109,7 +1135,8 @@ function GroupView:createModals()
     -- Campo: Nota / Horário
     local noteLbl = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noteLbl:SetPoint("LEFT", nameLbl, "LEFT", 295, 0)
-    noteLbl:SetText("|cffffd200Nota / Horário:|r")
+    noteLbl:SetText(L["GROUP_NOTE_LABEL_PLAIN"])
+    detailModal.noteLbl = noteLbl
 
     local noteEB = CreateFrame("EditBox", nil, detailModal, template)
     noteEB:SetPoint("TOPLEFT", noteLbl, "BOTTOMLEFT", 0, -3)
@@ -1120,7 +1147,8 @@ function GroupView:createModals()
     -- Campo: Líder do Grupo
     local leaderLbl = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     leaderLbl:SetPoint("TOPLEFT", nameEB, "BOTTOMLEFT", 0, -8)
-    leaderLbl:SetText("|cffffd200Líder Atual do Grupo:|r")
+    leaderLbl:SetText(L["GROUP_CURRENT_LEADER_LABEL"])
+    detailModal.leaderLbl = leaderLbl
 
     local leaderBox = CreateFrame("Frame", nil, detailModal, template)
     leaderBox:SetPoint("TOPLEFT", leaderLbl, "BOTTOMLEFT", 0, -3)
@@ -1154,7 +1182,7 @@ function GroupView:createModals()
     local changeLeaderBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
     changeLeaderBtn:SetSize(110, 22)
     changeLeaderBtn:SetPoint("LEFT", leaderBox, "RIGHT", 8, 0)
-    changeLeaderBtn:SetText("Trocar Líder...")
+    changeLeaderBtn:SetText(L["GROUP_CHANGE_LEADER_BTN"])
     changeLeaderBtn:SetScript("OnClick", function()
         self:openLeaderPicker(function(chosenMember)
             detailModal.selectedLeaderName = chosenMember:getName()
@@ -1174,13 +1202,14 @@ function GroupView:createModals()
             end
         end)
     end)
+    detailModal.changeLeaderBtn = changeLeaderBtn
 
     -- Botão "Salvar Dados"
     local saveInfoBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
     saveInfoBtn:SetSize(162, 22)
     saveInfoBtn:SetPoint("RIGHT", detailModal, "RIGHT", -20, 0)
     saveInfoBtn:SetPoint("CENTER", changeLeaderBtn, "CENTER", 140, 0)
-    saveInfoBtn:SetText("Salvar Informações")
+    saveInfoBtn:SetText(L["GROUP_SAVE_INFO_BTN"])
     saveInfoBtn:SetScript("OnClick", function()
         if not detailModal.currentGroup then return end
         local nVal = nameEB:GetText()
@@ -1190,6 +1219,7 @@ function GroupView:createModals()
             self._onUpdateGroupDetailsCallback(detailModal.currentGroup:getId(), nVal, ntVal, lVal)
         end
     end)
+    detailModal.saveInfoBtn = saveInfoBtn
 
     -- Divisória abaixo dos dados do grupo
     local dSep2 = detailModal:CreateTexture(nil, "ARTWORK")
@@ -1201,7 +1231,8 @@ function GroupView:createModals()
     -- --- SEÇÃO DE MEMBROS DO GRUPO ---
     local membersHeader = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     membersHeader:SetPoint("TOPLEFT", dSep2, "BOTTOMLEFT", 4, -8)
-    membersHeader:SetText("|cffffd200MEMBROS DO GRUPO|r")
+    membersHeader:SetText(L["GROUP_MEMBERS_HEADER"])
+    detailModal.membersHeader = membersHeader
 
     local membersSummary = detailModal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     membersSummary:SetPoint("LEFT", membersHeader, "RIGHT", 12, 0)
@@ -1211,12 +1242,13 @@ function GroupView:createModals()
     addMemberBtn:SetSize(140, 22)
     addMemberBtn:SetPoint("RIGHT", detailModal, "RIGHT", -18, 0)
     addMemberBtn:SetPoint("CENTER", membersHeader, "CENTER", 180, 0)
-    addMemberBtn:SetText("+ Adicionar Membro")
+    addMemberBtn:SetText(L["GROUP_ADD_MEMBER_BTN"])
     addMemberBtn:SetScript("OnClick", function()
         if detailModal.currentGroup then
             self:openAddMemberModal(detailModal.currentGroup)
         end
     end)
+    detailModal.addMemberBtn = addMemberBtn
 
     -- Container e ScrollFrame da lista de membros
     local memberTable = CreateFrame("Frame", nil, detailModal, template)
@@ -1250,18 +1282,20 @@ function GroupView:createModals()
     local inviteAllBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
     inviteAllBtn:SetSize(140, 24)
     inviteAllBtn:SetPoint("BOTTOMLEFT", detailModal, "BOTTOMLEFT", 16, 14)
-    inviteAllBtn:SetText("Convidar Grupo")
+    inviteAllBtn:SetText(L["INVITE_ALL"])
     inviteAllBtn:SetScript("OnClick", function()
         if detailModal.currentGroup and self._onInviteGroupCallback then
             self._onInviteGroupCallback(detailModal.currentGroup:getId())
         end
     end)
+    detailModal.inviteAllBtn = inviteAllBtn
 
     local delGroupBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
     delGroupBtn:SetSize(120, 24)
     delGroupBtn:SetPoint("LEFT", inviteAllBtn, "RIGHT", 10, 0)
-    delGroupBtn:SetText("Excluir Grupo")
+    delGroupBtn:SetText(L["GROUP_DELETE_BTN"])
     delGroupBtn:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1273,11 +1307,11 @@ function GroupView:createModals()
 
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Excluir Grupo|r", 1, 1, 1)
+            GameTooltip:AddLine(curL["GROUP_DELETE_BTN"], 1, 1, 1)
             if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem excluir grupos.|r", 1, 0.3, 0.3, true)
+                GameTooltip:AddLine(curL["GROUP_TIP_OFFICER_ONLY"], 1, 0.3, 0.3, true)
             else
-                GameTooltip:AddLine("|cff00ff00Clique para excluir este grupo da guilda.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+                GameTooltip:AddLine(curL["GROUP_TIP_DELETE_CLICK"], 0.2, 1.0, 0.2)
             end
             GameTooltip:Show()
         end
@@ -1286,6 +1320,7 @@ function GroupView:createModals()
         if GameTooltip then GameTooltip:Hide() end
     end)
     delGroupBtn:SetScript("OnClick", function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1296,22 +1331,22 @@ function GroupView:createModals()
         end
 
         if not canOfficer then
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir grupos.")
+            print(string.format("|cffff4444[GuildManager]|r %s", curL["GROUP_ERR_OFFICER_ONLY"]))
             return
         end
 
         if detailModal.currentGroup and self._onDeleteGroupCallback then
             local gId = detailModal.currentGroup:getId()
-            local gName = detailModal.currentGroup:getName() or "este grupo"
+            local gName = detailModal.currentGroup:getName() or curL["NEW_GROUP"]
             local confirm = true
             if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("confirmGroupDelete") == false then
                 confirm = false
             end
             if confirm and StaticPopupDialogs then
                 StaticPopupDialogs["GM_CONFIRM_DELETE_GROUP"] = {
-                    text = string.format("Deseja realmente excluir o grupo '%s'?", gName),
-                    button1 = "Sim",
-                    button2 = "Não",
+                    text = string.format(curL["GROUP_CONFIRM_DELETE"], gName),
+                    button1 = curL["YES"],
+                    button2 = curL["NO"],
                     OnAccept = function()
                         self._onDeleteGroupCallback(gId)
                         detailModal:Hide()
@@ -1333,8 +1368,9 @@ function GroupView:createModals()
     local closeDetailBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
     closeDetailBtn:SetSize(100, 24)
     closeDetailBtn:SetPoint("BOTTOMRIGHT", detailModal, "BOTTOMRIGHT", -16, 14)
-    closeDetailBtn:SetText("Fechar")
+    closeDetailBtn:SetText(L["CLOSE"])
     closeDetailBtn:SetScript("OnClick", function() detailModal:Hide() end)
+    detailModal.closeDetailBtn = closeDetailBtn
 
     self._detailModal = detailModal
 
@@ -1371,7 +1407,8 @@ function GroupView:createModals()
 
     local cTitle = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     cTitle:SetPoint("TOPLEFT", createModal, "TOPLEFT", 18, -16)
-    cTitle:SetText("|cffffd200CRIAR NOVO GRUPO|r")
+    cTitle:SetText(L["GROUP_CREATE_MODAL_TITLE"])
+    createModal.titleText = cTitle
 
     local cSep = createModal:CreateTexture(nil, "ARTWORK")
     cSep:SetPoint("TOPLEFT", createModal, "TOPLEFT", 16, -44)
@@ -1382,7 +1419,8 @@ function GroupView:createModals()
     -- Nome
     local cNameLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cNameLabel:SetPoint("TOPLEFT", cSep, "BOTTOMLEFT", 4, -12)
-    cNameLabel:SetText("|cffffd200Nome do Grupo:|r |cffff0000*|r")
+    cNameLabel:SetText(L["GROUP_NAME_LABEL"])
+    createModal.nameLabel = cNameLabel
 
     local cNameEB = CreateFrame("EditBox", nil, createModal, template)
     cNameEB:SetPoint("TOPLEFT", cNameLabel, "BOTTOMLEFT", 0, -4)
@@ -1393,14 +1431,16 @@ function GroupView:createModals()
     -- Tipo
     local cTypeLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cTypeLabel:SetPoint("TOPLEFT", cNameEB, "BOTTOMLEFT", 0, -12)
-    cTypeLabel:SetText("|cffffd200Tipo de Grupo:|r")
+    cTypeLabel:SetText(L["GROUP_TYPE_LABEL"])
+    createModal.typeLabel = cTypeLabel
 
     local typeButtons = {}
     local typeDefs = {
-        { id = GroupType.DUNGEON, label = "Masmorras" },
-        { id = GroupType.RAID, label = "Raides" },
-        { id = GroupType.MISC, label = "Diversos" },
+        { id = GroupType.DUNGEON, labelKey = "GROUP_BTN_TYPE_DUNGEONS" },
+        { id = GroupType.RAID,    labelKey = "GROUP_BTN_TYPE_RAIDS" },
+        { id = GroupType.MISC,    labelKey = "GROUP_BTN_TYPE_MISC" },
     }
+    createModal.typeDefs = typeDefs
     createModal.selectedType = GroupType.DUNGEON
 
     for i, tDef in ipairs(typeDefs) do
@@ -1410,7 +1450,7 @@ function GroupView:createModals()
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        txt:SetText(tDef.label)
+        txt:SetText(L[tDef.labelKey] or tDef.labelKey)
         btn.txt = txt
 
         btn:SetScript("OnClick", function()
@@ -1425,7 +1465,8 @@ function GroupView:createModals()
     -- Nota / Horário
     local cNoteLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cNoteLabel:SetPoint("TOPLEFT", cTypeLabel, "BOTTOMLEFT", 0, -38)
-    cNoteLabel:SetText("|cffffd200Nota / Horário (Opcional):|r")
+    cNoteLabel:SetText(L["GROUP_NOTE_LABEL"])
+    createModal.noteLabel = cNoteLabel
 
     local cNoteEB = CreateFrame("EditBox", nil, createModal, template)
     cNoteEB:SetPoint("TOPLEFT", cNoteLabel, "BOTTOMLEFT", 0, -4)
@@ -1436,7 +1477,8 @@ function GroupView:createModals()
     -- Líder Obrigatório
     local cLeaderLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cLeaderLabel:SetPoint("TOPLEFT", cNoteEB, "BOTTOMLEFT", 0, -12)
-    cLeaderLabel:SetText("|cffffd200Líder do Grupo (Membro da Guilda):|r |cffff0000*|r")
+    cLeaderLabel:SetText(L["GROUP_LEADER_LABEL"])
+    createModal.leaderLabel = cLeaderLabel
 
     local cLeaderBox = CreateFrame("Button", nil, createModal, template)
     cLeaderBox:SetPoint("TOPLEFT", cLeaderLabel, "BOTTOMLEFT", 0, -4)
@@ -1453,14 +1495,14 @@ function GroupView:createModals()
 
     local cLeaderText = cLeaderBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     cLeaderText:SetPoint("LEFT", cCrown, "RIGHT", 6, 0)
-    cLeaderText:SetText("|cffaaaaaaClique para selecionar líder...|r")
+    cLeaderText:SetText(L["GROUP_LEADER_PICK_HINT"])
     createModal.leaderText = cLeaderText
     createModal.selectedLeader = nil
 
     local cLeaderPickBtn = CreateFrame("Button", nil, createModal, "UIPanelButtonTemplate")
     cLeaderPickBtn:SetSize(104, 24)
     cLeaderPickBtn:SetPoint("LEFT", cLeaderBox, "RIGHT", 6, 0)
-    cLeaderPickBtn:SetText("Selecionar...")
+    cLeaderPickBtn:SetText(L["GROUP_SELECT_BTN"])
     cLeaderPickBtn:SetScript("OnClick", function()
         self:openLeaderPicker(function(chosenMember)
             createModal.selectedLeader = chosenMember
@@ -1474,6 +1516,7 @@ function GroupView:createModals()
         end)
     end)
     cLeaderBox:SetScript("OnClick", function() cLeaderPickBtn:Click() end)
+    createModal.leaderPickBtn = cLeaderPickBtn
 
     -- Função do Líder
     local cRoleContainer = CreateFrame("Frame", nil, createModal)
@@ -1483,14 +1526,16 @@ function GroupView:createModals()
 
     local cRoleLabel = cRoleContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cRoleLabel:SetPoint("TOPLEFT", cRoleContainer, "TOPLEFT", 0, 0)
-    cRoleLabel:SetText("|cffffd200Função do Líder no Grupo:|r |cffff0000*|r")
+    cRoleLabel:SetText(L["GROUP_ROLE_LABEL"])
+    createModal.roleLabel = cRoleLabel
 
     local cRoleButtons = {}
     local roleDefs = {
-        { id = GroupRole.TANK, label = "🛡️ Tank", color = { 0.29, 0.56, 0.88 } },
-        { id = GroupRole.HEALER, label = "✨ Curador", color = { 0.18, 0.80, 0.44 } },
-        { id = GroupRole.DPS, label = "⚔️ Dano", color = { 0.91, 0.30, 0.24 } },
+        { id = GroupRole.TANK,   labelKey = "ROLE_TANK",   color = { 0.29, 0.56, 0.88 } },
+        { id = GroupRole.HEALER, labelKey = "ROLE_HEALER", color = { 0.18, 0.80, 0.44 } },
+        { id = GroupRole.DPS,    labelKey = "ROLE_DPS",    color = { 0.91, 0.30, 0.24 } },
     }
+    createModal.roleDefs = roleDefs
     createModal.selectedLeaderRole = GroupRole.DPS
 
     for i, rDef in ipairs(roleDefs) do
@@ -1500,7 +1545,7 @@ function GroupView:createModals()
         if rBtn.SetBackdrop then rBtn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local rTxt = rBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         rTxt:SetPoint("CENTER", rBtn, "CENTER", 0, 0)
-        rTxt:SetText(rDef.label)
+        rTxt:SetText(L[rDef.labelKey] or rDef.labelKey)
         rBtn.txt = rTxt
         rBtn.def = rDef
 
@@ -1522,8 +1567,9 @@ function GroupView:createModals()
     local cSaveBtn = CreateFrame("Button", nil, createModal, "UIPanelButtonTemplate")
     cSaveBtn:SetSize(130, 24)
     cSaveBtn:SetPoint("BOTTOMRIGHT", createModal, "BOTTOMRIGHT", -16, 16)
-    cSaveBtn:SetText("Criar Grupo")
+    cSaveBtn:SetText(L["GROUP_CREATE_SUBMIT"])
     cSaveBtn:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1535,11 +1581,11 @@ function GroupView:createModals()
 
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Criar Grupo|r", 1, 1, 1)
+            GameTooltip:AddLine(curL["GROUP_TIP_CREATE_HEADER"], 1, 1, 1)
             if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar grupos.|r", 1, 0.3, 0.3, true)
+                GameTooltip:AddLine(curL["GROUP_TIP_OFFICER_ONLY"], 1, 0.3, 0.3, true)
             else
-                GameTooltip:AddLine("|cff00ff00Clique para confirmar a criação deste grupo.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+                GameTooltip:AddLine(curL["GROUP_TIP_CREATE_CLICK"], 0.2, 1.0, 0.2)
             end
             GameTooltip:Show()
         end
@@ -1548,6 +1594,7 @@ function GroupView:createModals()
         if GameTooltip then GameTooltip:Hide() end
     end)
     cSaveBtn:SetScript("OnClick", function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1558,22 +1605,22 @@ function GroupView:createModals()
         end
 
         if not canOfficer then
-            cErrorText:SetText("Apenas Oficiais ou o Líder da Guilda podem criar grupos.")
+            cErrorText:SetText(curL["GROUP_ERR_OFFICER_ONLY"])
             return
         end
         local nameVal = cNameEB:GetText()
         if not nameVal or nameVal:match("^%s*$") then
-            cErrorText:SetText("Por favor, informe o nome do grupo.")
+            cErrorText:SetText(curL["GROUP_ERR_NAME_REQ"])
             return
         end
         if not createModal.selectedLeader then
-            cErrorText:SetText("Selecione um membro da guilda para ser o líder.")
+            cErrorText:SetText(curL["GROUP_ERR_LEADER_REQ"])
             return
         end
         local lRole = createModal.selectedLeaderRole
         if createModal.selectedType ~= GroupType.MISC then
             if not lRole or lRole == GroupRole.NONE then
-                cErrorText:SetText("Defina a função do líder (Tank, Curador ou Dano).")
+                cErrorText:SetText(curL["GROUP_ERR_ROLE_REQ"])
                 return
             end
         else
@@ -1591,16 +1638,18 @@ function GroupView:createModals()
             if ok then
                 createModal:Hide()
             else
-                cErrorText:SetText(err or "Falha ao criar grupo.")
+                cErrorText:SetText(err or curL["GROUP_ERR_CREATE_FAIL"])
             end
         end
     end)
+    createModal.saveBtn = cSaveBtn
 
     local cCancelBtn = CreateFrame("Button", nil, createModal, "UIPanelButtonTemplate")
     cCancelBtn:SetSize(100, 24)
     cCancelBtn:SetPoint("RIGHT", cSaveBtn, "LEFT", -8, 0)
-    cCancelBtn:SetText("Cancelar")
+    cCancelBtn:SetText(L["CANCEL"])
     cCancelBtn:SetScript("OnClick", function() createModal:Hide() end)
+    createModal.cancelBtn = cCancelBtn
 
     self._createModal = createModal
 
@@ -1637,7 +1686,8 @@ function GroupView:createModals()
 
     local aTitle = addModal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     aTitle:SetPoint("TOPLEFT", addModal, "TOPLEFT", 18, -16)
-    aTitle:SetText("|cffffd200ADICIONAR MEMBRO AO GRUPO|r")
+    aTitle:SetText(L["GROUP_ADD_MEMBER_TITLE"])
+    addModal.titleText = aTitle
 
     local aSubtitle = addModal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     aSubtitle:SetPoint("TOPLEFT", aTitle, "BOTTOMLEFT", 0, -4)
@@ -1657,7 +1707,8 @@ function GroupView:createModals()
 
     local aSearchHint = aSearchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     aSearchHint:SetPoint("LEFT", aSearchEB, "LEFT", 8, 0)
-    aSearchHint:SetText("|cffaaaaaaBuscar membro na guilda...|r")
+    aSearchHint:SetText(L["GROUP_ADD_MEMBER_SEARCH"])
+    addModal.searchHint = aSearchHint
 
     aSearchEB:SetScript("OnTextChanged", function(box)
         local txt = box:GetText()
@@ -1694,10 +1745,12 @@ function GroupView:createModals()
 
     local aRoleLabel = aRoleContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     aRoleLabel:SetPoint("TOPLEFT", aRoleContainer, "TOPLEFT", 0, 0)
-    aRoleLabel:SetText("|cffffd200Função do Membro no Grupo:|r |cffff0000*|r")
+    aRoleLabel:SetText(L["GROUP_MEMBER_ROLE_LABEL"])
+    addModal.roleLabel = aRoleLabel
 
     local aRoleButtons = {}
     addModal.selectedRole = GroupRole.DPS
+    addModal.roleDefs = roleDefs
 
     for i, rDef in ipairs(roleDefs) do
         local rBtn = CreateFrame("Button", nil, aRoleContainer, template)
@@ -1706,7 +1759,7 @@ function GroupView:createModals()
         if rBtn.SetBackdrop then rBtn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local rTxt = rBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         rTxt:SetPoint("CENTER", rBtn, "CENTER", 0, 0)
-        rTxt:SetText(rDef.label)
+        rTxt:SetText(L[rDef.labelKey] or rDef.labelKey)
         rBtn.txt = rTxt
         rBtn.def = rDef
 
@@ -1728,16 +1781,17 @@ function GroupView:createModals()
     local aAddBtn = CreateFrame("Button", nil, addModal, "UIPanelButtonTemplate")
     aAddBtn:SetSize(140, 24)
     aAddBtn:SetPoint("BOTTOMRIGHT", addModal, "BOTTOMRIGHT", -16, 16)
-    aAddBtn:SetText("Adicionar Membro")
+    aAddBtn:SetText(L["GROUP_ADD_MEMBER_SUBMIT"])
     aAddBtn:SetScript("OnClick", function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         if not addModal.selectedMember then
-            aErrorText:SetText("Selecione um membro na lista acima.")
+            aErrorText:SetText(curL["GROUP_ERR_SELECT_MEMBER"])
             return
         end
         local role = addModal.selectedRole
         if addModal.targetGroup and addModal.targetGroup:getType() ~= GroupType.MISC then
             if not role or role == GroupRole.NONE then
-                aErrorText:SetText("Defina a função do membro (Tank, Curador ou Dano).")
+                aErrorText:SetText(curL["GROUP_ERR_MEMBER_ROLE_REQ"])
                 return
             end
         else
@@ -1749,16 +1803,18 @@ function GroupView:createModals()
             if ok then
                 addModal:Hide()
             else
-                aErrorText:SetText(err or "Falha ao adicionar membro.")
+                aErrorText:SetText(err or curL["GROUP_ERR_ADD_MEMBER_FAIL"])
             end
         end
     end)
+    addModal.addBtn = aAddBtn
 
     local aCancelBtn = CreateFrame("Button", nil, addModal, "UIPanelButtonTemplate")
     aCancelBtn:SetSize(100, 24)
     aCancelBtn:SetPoint("RIGHT", aAddBtn, "LEFT", -8, 0)
-    aCancelBtn:SetText("Cancelar")
+    aCancelBtn:SetText(L["CANCEL"])
     aCancelBtn:SetScript("OnClick", function() addModal:Hide() end)
+    addModal.cancelBtn = aCancelBtn
 
     self._addMemberModal = addModal
 
@@ -1787,7 +1843,8 @@ function GroupView:createModals()
 
     local lpTitle = leaderPicker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     lpTitle:SetPoint("TOPLEFT", leaderPicker, "TOPLEFT", 14, -14)
-    lpTitle:SetText("|cffffd200ESCOLHER LÍDER DA GUILDA|r")
+    lpTitle:SetText(L["GROUP_PICK_LEADER_TITLE"])
+    leaderPicker.titleText = lpTitle
 
     local lpSearch = CreateFrame("EditBox", nil, leaderPicker, template)
     lpSearch:SetPoint("TOPLEFT", lpTitle, "BOTTOMLEFT", 0, -8)
@@ -1797,7 +1854,8 @@ function GroupView:createModals()
 
     local lpSearchHint = lpSearch:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     lpSearchHint:SetPoint("LEFT", lpSearch, "LEFT", 8, 0)
-    lpSearchHint:SetText("|cffaaaaaaBuscar membro...|r")
+    lpSearchHint:SetText(L["GROUP_PICK_LEADER_SEARCH"])
+    leaderPicker.searchHint = lpSearchHint
 
     lpSearch:SetScript("OnTextChanged", function(box)
         local txt = box:GetText()
@@ -1817,6 +1875,12 @@ function GroupView:createModals()
     leaderPicker.rows = {}
 
     self._leaderPickerModal = leaderPicker
+
+    -- Inicializa todos os textos das modais de acordo com o idioma ativo
+    self:updateDetailModalLocale()
+    self:updateCreateModalLocale()
+    self:updateAddMemberModalLocale()
+    self:updateLeaderPickerLocale()
 end
 
 --- Abre a janela de detalhes / gerenciamento de membros do grupo.
@@ -1824,6 +1888,9 @@ end
 function GroupView:openGroupDetailModal(group)
     local m = self._detailModal
     if not m or not group then return end
+
+    self:updateDetailModalLocale()
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
     self._currentDetailGroupId = group:getId()
     m.currentGroup = group
@@ -1833,13 +1900,13 @@ function GroupView:openGroupDetailModal(group)
     local gType = group:getType()
     if gType == GroupType.DUNGEON then
         m.icon:SetTexture("Interface\\Icons\\INV_Shield_04")
-        m.subtitle:SetText("|cff4a90e2Masmorras (5 Jogadores)|r")
+        m.subtitle:SetText(L["GROUP_DETAIL_SUB_DUNGEON"])
     elseif gType == GroupType.RAID then
         m.icon:SetTexture("Interface\\Icons\\INV_Helmet_06")
-        m.subtitle:SetText("|cffff8000Raides (10 / 25 / 40 Jogadores)|r")
+        m.subtitle:SetText(L["GROUP_DETAIL_SUB_RAID"])
     else
         m.icon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
-        m.subtitle:SetText("|cff00ff88Diversos (PvP / Farm / Eventos)|r")
+        m.subtitle:SetText(L["GROUP_DETAIL_SUB_MISC"])
     end
 
     -- Preenche campos editáveis
@@ -1904,6 +1971,7 @@ function GroupView:renderDetailMembers(group)
     local m = self._detailModal
     if not m then return end
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local members = group:getMembers() or {}
     local gType = group:getType()
     local leaderName = group:getLeader() or ""
@@ -1912,11 +1980,11 @@ function GroupView:renderDetailMembers(group)
     -- Resumo de funções
     if gType == GroupType.DUNGEON or gType == GroupType.RAID then
         m.membersSummary:SetText(string.format(
-            "|cff4a90e2T: %d|r  |cff2ecc71C: %d|r  |cffe74c3cD: %d|r  |cffaaaaaa(Total: %d membros)|r",
+            L["GROUP_MEMBERS_SUMMARY_ROLES"],
             roleCounts.tank, roleCounts.healer, roleCounts.dps, #members
         ))
     else
-        m.membersSummary:SetText(string.format("|cffaaaaaaTotal: %d membro(s)|r", #members))
+        m.membersSummary:SetText(string.format(L["GROUP_MEMBERS_SUMMARY_TOTAL"], #members))
     end
 
     local rowHeight = 26
@@ -2028,7 +2096,7 @@ function GroupView:renderDetailMembers(group)
                 end
             end)
         else
-            row.roleBtn:SetText("|cff888888Membro|r")
+            row.roleBtn:SetText("|cff888888" .. L["GROUP_ROLE_MEMBER"] .. "|r")
             row.roleBtn:SetScript("OnClick", nil)
         end
 
@@ -2147,6 +2215,7 @@ function GroupView:autoSelectRoleForClass(roleButtons, classToken, setCallback)
 end
 
 function GroupView:openCreateModal(groupType)
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local canOfficer = false
     if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
         canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -2157,12 +2226,14 @@ function GroupView:openCreateModal(groupType)
     end
 
     if not canOfficer then
-        print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos.")
+        print(string.format("|cffff4444[GuildManager]|r %s", L["GROUP_ERR_OFFICER_ONLY"]))
         return
     end
 
     local m = self._createModal
     if not m then return end
+
+    self:updateCreateModalLocale()
 
     groupType = groupType or GroupType.DUNGEON
     m.selectedType = groupType
@@ -2171,7 +2242,7 @@ function GroupView:openCreateModal(groupType)
 
     m.nameEB:SetText("")
     m.noteEB:SetText("")
-    m.leaderText:SetText("|cffaaaaaaClique para selecionar líder...|r")
+    m.leaderText:SetText(L["GROUP_LEADER_PICK_HINT"])
     m.errorText:SetText("")
 
     self:updateCreateModalTypeButtons(m.typeButtons, groupType)
@@ -2186,10 +2257,13 @@ function GroupView:openAddMemberModal(group)
     local m = self._addMemberModal
     if not m or not group then return end
 
+    self:updateAddMemberModalLocale()
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
     m.targetGroup = group
     m.selectedMember = nil
     m.selectedRole = (group:getType() ~= GroupType.MISC) and GroupRole.DPS or GroupRole.NONE
-    m.subtitle:SetText(string.format("Grupo: |cffffff00%s|r", group:getName()))
+    m.subtitle:SetText(string.format(L["GROUP_ADD_MEMBER_SUBTITLE"], group:getName() or ""))
     m.searchEB:SetText("")
     m.errorText:SetText("")
 
@@ -2209,6 +2283,7 @@ function GroupView:filterAddMemberList(filterText)
     local m = self._addMemberModal
     if not m or not m.targetGroup then return end
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local group = m.targetGroup
     local search = (filterText or ""):lower():match("^%s*(.-)%s*$")
     local candidates = {}
@@ -2253,7 +2328,7 @@ function GroupView:filterAddMemberList(filterText)
         local cClass = self:resolveMemberClass(candidate:getName(), candidate:getClass())
         local nameStr = getColoredMemberName(candidate:getName(), cClass)
         local lvl = candidate:getLevel() or 1
-        row.txt:SetText(string.format("%s (Nv %d)", nameStr, lvl))
+        row.txt:SetText(string.format("%s " .. L["LEVEL_ABBR_FMT"], nameStr, lvl))
         row.rnk:SetText(candidate:getRankName() or "")
 
         row:SetScript("OnClick", function()
@@ -2293,6 +2368,7 @@ function GroupView:openLeaderPicker(onChosen)
     local p = self._leaderPickerModal
     if not p then return end
 
+    self:updateLeaderPickerLocale()
     p.onChosen = onChosen
     p.searchEB:SetText("")
     self:filterLeaderPickerList("")
@@ -2304,6 +2380,7 @@ function GroupView:filterLeaderPickerList(filterText)
     local p = self._leaderPickerModal
     if not p then return end
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local search = (filterText or ""):lower():match("^%s*(.-)%s*$")
     local candidates = {}
 
@@ -2341,7 +2418,7 @@ function GroupView:filterLeaderPickerList(filterText)
         local cClass = self:resolveMemberClass(candidate:getName(), candidate:getClass())
         local nameStr = getColoredMemberName(candidate:getName(), cClass)
         local lvl = candidate:getLevel() or 1
-        row.txt:SetText(string.format("%s (Nv %d)", nameStr, lvl))
+        row.txt:SetText(string.format("%s " .. L["LEVEL_ABBR_FMT"], nameStr, lvl))
 
         row:SetScript("OnClick", function()
             if p.onChosen then
@@ -2393,8 +2470,153 @@ function GroupView:updateCreatePermissions()
     end
 end
 
+--- Atualiza os textos da modal de criação de novo grupo.
+function GroupView:updateCreateModalLocale()
+    local m = self._createModal
+    if not m then return end
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    if m.titleText then m.titleText:SetText(L["GROUP_CREATE_MODAL_TITLE"]) end
+    if m.nameLabel then m.nameLabel:SetText(L["GROUP_NAME_LABEL"]) end
+    if m.typeLabel then m.typeLabel:SetText(L["GROUP_TYPE_LABEL"]) end
+    if m.noteLabel then m.noteLabel:SetText(L["GROUP_NOTE_LABEL"]) end
+    if m.leaderLabel then m.leaderLabel:SetText(L["GROUP_LEADER_LABEL"]) end
+    if m.leaderPickBtn then m.leaderPickBtn:SetText(L["GROUP_SELECT_BTN"]) end
+    if m.roleLabel then m.roleLabel:SetText(L["GROUP_ROLE_LABEL"]) end
+    if m.saveBtn then m.saveBtn:SetText(L["GROUP_CREATE_SUBMIT"]) end
+    if m.cancelBtn then m.cancelBtn:SetText(L["CANCEL"]) end
+
+    if not m.selectedLeader and m.leaderText then
+        m.leaderText:SetText(L["GROUP_LEADER_PICK_HINT"])
+    end
+
+    if m.typeButtons and m.typeDefs then
+        for _, tDef in ipairs(m.typeDefs) do
+            local btn = m.typeButtons[tDef.id]
+            if btn and btn.txt then
+                btn.txt:SetText(L[tDef.labelKey] or tDef.labelKey)
+            end
+        end
+    end
+
+    if m.roleButtons and m.roleDefs then
+        for _, rDef in ipairs(m.roleDefs) do
+            local btn = m.roleButtons[rDef.id]
+            if btn and btn.txt then
+                btn.txt:SetText(L[rDef.labelKey] or rDef.labelKey)
+            end
+        end
+    end
+end
+
+--- Atualiza os textos da modal de detalhes e gerenciamento do grupo.
+function GroupView:updateDetailModalLocale()
+    local m = self._detailModal
+    if not m then return end
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    if m.title then m.title:SetText(L["GROUP_DETAIL_TITLE"]) end
+    if m.nameLbl then m.nameLbl:SetText(L["GROUP_NAME_LABEL_PLAIN"]) end
+    if m.noteLbl then m.noteLbl:SetText(L["GROUP_NOTE_LABEL_PLAIN"]) end
+    if m.leaderLbl then m.leaderLbl:SetText(L["GROUP_CURRENT_LEADER_LABEL"]) end
+    if m.changeLeaderBtn then m.changeLeaderBtn:SetText(L["GROUP_CHANGE_LEADER_BTN"]) end
+    if m.saveInfoBtn then m.saveInfoBtn:SetText(L["GROUP_SAVE_INFO_BTN"]) end
+    if m.membersHeader then m.membersHeader:SetText(L["GROUP_MEMBERS_HEADER"]) end
+    if m.addMemberBtn then m.addMemberBtn:SetText(L["GROUP_ADD_MEMBER_BTN"]) end
+    if m.inviteAllBtn then m.inviteAllBtn:SetText(L["INVITE_ALL"]) end
+    if m.delGroupBtn then m.delGroupBtn:SetText(L["GROUP_DELETE_BTN"]) end
+    if m.closeDetailBtn then m.closeDetailBtn:SetText(L["CLOSE"]) end
+
+    if m.currentGroup then
+        local gType = m.currentGroup:getType()
+        if gType == GroupType.DUNGEON then
+            m.subtitle:SetText(L["GROUP_DETAIL_SUB_DUNGEON"])
+        elseif gType == GroupType.RAID then
+            m.subtitle:SetText(L["GROUP_DETAIL_SUB_RAID"])
+        else
+            m.subtitle:SetText(L["GROUP_DETAIL_SUB_MISC"])
+        end
+    end
+end
+
+--- Atualiza os textos da modal de adicionar membro.
+function GroupView:updateAddMemberModalLocale()
+    local m = self._addMemberModal
+    if not m then return end
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    if m.titleText then m.titleText:SetText(L["GROUP_ADD_MEMBER_TITLE"]) end
+    if m.searchHint then m.searchHint:SetText(L["GROUP_ADD_MEMBER_SEARCH"]) end
+    if m.roleLabel then m.roleLabel:SetText(L["GROUP_MEMBER_ROLE_LABEL"]) end
+    if m.addBtn then m.addBtn:SetText(L["GROUP_ADD_MEMBER_SUBMIT"]) end
+    if m.cancelBtn then m.cancelBtn:SetText(L["CANCEL"]) end
+
+    if m.roleButtons and m.roleDefs then
+        for _, rDef in ipairs(m.roleDefs) do
+            local btn = m.roleButtons[rDef.id]
+            if btn and btn.txt then
+                btn.txt:SetText(L[rDef.labelKey] or rDef.labelKey)
+            end
+        end
+    end
+
+    if m.targetGroup and m.subtitle then
+        m.subtitle:SetText(string.format(L["GROUP_ADD_MEMBER_SUBTITLE"], m.targetGroup:getName() or ""))
+    end
+end
+
+--- Atualiza os textos do modal picker de líderes.
+function GroupView:updateLeaderPickerLocale()
+    local p = self._leaderPickerModal
+    if not p then return end
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    if p.titleText then p.titleText:SetText(L["GROUP_PICK_LEADER_TITLE"]) end
+    if p.searchHint then p.searchHint:SetText(L["GROUP_PICK_LEADER_SEARCH"]) end
+end
+
+--- Atualiza dinamicamente todos os textos da interface de grupos.
+function GroupView:updateLocale()
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not self._frame then return end
+
+    if self._titleText then
+        self._titleText:SetText(L["GROUPS_TITLE"])
+    end
+    if self._subtitleText then
+        self._subtitleText:SetText(L["GROUPS_SUBTITLE"])
+    end
+
+    if self._columns then
+        for colType, colData in pairs(self._columns) do
+            if colData.headerTitle and colData.def then
+                colData.headerTitle:SetText(colData.def.titleColor .. L[colData.def.titleKey] .. "|r")
+            end
+            if colData.headerSub and colData.def then
+                colData.headerSub:SetText("|cffaaaaaa" .. L[colData.def.subKey] .. "|r")
+            end
+            if colData.createBtn then
+                colData.createBtn:SetText(L["GROUP_CREATE_BTN"])
+            end
+            if colData.emptyText then
+                colData.emptyText:SetText(L["GROUP_EMPTY_COL"])
+            end
+        end
+    end
+
+    self:updateCreateModalLocale()
+    self:updateDetailModalLocale()
+    self:updateAddMemberModalLocale()
+    self:updateLeaderPickerLocale()
+
+    if self.renderGroups then
+        self:renderGroups()
+    end
+end
+
 function GroupView:show()
     if not self._frame then self:createUI() end
+    self:updateLocale()
     self:updateCreatePermissions()
     self._frame:Show()
 end
