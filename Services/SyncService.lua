@@ -43,6 +43,30 @@ local function getCurrentTimestamp()
     return 0
 end
 
+--- Helper de localização seguro para mensagens do SyncService.
+---@param key string
+---@param ... any
+---@return string
+local function L(key, ...)
+    local str = nil
+    if _G.GM and _G.GM.L and type(_G.GM.L) == "table" then
+        str = _G.GM.L[key]
+    elseif _G.L and type(_G.L) == "table" then
+        str = _G.L[key]
+    end
+    if not str and Locales and Locales.get then
+        str = Locales.get(key)
+    end
+    if not str then
+        str = key
+    end
+    if select("#", ...) > 0 then
+        local ok, formatted = pcall(string.format, str, ...)
+        if ok then return formatted end
+    end
+    return str
+end
+
 local SYNC_PREFIX = "GM_SYNC"
 local COMM_CHANNEL_NAME = "AJShare"
 local RETRANSMIT_INTERVAL = 2.5       -- Intervalo entre retransmissões de pacotes pendentes (2.5s)
@@ -200,9 +224,11 @@ function SyncService:touchPeer(peerName)
     end
 end
 
+local SYNC_CHAT_NAME = "Logs GM Sync"
+
 --- Localiza ou cria a aba de chat dedicada para as mensagens de sincronização.
 --- NUNCA retorna DEFAULT_CHAT_FRAME ou ChatFrame1, garantindo que as mensagens de sync não apareçam na janela padrão.
---- Procura por uma aba chamada "GuildManager" (ou "Sync" / "Sincronização") ou cria uma nova aba "GuildManager".
+--- Procura pela aba exclusiva "Logs GM Sync" ou cria uma nova aba com esse nome exato.
 ---@return table|nil
 function SyncService:getSyncChatFrame()
     if self._syncChatFrame and self._syncChatFrame.AddMessage and self._syncChatFrame ~= DEFAULT_CHAT_FRAME and self._syncChatFrame ~= _G.ChatFrame1 then
@@ -211,59 +237,83 @@ function SyncService:getSyncChatFrame()
 
     local numWindows = NUM_CHAT_WINDOWS or 10
 
-    -- 1. Procura se o usuário já possui uma aba de chat dedicada criada (GuildManager, Sync, GM Sync, Sincronização)
+    -- 1. Procura se a aba exclusiva "Logs GM Sync" já existe
     for i = 1, numWindows do
         local cf = _G["ChatFrame" .. i]
         if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 then
             local name = GetChatWindowInfo(i)
-            if name and (name == "GuildManager" or name == "Sync" or name == "GM Sync" or name == "Sincronização" or name == "Sincronizacao") then
+            if name and name == SYNC_CHAT_NAME then
+                if ChatFrame_RemoveAllMessageGroups then
+                    pcall(ChatFrame_RemoveAllMessageGroups, cf)
+                end
+                if ChatFrame_RemoveAllChannels then
+                    pcall(ChatFrame_RemoveAllChannels, cf)
+                end
                 self._syncChatFrame = cf
                 return cf
             end
         end
     end
 
-    -- 2. Tenta criar automaticamente a aba dedicada "GuildManager" usando a API oficial da Blizzard
+    -- 2. Migração: Se o usuário possuía uma aba antiga ("GuildManager", "GM Sync", "Sync", "Sincronização"), renomeia para "Logs GM Sync"
+    for i = 1, numWindows do
+        local cf = _G["ChatFrame" .. i]
+        if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 then
+            local name = GetChatWindowInfo(i)
+            if name and (name == "GuildManager" or name == "GM Sync" or name == "Sync" or name == "Sincronização" or name == "Sincronizacao") then
+                if FCF_SetWindowName then
+                    pcall(FCF_SetWindowName, cf, SYNC_CHAT_NAME)
+                end
+                if ChatFrame_RemoveAllMessageGroups then
+                    pcall(ChatFrame_RemoveAllMessageGroups, cf)
+                end
+                if ChatFrame_RemoveAllChannels then
+                    pcall(ChatFrame_RemoveAllChannels, cf)
+                end
+                self._syncChatFrame = cf
+                return cf
+            end
+        end
+    end
+
+    -- 3. Cria automaticamente a nova aba exclusiva "Logs GM Sync" usando FCF_OpenNewWindow
     if FCF_OpenNewWindow then
-        local ok, newFrame = pcall(FCF_OpenNewWindow, "GuildManager")
+        local ok, newFrame = pcall(FCF_OpenNewWindow, SYNC_CHAT_NAME)
         if ok and newFrame and newFrame.AddMessage and newFrame ~= DEFAULT_CHAT_FRAME and newFrame ~= _G.ChatFrame1 then
-            -- Remove grupos de mensagens convencionais (Say, Yell, Guild, Whispers etc.) para manter a aba limpa e exclusiva
+            -- Remove grupos convencionais (Say, Yell, Guild, Whispers, Party etc.) para mantê-la 100% exclusiva de Sync
             if ChatFrame_RemoveAllMessageGroups then
                 pcall(ChatFrame_RemoveAllMessageGroups, newFrame)
             end
             if ChatFrame_RemoveAllChannels then
                 pcall(ChatFrame_RemoveAllChannels, newFrame)
             end
-            newFrame:AddMessage("|cff00ff00[GuildManager]|r Aba de sincronização criada com sucesso! Todas as notificações de sincronização serão exibidas aqui.")
+
+            local welcome = L("SYNC_LOG_TAB_CREATED", SYNC_CHAT_NAME)
+            local timeStr = date and date("%H:%M:%S")
+            local timePrefix = timeStr and string.format("|cff888888[%s]|r ", timeStr) or ""
+            newFrame:AddMessage(timePrefix .. welcome)
+
             self._syncChatFrame = newFrame
             return newFrame
-        end
-    end
-
-    -- 3. Fallback: Procura qualquer outra aba existente diferente da janela padrão (ChatFrame1 / DEFAULT_CHAT_FRAME)
-    for i = 2, numWindows do
-        local cf = _G["ChatFrame" .. i]
-        if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 and cf.AddMessage then
-            local name = GetChatWindowInfo(i)
-            if name and name ~= "" then
-                self._syncChatFrame = cf
-                return cf
-            end
         end
     end
 
     return nil
 end
 
---- Imprime a mensagem de sincronização exclusivamente na aba dedicada (nunca na janela padrão de chat).
+--- Imprime a mensagem de sincronização exclusivamente na aba dedicada "Logs GM Sync" (nunca na janela padrão).
 ---@param msg string
 function SyncService:printSyncNotification(msg)
     if not msg or msg == "" then return end
     local targetFrame = self:getSyncChatFrame()
-    if targetFrame and targetFrame.AddMessage then
-        targetFrame:AddMessage(msg)
+    local timeStr = date and date("%H:%M:%S")
+    local timePrefix = timeStr and string.format("|cff888888[%s]|r ", timeStr) or ""
+    local fullMsg = timePrefix .. msg
 
-        -- Se a aba de sincronização não estiver atualmente aberta/selecionada na tela, faz a aba piscar para alertar o usuário
+    if targetFrame and targetFrame.AddMessage then
+        targetFrame:AddMessage(fullMsg)
+
+        -- Se a aba "Logs GM Sync" não estiver selecionada no momento, faz piscar para alertar o usuário
         local selected = SELECTED_CHAT_FRAME or (FCF_GetCurrentChatFrame and FCF_GetCurrentChatFrame())
         if targetFrame ~= selected then
             if FCF_StartAlertFlash then
@@ -275,6 +325,11 @@ function SyncService:printSyncNotification(msg)
                 end
             end
         end
+    else
+        -- Fallback apenas se nenhuma aba puder ser encontrada/criada
+        if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+            DEFAULT_CHAT_FRAME:AddMessage(fullMsg)
+        end
     end
 end
 
@@ -285,7 +340,7 @@ function SyncService:onPeerLoggedIn(peerName)
     if not peerName or peerName == "" or self:isSelf(peerName) then return end
     local cName = cleanName(peerName)
 
-    self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Membro com o AddOn detectado online: |cffffff00%s|r. Sincronizando dados customizados...", cName))
+    self:printSyncNotification(L("SYNC_LOG_PEER_ONLINE", cName))
 
     -- Dispara a sincronização de todos os membros que possuem dados customizados com o novo colega
     self:syncWithPeer(cName)
@@ -464,24 +519,24 @@ function SyncService:broadcastMemberCustomData(member, force)
         local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Você"
         local fieldsList = {}
         if birthday and birthday ~= "" then
-            table.insert(fieldsList, string.format("Aniversário (%s)", birthday))
+            table.insert(fieldsList, L("SYNC_LOG_FIELD_BIRTHDAY", birthday))
         end
         if dateJoin and dateJoin ~= "" then
-            table.insert(fieldsList, string.format("Data de Entrada (%s)", dateJoin))
+            table.insert(fieldsList, L("SYNC_LOG_FIELD_JOIN_DATE", dateJoin))
         end
         if recruiter and recruiter ~= "" then
-            table.insert(fieldsList, string.format("Recrutador (%s)", recruiter))
+            table.insert(fieldsList, L("SYNC_LOG_FIELD_RECRUITER", recruiter))
         end
         if altsCsv and altsCsv ~= "" then
-            table.insert(fieldsList, "Alts Vinculados")
+            table.insert(fieldsList, L("SYNC_LOG_FIELD_ALTS"))
         end
 
-        local infoY = "dados de " .. memberName
+        local infoY = L("SYNC_LOG_DATA_OF", memberName)
         if #fieldsList > 0 then
-            infoY = table.concat(fieldsList, ", ") .. " de " .. memberName
+            infoY = L("SYNC_LOG_FIELD_OF", table.concat(fieldsList, ", "), memberName)
         end
 
-        self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Jogador |cffffff00%s|r sincronizou informação |cffffff00%s|r.", myName, infoY))
+        self:printSyncNotification(L("SYNC_LOG_DATA_SYNCED", myName, infoY))
     end
 
     return true
@@ -735,24 +790,24 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if isNewUpdate then
             local fieldsList = {}
             if birthday and birthday ~= "" then
-                table.insert(fieldsList, string.format("Aniversário (%s)", birthday))
+                table.insert(fieldsList, L("SYNC_LOG_FIELD_BIRTHDAY", birthday))
             end
             if dateJoin and dateJoin ~= "" then
-                table.insert(fieldsList, string.format("Data de Entrada (%s)", dateJoin))
+                table.insert(fieldsList, L("SYNC_LOG_FIELD_JOIN_DATE", dateJoin))
             end
             if recruiter and recruiter ~= "" then
-                table.insert(fieldsList, string.format("Recrutador (%s)", recruiter))
+                table.insert(fieldsList, L("SYNC_LOG_FIELD_RECRUITER", recruiter))
             end
             if altsCsv and altsCsv ~= "" then
-                table.insert(fieldsList, "Alts Vinculados")
+                table.insert(fieldsList, L("SYNC_LOG_FIELD_ALTS"))
             end
 
-            local infoY = "dados de " .. mClean
+            local infoY = L("SYNC_LOG_DATA_OF", mClean)
             if #fieldsList > 0 then
-                infoY = table.concat(fieldsList, ", ") .. " de " .. mClean
+                infoY = L("SYNC_LOG_FIELD_OF", table.concat(fieldsList, ", "), mClean)
             end
 
-            self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Jogador |cffffff00%s|r sincronizou informação |cffffff00%s|r.", senderClean, infoY))
+            self:printSyncNotification(L("SYNC_LOG_DATA_SYNCED", senderClean, infoY))
         end
 
         -- SEMPRE responde com ACK ao emissor informando que o receptor recebeu
@@ -854,9 +909,9 @@ function SyncService:forceSyncAll()
         for _, p in ipairs(activePeers) do
             table.insert(peerNames, p.name)
         end
-        self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Sincronização manual iniciada! |cffffff00%d|r membro(s) com dados customizados para |cffffff00%d|r colega(s) online: |cff00ffff%s|r.", count, #activePeers, table.concat(peerNames, ", ")))
+        self:printSyncNotification(L("SYNC_LOG_MANUAL_STARTED", count, #activePeers, table.concat(peerNames, ", ")))
     else
-        self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Sincronização manual iniciada para |cffffff00%d|r membro(s). Nenhum outro membro com o AddOn online no momento (os dados serão sincronizados automaticamente assim que um membro logar).", count))
+        self:printSyncNotification(L("SYNC_LOG_MANUAL_NO_PEERS", count))
     end
 
     return count
@@ -883,7 +938,7 @@ function SyncService:simulateTestPeerAck()
         end
     end
 
-    self:printSyncNotification(string.format("|cff00ff00[GuildManager]|r Peer de teste '%s' confirmou recebimento de %d pacote(s) pendente(s).", testPeer, count))
+    self:printSyncNotification(L("SYNC_LOG_TEST_ACK", testPeer, count))
     return true
 end
 
@@ -931,7 +986,12 @@ function SyncService:initHooks()
         end
 
         -- Garante que a aba de chat dedicada para sincronização seja inicializada
-        self:getSyncChatFrame()
+        local syncFrame = self:getSyncChatFrame()
+        if syncFrame and not self._sessionLogged then
+            self._sessionLogged = true
+            local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Player"
+            self:printSyncNotification(L("SYNC_LOG_INIT", myName))
+        end
 
         -- Garante que membros existentes com dados customizados possuam timestamp inicial de segurança
         if self._memberService then

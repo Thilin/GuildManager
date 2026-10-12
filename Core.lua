@@ -161,16 +161,29 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                 end
             elseif arg == "status" then
                 local status = syncService and syncService:getStatus() or { pendingCount = 0, queueCount = 0, activePeerCount = 0, activePeers = {} }
-                print(string.format("|cff00ff00[GuildManager]|r Sincronização P2P: |cffffff00%d|r membro(s) com Addon online, |cffffff00%d|r na fila de envio, |cffffff00%d|r aguardando confirmação (ACK).", status.activePeerCount, status.queueCount, status.pendingCount))
+                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+                local summary = string.format(curL["SYNC_LOG_STATUS_SUMMARY"] or "|cff00ff00[GuildManager]|r Sincronização P2P: |cffffff00%d|r membro(s) com Addon online, |cffffff00%d|r na fila de envio, |cffffff00%d|r aguardando confirmação (ACK).", status.activePeerCount, status.queueCount, status.pendingCount)
+                print(summary)
+                if syncService and syncService.printSyncNotification then
+                    syncService:printSyncNotification(summary)
+                end
                 if #status.activePeers > 0 then
                     local names = {}
                     for _, p in ipairs(status.activePeers) do
                         table.insert(names, p.name)
                     end
-                    print("|cffaaaaaaMembros com Addon online:|r " .. table.concat(names, ", "))
+                    local peersMsg = string.format(curL["SYNC_LOG_ONLINE_PEERS"] or "|cffaaaaaaMembros com Addon online:|r %s", table.concat(names, ", "))
+                    print(peersMsg)
+                    if syncService and syncService.printSyncNotification then
+                        syncService:printSyncNotification(peersMsg)
+                    end
                 end
                 if status.pendingCount > 0 then
-                    print("|cffaaaaaa(Retransmitindo pacotes em segundo plano até que todos confirmem o recebimento)|r")
+                    local retransMsg = curL["SYNC_LOG_RETRANSMIT_NOTICE"] or "|cffaaaaaa(Retransmitindo pacotes em segundo plano até que todos confirmem o recebimento)|r"
+                    print(retransMsg)
+                    if syncService and syncService.printSyncNotification then
+                        syncService:printSyncNotification(retransMsg)
+                    end
                 end
             elseif arg == "help" or arg == "ajuda" then
                 print("|cff00ff00[GuildManager]|r Comandos de Sincronização:")
