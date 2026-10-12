@@ -949,6 +949,16 @@ function MemberView:showMember(member, isLocked)
         return
     end
 
+    if type(member) == "string" then
+        if _G.GM and _G.GM.memberService and _G.GM.memberService.getMember then
+            member = _G.GM.memberService:getMember(member)
+        end
+    end
+
+    if not member or type(member) ~= "table" then
+        return
+    end
+
     -- Se já estiver exibindo um membro diferente, salva as alterações do membro anterior automaticamente
     if self._currentMember and self._currentMember ~= member then
         self:saveCurrentMember()
@@ -992,7 +1002,7 @@ function MemberView:showMember(member, isLocked)
 
     -- Raça do Jogador exibida em português diretamente abaixo do ícone da facção
     local race = (member.getRace and member:getRace()) or ""
-    if race == "" and member:getGuid() and GetPlayerInfoByGUID then
+    if race == "" and member.getGuid and member:getGuid() and GetPlayerInfoByGUID then
         local _, _, locRace = GetPlayerInfoByGUID(member:getGuid())
         if locRace and locRace ~= "" then
             race = locRace

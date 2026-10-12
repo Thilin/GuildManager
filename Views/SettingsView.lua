@@ -152,7 +152,7 @@ function SettingsView:createUI()
 
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local frame = CreateFrame("Frame", "GM_SettingsFrame", UIParent, template)
-    frame:SetSize(840, 510)
+    frame:SetSize(946, 594)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     frame:SetFrameStrata("HIGH")
     frame:SetToplevel(true)
@@ -505,8 +505,8 @@ function SettingsView:createSettingsColumns()
     local frame = self._frame
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
-    local colWidth = 398
-    local colHeight = 352
+    local colWidth = 451
+    local colHeight = 440
 
     -- =========================================================================
     -- COLUNA ESQUERDA: Interface, Chat & Minimapa

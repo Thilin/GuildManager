@@ -76,6 +76,7 @@ function Member:new(data)
         instance._isInGuild = true
     end
     instance._recruiter = data.recruiter or ""
+    instance._customDataTimestamp = tonumber(data.customDataTimestamp) or 0
 
     return instance
 end
@@ -380,6 +381,7 @@ function Member:serialize()
         isMain = self._isMain,
         isInGuild = self._isInGuild,
         recruiter = self._recruiter,
+        customDataTimestamp = self._customDataTimestamp or 0,
     }
 end
 
@@ -569,5 +571,14 @@ function Member:setRecruiter(recruiter)
     self._recruiter = tostring(recruiter or "")
 end
 
+--- Obtém o timestamp da última atualização dos dados customizados deste membro.
+---@return number
+function Member:getCustomDataTimestamp()
+    return self._customDataTimestamp or 0
+end
 
-
+--- Define o timestamp da última atualização dos dados customizados deste membro.
+---@param timestamp number
+function Member:setCustomDataTimestamp(timestamp)
+    self._customDataTimestamp = tonumber(timestamp) or 0
+end

@@ -4,6 +4,23 @@
 MemberService = {}
 MemberService.__index = MemberService
 
+--- Obtém o timestamp sincronizado do servidor (ou relógio local como fallback)
+---@return number
+local function getCurrentTimestamp()
+    if GetServerTime then
+        local st = GetServerTime()
+        if st and st > 0 then return st end
+    end
+    if time then
+        local t = time()
+        if t and t > 0 then return t end
+    end
+    if os and os.time then
+        return os.time()
+    end
+    return 0
+end
+
 --- Construtor do serviço de membros.
 ---@param repository MemberRepository @Instância do repositório de membros
 ---@param logService LogService|nil @Instância opcional do serviço de logs
@@ -182,6 +199,7 @@ function MemberService:setMemberRecruiter(memberName, recruiterName)
     local member = self._repository:findByName(memberName)
     if member then
         member:setRecruiter(recruiterName)
+        member:setCustomDataTimestamp(getCurrentTimestamp())
         self._repository:save(member)
         if self._logService then
             self._logService:updateRecruiterForMember(memberName, recruiterName)
@@ -820,8 +838,9 @@ end
 --- 2. Unicidade de Main: exatamente um único membro da lista é marcado como Main (isMain = true), e todos os outros como Alts (isMain = false).
 ---@param memberNames string[] @Lista com todos os nomes dos personagens do grupo
 ---@param mainName string @Nome do personagem que será o Main único
+---@param skipSync boolean|nil @Se true, não dispara retransmissão de rede nem sobrescreve timestamp
 ---@return boolean
-function MemberService:syncAltFamily(memberNames, mainName)
+function MemberService:syncAltFamily(memberNames, mainName, skipSync)
     if type(memberNames) ~= "table" or #memberNames == 0 then
         return false
     end
@@ -865,6 +884,7 @@ function MemberService:syncAltFamily(memberNames, mainName)
         mainLower = members[1]:getName():lower()
     end
 
+    local nowTs = getCurrentTimestamp()
     for _, m in ipairs(members) do
         local isThisMain = (m:getName():lower() == mainLower)
         m:setMain(isThisMain)
@@ -877,11 +897,14 @@ function MemberService:syncAltFamily(memberNames, mainName)
             end
         end
         m:setAlts(altList)
+        if not skipSync then
+            m:setCustomDataTimestamp(nowTs)
+        end
         self._repository:save(m)
     end
 
     -- Notifica o SyncService para transmitir a família atualizada na hora para todos os outros pares
-    if self._syncService and self._syncService.broadcastMemberCustomData then
+    if not skipSync and self._syncService and self._syncService.broadcastMemberCustomData then
         for _, m in ipairs(members) do
             self._syncService:broadcastMemberCustomData(m)
         end
@@ -925,6 +948,7 @@ function MemberService:unlinkAltFromFamily(currentMember, altToRemoveName)
     if removedMember then
         removedMember:setAlts({})
         removedMember:setMain(true)
+        removedMember:setCustomDataTimestamp(getCurrentTimestamp())
         self._repository:save(removedMember)
         if self._syncService and self._syncService.broadcastMemberCustomData then
             self._syncService:broadcastMemberCustomData(removedMember)

@@ -115,7 +115,7 @@ function AuditView:new()
     instance._filterText = ""
     instance._activeFilter = "ALL"
     instance._collapsedMains = {}
-    instance._numVisibleRows = 15
+    instance._numVisibleRows = 18
     instance._rowHeight = 24
     instance._onRefreshCallback = nil
     instance._onSaveCallback = nil
@@ -149,7 +149,7 @@ function AuditView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerAuditFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(840, 510)
+    frame:SetSize(946, 594)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -748,9 +748,8 @@ function AuditView:createUI()
         row:RegisterForClicks("LeftButtonUp")
         row:SetScript("OnClick", function(r)
             if r.rowData and r.rowData.member then
-                local mName = r.rowData.member:getName()
                 if _G.GM and _G.GM.memberView and _G.GM.memberView.showMember then
-                    _G.GM.memberView:showMember(mName)
+                    _G.GM.memberView:showMember(r.rowData.member, true)
                 end
             end
         end)

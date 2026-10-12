@@ -6,6 +6,24 @@
 LocationService = {}
 LocationService.__index = LocationService
 
+--- Verifica com segurança se um valor é um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
+---@param val any
+---@return boolean
+local function isSecretValue(val)
+    if not val then
+        return false
+    end
+    local isSecret = _G.issecretvalue or issecretvalue
+    if isSecret and isSecret(val) then
+        return true
+    end
+    local ok = pcall(function() return val == "" end)
+    if not ok then
+        return true
+    end
+    return false
+end
+
 local PRIMARY_PREFIX = "GM_POS"
 local FALLBACK_PREFIX = "AJ_POS"
 local MSG_PREFIX = "AJ_POS"
@@ -349,7 +367,10 @@ end
 ---@param channel string
 ---@param sender string
 function LocationService:onAddonMessage(prefix, message, channel, sender)
-    if not prefix or not message or type(message) ~= "string" then return end
+    if not prefix or not message or isSecretValue(prefix) or isSecretValue(message) or (sender and isSecretValue(sender)) then
+        return
+    end
+    if type(message) ~= "string" then return end
 
     -- Aceita mensagens do prefixo primário do GuildManager (GM_POS) e fallback (AJ_POS)
     local pUpper = prefix:upper()

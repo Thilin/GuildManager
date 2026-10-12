@@ -5,6 +5,24 @@
 ChatMentionController = {}
 ChatMentionController.__index = ChatMentionController
 
+--- Verifica com segurança se um valor é um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
+---@param val any
+---@return boolean
+local function isSecretValue(val)
+    if not val then
+        return false
+    end
+    local isSecret = _G.issecretvalue or issecretvalue
+    if isSecret and isSecret(val) then
+        return true
+    end
+    local ok = pcall(function() return val == "" end)
+    if not ok then
+        return true
+    end
+    return false
+end
+
 --- Construtor do Controller de Menções no Chat da Guilda.
 ---@param memberService MemberService
 ---@param guildRosterService GuildRosterService
@@ -625,7 +643,10 @@ end
 ---@param author string
 ---@return boolean, string, string, ...
 function ChatMentionController:onGuildChatMessage(chatFrame, event, msg, author, ...)
-    if not msg or not msg:find("@", 1, true) then
+    if not msg or isSecretValue(msg) or (author and isSecretValue(author)) then
+        return false, msg, author, ...
+    end
+    if type(msg) ~= "string" or not msg:find("@", 1, true) then
         return false, msg, author, ...
     end
 

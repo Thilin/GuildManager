@@ -5,6 +5,23 @@
 AuditController = {}
 AuditController.__index = AuditController
 
+--- Obtém o timestamp sincronizado do servidor (ou relógio local como fallback)
+---@return number
+local function getCurrentTimestamp()
+    if GetServerTime then
+        local st = GetServerTime()
+        if st and st > 0 then return st end
+    end
+    if time then
+        local t = time()
+        if t and t > 0 then return t end
+    end
+    if os and os.time then
+        return os.time()
+    end
+    return 0
+end
+
 --- Construtor do Controller de auditoria de membros da guilda.
 ---@param memberService MemberService @Serviço de gerenciamento de membros
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
@@ -47,21 +64,29 @@ function AuditController:initHooks()
                 canOfficer = true
             end
 
-            if canOfficer and fields.dateJoin ~= nil then
+            local hasChanged = false
+            if canOfficer and fields.dateJoin ~= nil and member:getDateJoin() ~= fields.dateJoin then
                 member:setDateJoin(fields.dateJoin)
+                hasChanged = true
             end
-            if fields.birthday ~= nil then
+            if fields.birthday ~= nil and member:getBirthday() ~= fields.birthday then
                 member:setBirthday(fields.birthday)
+                hasChanged = true
             end
             if fields.customNote ~= nil then
                 member:setCustomNote(fields.customNote)
             end
-            if canOfficer and fields.recruiter ~= nil then
+            if canOfficer and fields.recruiter ~= nil and member:getRecruiter() ~= fields.recruiter then
                 local oldRecruiter = member:getRecruiter() or ""
                 member:setRecruiter(fields.recruiter)
+                hasChanged = true
                 if oldRecruiter ~= fields.recruiter and self._logService and self._logService.updateRecruiterForMember then
                     self._logService:updateRecruiterForMember(member:getName(), fields.recruiter)
                 end
+            end
+
+            if hasChanged then
+                member:setCustomDataTimestamp(getCurrentTimestamp())
             end
 
             self._memberService:saveMember(member)

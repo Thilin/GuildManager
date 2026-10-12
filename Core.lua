@@ -2,6 +2,24 @@ local addonName, addonTable = ...
 
 _G.GM = _G.GM or addonTable or {}
 
+--- Verifica com segurança se um valor é um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
+---@param val any
+---@return boolean
+function GM.isSecretValue(val)
+    if not val then
+        return false
+    end
+    local isSecret = _G.issecretvalue or issecretvalue
+    if isSecret and isSecret(val) then
+        return true
+    end
+    local ok = pcall(function() return val == "" end)
+    if not ok then
+        return true
+    end
+    return false
+end
+
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("ADDON_LOADED")
 

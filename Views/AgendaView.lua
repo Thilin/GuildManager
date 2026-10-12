@@ -291,7 +291,7 @@ function AgendaView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerAgendaFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(860, 540)
+    frame:SetSize(946, 594)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -646,7 +646,7 @@ function AgendaView:createLeftPanel()
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
     local leftPanel = CreateFrame("Frame", "GM_AgendaLeftPanel", frame, template)
-    leftPanel:SetSize(556, 476)
+    leftPanel:SetSize(612, 530)
     leftPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -48)
     if leftPanel.SetBackdrop then
         leftPanel:SetBackdrop(CONTAINER_BACKDROP)
@@ -809,7 +809,7 @@ function AgendaView:createLeftPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -24, 6)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetWidth(524)
+    scrollChild:SetWidth(580)
     scrollChild:SetHeight(1)
     scrollFrame:SetScrollChild(scrollChild)
     self._eventsScrollChild = scrollChild
@@ -822,7 +822,7 @@ function AgendaView:createLeftPanel()
 
     local emptyEventsText = leftPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyEventsText:SetPoint("CENTER", leftPanel, "CENTER", 0, -20)
-    emptyEventsText:SetWidth(400)
+    emptyEventsText:SetWidth(460)
     emptyEventsText:SetJustifyH("CENTER")
     emptyEventsText:SetText("Nenhum evento agendado.\nClique em |cffffff00+ Novo Evento|r acima para criar um evento.")
     emptyEventsText:Hide()
@@ -854,7 +854,7 @@ function AgendaView:createRightPanel()
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
     local rightPanel = CreateFrame("Frame", "GM_AgendaRightPanel", frame, template)
-    rightPanel:SetSize(264, 476)
+    rightPanel:SetSize(294, 530)
     rightPanel:SetPoint("TOPLEFT", self._leftPanel, "TOPRIGHT", 8, 0)
     if rightPanel.SetBackdrop then
         rightPanel:SetBackdrop(CONTAINER_BACKDROP)
@@ -894,7 +894,7 @@ function AgendaView:createRightPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -24, 6)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetWidth(232)
+    scrollChild:SetWidth(262)
     scrollChild:SetHeight(1)
     scrollFrame:SetScrollChild(scrollChild)
     self._birthdaysScrollChild = scrollChild
@@ -907,7 +907,7 @@ function AgendaView:createRightPanel()
 
     local emptyBirthdaysText = rightPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyBirthdaysText:SetPoint("CENTER", rightPanel, "CENTER", 0, -20)
-    emptyBirthdaysText:SetWidth(220)
+    emptyBirthdaysText:SetWidth(250)
     emptyBirthdaysText:SetJustifyH("CENTER")
     emptyBirthdaysText:SetText("Nenhum aniversário cadastrado.\nAdicione a data na tela de membros ou notas da guilda.")
     emptyBirthdaysText:Hide()
@@ -994,7 +994,7 @@ function AgendaView:renderEvents()
         local card = self._activeEventCardPool[idx]
         if not card then
             card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
-            card:SetSize(520, cardHeight)
+            card:SetSize(576, cardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.85)
@@ -1195,7 +1195,7 @@ function AgendaView:renderBirthdays()
         local card = self._activeBirthdayCardPool[idx]
         if not card then
             card = CreateFrame("Frame", nil, self._birthdaysScrollChild, template)
-            card:SetSize(228, cardHeight)
+            card:SetSize(258, cardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.85)

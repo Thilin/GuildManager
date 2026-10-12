@@ -7,6 +7,42 @@
 MemberController = {}
 MemberController.__index = MemberController
 
+--- Verifica com segurança se um valor é um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
+--- Valores secretos geram erro Lua se comparados ou manipulados diretamente sob execução tainted.
+---@param val any
+---@return boolean
+local function isSecretValue(val)
+    if not val then
+        return false
+    end
+    local isSecret = _G.issecretvalue or issecretvalue
+    if isSecret and isSecret(val) then
+        return true
+    end
+    local ok = pcall(function() return val == "" end)
+    if not ok then
+        return true
+    end
+    return false
+end
+
+--- Obtém o timestamp sincronizado do servidor (ou relógio local como fallback)
+---@return number
+local function getCurrentTimestamp()
+    if GetServerTime then
+        local st = GetServerTime()
+        if st and st > 0 then return st end
+    end
+    if time then
+        local t = time()
+        if t and t > 0 then return t end
+    end
+    if os and os.time then
+        return os.time()
+    end
+    return 0
+end
+
 --- Construtor do Controller de membros no padrão MVC.
 ---@param memberService MemberService @Serviço de membros
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
@@ -67,23 +103,32 @@ function MemberController:initHooks()
                 canOfficer = true
             end
 
-            if updatedFields.customNote ~= nil then
+            local hasCustomFieldChanged = false
+            if updatedFields.customNote ~= nil and member:getCustomNote() ~= updatedFields.customNote then
                 member:setCustomNote(updatedFields.customNote)
             end
-            if updatedFields.birthday ~= nil then
+            if updatedFields.birthday ~= nil and member:getBirthday() ~= updatedFields.birthday then
                 member:setBirthday(updatedFields.birthday)
+                hasCustomFieldChanged = true
             end
-            if canOfficer and updatedFields.dateJoin ~= nil then
+            if canOfficer and updatedFields.dateJoin ~= nil and member:getDateJoin() ~= updatedFields.dateJoin then
                 member:setDateJoin(updatedFields.dateJoin)
+                hasCustomFieldChanged = true
             end
-            if updatedFields.isMain ~= nil then
+            if updatedFields.isMain ~= nil and member:isMain() ~= updatedFields.isMain then
                 member:setMain(updatedFields.isMain)
+                hasCustomFieldChanged = true
             end
-            if canOfficer and updatedFields.recruiter ~= nil then
+            if canOfficer and updatedFields.recruiter ~= nil and member:getRecruiter() ~= updatedFields.recruiter then
                 member:setRecruiter(updatedFields.recruiter)
+                hasCustomFieldChanged = true
                 if self._logService then
                     self._logService:updateRecruiterForMember(member:getName(), updatedFields.recruiter)
                 end
+            end
+
+            if hasCustomFieldChanged then
+                member:setCustomDataTimestamp(getCurrentTimestamp())
             end
 
             self._memberService:saveMember(member)
@@ -210,9 +255,13 @@ function MemberController:initHooks()
                     end
                 end
             elseif event == "CHAT_MSG_SYSTEM" then
-                self:handleSystemChatMessage(arg1)
+                if arg1 and not isSecretValue(arg1) then
+                    self:handleSystemChatMessage(arg1)
+                end
             elseif event == "CHAT_MSG_ADDON" then
-                self:handleAddonChatMessage(arg1, arg2, arg3, arg4)
+                if arg1 and not isSecretValue(arg1) and not isSecretValue(arg2) then
+                    self:handleAddonChatMessage(arg1, arg2, arg3, arg4)
+                end
             elseif event == "GUILD_EVENT_LOG_UPDATE" then
                 self:checkGuildEventLog()
             end
@@ -723,7 +772,7 @@ function MemberController:hookInviteAPIs()
     if GuildInvite and not self._guildInviteHooked then
         self._guildInviteHooked = true
         hooksecurefunc("GuildInvite", function(name)
-            if name and name ~= "" then
+            if name and not isSecretValue(name) and name ~= "" then
                 local myName = UnitName and UnitName("player") or ""
                 self:recordPendingInvite(name, myName)
             end
@@ -733,7 +782,7 @@ function MemberController:hookInviteAPIs()
     if C_GuildInfo and C_GuildInfo.Invite and not self._cGuildInviteHooked then
         self._cGuildInviteHooked = true
         hooksecurefunc(C_GuildInfo, "Invite", function(name)
-            if name and name ~= "" then
+            if name and not isSecretValue(name) and name ~= "" then
                 local myName = UnitName and UnitName("player") or ""
                 self:recordPendingInvite(name, myName)
             end
@@ -835,7 +884,10 @@ end
 --- e convites emitidos (ERR_GUILD_INVITE_S).
 ---@param message string
 function MemberController:handleSystemChatMessage(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) then
+        return
+    end
+    if type(message) ~= "string" or message == "" then
         return
     end
 
@@ -886,7 +938,7 @@ end
 ---@param templateStr string|nil
 ---@return string|nil
 function MemberController:buildPatternFromTemplate(templateStr)
-    if not templateStr or type(templateStr) ~= "string" or templateStr == "" then
+    if not templateStr or isSecretValue(templateStr) or type(templateStr) ~= "string" or templateStr == "" then
         return nil
     end
 
@@ -908,7 +960,7 @@ end
 ---@param rawName string
 ---@return string
 function MemberController:sanitizeCharacterName(rawName)
-    if not rawName or type(rawName) ~= "string" then
+    if not rawName or isSecretValue(rawName) or type(rawName) ~= "string" then
         return ""
     end
 
@@ -936,7 +988,7 @@ end
 ---@param message string
 ---@return string|nil
 function MemberController:matchGuildJoin(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) or type(message) ~= "string" or message == "" then
         return nil
     end
 
@@ -979,7 +1031,7 @@ end
 ---@param message string
 ---@return string|nil
 function MemberController:matchGuildInvite(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) or type(message) ~= "string" or message == "" then
         return nil
     end
 
@@ -1019,7 +1071,7 @@ end
 ---@param message string
 ---@return string|nil, string|nil @kickedName, kickerName
 function MemberController:matchGuildKick(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) or type(message) ~= "string" or message == "" then
         return nil, nil
     end
 
@@ -1138,7 +1190,7 @@ end
 ---@param message string
 ---@return string|nil
 function MemberController:matchGuildLeave(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) or type(message) ~= "string" or message == "" then
         return nil
     end
 
@@ -1178,7 +1230,7 @@ end
 ---@param message string
 ---@return string|nil, string|nil, string|nil @promotedName, promoterName, newRank
 function MemberController:matchGuildPromote(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) or type(message) ~= "string" or message == "" then
         return nil, nil, nil
     end
 
@@ -1278,7 +1330,7 @@ end
 ---@param message string
 ---@return string|nil, string|nil, string|nil
 function MemberController:matchGuildDemote(message)
-    if not message or type(message) ~= "string" or message == "" then
+    if not message or isSecretValue(message) or type(message) ~= "string" or message == "" then
         return nil, nil, nil
     end
 
@@ -1955,6 +2007,9 @@ end
 ---@param channel string
 ---@param sender string
 function MemberController:handleAddonChatMessage(prefix, msg, channel, sender)
+    if not prefix or not msg or isSecretValue(prefix) or isSecretValue(msg) then
+        return
+    end
     if prefix ~= "GuildManager" or type(msg) ~= "string" then
         return
     end

@@ -8,6 +8,41 @@
 SyncService = {}
 SyncService.__index = SyncService
 
+--- Verifica com segurança se um valor é um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
+---@param val any
+---@return boolean
+local function isSecretValue(val)
+    if not val then
+        return false
+    end
+    local isSecret = _G.issecretvalue or issecretvalue
+    if isSecret and isSecret(val) then
+        return true
+    end
+    local ok = pcall(function() return val == "" end)
+    if not ok then
+        return true
+    end
+    return false
+end
+
+--- Obtém o timestamp sincronizado do servidor (ou relógio local como fallback)
+---@return number
+local function getCurrentTimestamp()
+    if GetServerTime then
+        local st = GetServerTime()
+        if st and st > 0 then return st end
+    end
+    if time then
+        local t = time()
+        if t and t > 0 then return t end
+    end
+    if os and os.time then
+        return os.time()
+    end
+    return 0
+end
+
 local SYNC_PREFIX = "GM_SYNC"
 local COMM_CHANNEL_NAME = "AJShare"
 local RETRANSMIT_INTERVAL = 2.5       -- Intervalo entre retransmissões de pacotes pendentes (2.5s)
@@ -384,9 +419,19 @@ function SyncService:broadcastMemberCustomData(member, force)
     end
     self._lastMemberSignatures[memberLower] = signature
 
-    local nowClock = (time and time()) or (os and os.time and os.time()) or 0
+    local memberTimestamp = (member.getCustomDataTimestamp and member:getCustomDataTimestamp()) or 0
+    if memberTimestamp == 0 then
+        memberTimestamp = getCurrentTimestamp()
+        if member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(memberTimestamp)
+        end
+        if self._memberService then
+            self._memberService:saveMember(member, true)
+        end
+    end
+
     local randomSuffix = math.random(1000, 9999)
-    local updateId = string.format("%s_%d_%d", memberName, nowClock, randomSuffix)
+    local updateId = string.format("%s_%d_%d", memberName, memberTimestamp, randomSuffix)
 
     -- Cancela envios anteriores do mesmo membro que ainda estavam pendentes na fila
     for id, u in pairs(self._pendingOutbox) do
@@ -403,7 +448,7 @@ function SyncService:broadcastMemberCustomData(member, force)
         recruiter = recruiter,
         altsCsv = altsCsv,
         isMain = isMain,
-        timestamp = nowClock,
+        timestamp = memberTimestamp,
         acknowledgedPeers = {},
         sendCount = 0,
         lastSent = 0,
@@ -558,7 +603,10 @@ end
 ---@param channel string
 ---@param sender string
 function SyncService:onAddonMessage(prefix, message, channel, sender)
-    if not prefix or not message or type(message) ~= "string" then return end
+    if not prefix or not message or isSecretValue(prefix) or isSecretValue(message) or (sender and isSecretValue(sender)) then
+        return
+    end
+    if type(message) ~= "string" then return end
 
     local pUpper = prefix:upper()
     if pUpper ~= SYNC_PREFIX then
@@ -607,6 +655,18 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         local mClean = cleanName(memberName)
         local member = self._memberService and self._memberService:getMember(mClean)
+        local localTimestamp = (member and member.getCustomDataTimestamp and member:getCustomDataTimestamp()) or 0
+
+        -- Last-Write-Wins: Se o membro já possui dados localmente e a versão local é MAIS RECENTE que o pacote recebido,
+        -- rejeita o pacote antigo para proteger as informações novas contra sobrescrita indevida!
+        if member and localTimestamp > 0 and timestamp > 0 and localTimestamp > timestamp then
+            -- Confirma o recebimento para o peer parar de retransmitir o pacote antigo
+            self:sendAckPacket(updateId, mClean)
+            -- Transmite imediatamente a nossa versão mais recente para atualizar o peer desatualizado
+            self:broadcastMemberCustomData(member, true)
+            return
+        end
+
         if not member then
             member = Member:new({ name = mClean, isInGuild = true })
         end
@@ -641,6 +701,11 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         member:setAlts(altsList)
         member:setMain(isMainStr == "1")
 
+        local appliedTimestamp = (timestamp > 0) and timestamp or getCurrentTimestamp()
+        if member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(appliedTimestamp)
+        end
+
         -- Atualiza a assinatura local para não retransmitir de volta o que acabou de receber
         local isMainBool = (isMainStr == "1")
         self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool)
@@ -649,14 +714,14 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if self._memberService then
             self._memberService:saveMember(member, true)
 
-            -- Mantém a reciprocidade da família de alts se houver lista
+            -- Mantém a reciprocidade da família de alts se houver lista (skipSync = true evita flood)
             if #altsList > 0 and self._memberService.syncAltFamily then
                 local familyNames = { mClean }
                 for _, aName in ipairs(altsList) do
                     table.insert(familyNames, aName)
                 end
                 local mainName = isMainBool and mClean or altsList[1]
-                self._memberService:syncAltFamily(familyNames, mainName)
+                self._memberService:syncAltFamily(familyNames, mainName, true)
             end
         end
 
@@ -867,6 +932,23 @@ function SyncService:initHooks()
 
         -- Garante que a aba de chat dedicada para sincronização seja inicializada
         self:getSyncChatFrame()
+
+        -- Garante que membros existentes com dados customizados possuam timestamp inicial de segurança
+        if self._memberService then
+            local all = self._memberService:getAllMembers()
+            local nowTs = getCurrentTimestamp()
+            for _, m in ipairs(all) do
+                local d = m:getDateJoin() or ""
+                local b = m:getBirthday() or ""
+                local r = m:getRecruiter() or ""
+                local a = m:getAlts() or {}
+                local ts = m:getCustomDataTimestamp()
+                if (d ~= "" or b ~= "" or r ~= "" or #a > 0) and (not ts or ts == 0) then
+                    m:setCustomDataTimestamp(nowTs)
+                    self._memberService:saveMember(m, true)
+                end
+            end
+        end
 
         -- Ao logar / entrar no mundo, aguarda 2.5s para os canais de chat estarem conectados
         -- e então anuncia a presença e solicita sincronização
