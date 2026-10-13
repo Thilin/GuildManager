@@ -219,9 +219,9 @@ function MemberController:initHooks()
                         end)
                     end
 
-                    -- Inicia varredura periódica do Roster da guilda para capturar eventos de LEVELED a cada 30 segundos
+                    -- Inicia varredura periódica do Roster da guilda para capturar eventos de LEVELED a cada 60 segundos
                     if not self._rosterTicker and C_Timer and C_Timer.NewTicker then
-                        self._rosterTicker = C_Timer.NewTicker(30, function()
+                        self._rosterTicker = C_Timer.NewTicker(60, function()
                             self:onPeriodicRosterScan()
                         end)
                     end
@@ -229,7 +229,7 @@ function MemberController:initHooks()
                         local elapsedAccum = 0
                         frame:SetScript("OnUpdate", function(_, elapsed)
                             elapsedAccum = elapsedAccum + (elapsed or 0)
-                            if elapsedAccum >= 30 then
+                            if elapsedAccum >= 60 then
                                 elapsedAccum = 0
                                 self:onPeriodicRosterScan()
                             end

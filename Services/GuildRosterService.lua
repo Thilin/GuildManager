@@ -74,15 +74,19 @@ function GuildRosterService:scanRoster()
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
         end
-        if _G.GM and _G.GM.logService then
-            if _G.GM.logService.cleanInvalidInviteJoinedLogs then
-                _G.GM.logService:cleanInvalidInviteJoinedLogs(self._memberService)
-            end
-            if _G.GM.logService.cleanInvalidLeftLogs then
-                _G.GM.logService:cleanInvalidLeftLogs(self._memberService, activeRosterNames)
-            end
-            if _G.GM.logService.cleanInvertedKickLogs then
-                _G.GM.logService:cleanInvertedKickLogs(self._memberService)
+        local now = GetTime and GetTime() or 0
+        if (now - (self._lastLogCleanTime or 0)) >= 300 then
+            self._lastLogCleanTime = now
+            if _G.GM and _G.GM.logService then
+                if _G.GM.logService.cleanInvalidInviteJoinedLogs then
+                    _G.GM.logService:cleanInvalidInviteJoinedLogs(self._memberService)
+                end
+                if _G.GM.logService.cleanInvalidLeftLogs then
+                    _G.GM.logService:cleanInvalidLeftLogs(self._memberService, activeRosterNames)
+                end
+                if _G.GM.logService.cleanInvertedKickLogs then
+                    _G.GM.logService:cleanInvertedKickLogs(self._memberService)
+                end
             end
         end
     end

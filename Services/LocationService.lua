@@ -29,8 +29,8 @@ local FALLBACK_PREFIX = "AJ_POS"
 local MSG_PREFIX = "AJ_POS"
 local COMM_CHANNEL_NAME = "AJShare"
 
-local MOVE_THROTTLE = 1.25    -- Intervalo quando o jogador está em movimento (1.25s)
-local IDLE_HEARTBEAT = 4.0     -- Intervalo de heartbeat quando o jogador está parado (4.0s)
+local MOVE_THROTTLE = 1.5     -- Intervalo quando o jogador está em movimento (1.5s)
+local IDLE_HEARTBEAT = 6.0    -- Intervalo de heartbeat quando o jogador está parado (6.0s)
 local PEER_TIMEOUT = 30.0      -- Tempo sem sinal para considerar o jogador offline (30s)
 
 -- Registra os prefixos de mensagem imediatamente no carregamento do arquivo
@@ -279,34 +279,37 @@ function LocationService:sendPosition(force)
     self._lastSentFacing = facing
     self._lastSentMapID = mapID
 
-    -- Atributos do jogador
-    local myClass = "WARRIOR"
-    if UnitClass then
+    -- Atributos do jogador com cache local para evitar chamadas de API repetidas
+    if not self._cachedClass and UnitClass then
         local ok, _, cFile = pcall(UnitClass, "player")
-        if ok and cFile and type(cFile) == "string" then myClass = cFile end
+        if ok and cFile and type(cFile) == "string" then self._cachedClass = cFile end
     end
+    local myClass = self._cachedClass or "WARRIOR"
 
-    local myLevel = 1
-    if UnitLevel then
-        local ok, lvl = pcall(UnitLevel, "player")
-        if ok and lvl then myLevel = tonumber(lvl) or 1 end
-    end
-
-    local myRace = "Desconhecido"
-    if UnitRace then
+    if not self._cachedRace and UnitRace then
         local ok, r = pcall(UnitRace, "player")
-        if ok and r and type(r) == "string" then myRace = r end
+        if ok and r and type(r) == "string" then self._cachedRace = r:gsub(":", "") end
     end
+    local myRace = self._cachedRace or "Desconhecido"
 
-    local myGuild = ""
-    if GetGuildInfo then
+    if not self._cachedGuild and GetGuildInfo then
         local ok, g = pcall(GetGuildInfo, "player")
-        if ok and g and type(g) == "string" then myGuild = g end
+        if ok and g and type(g) == "string" then self._cachedGuild = g:gsub(":", "") end
+    end
+    local myGuild = self._cachedGuild or ""
+
+    local myLevel = self._cachedLevel or 1
+    if (not self._cachedLevel or force) and UnitLevel then
+        local ok, lvl = pcall(UnitLevel, "player")
+        if ok and lvl then
+            myLevel = tonumber(lvl) or 1
+            self._cachedLevel = myLevel
+        end
     end
 
     -- Payload oficial compacto: POS:mapID:x:y:facing:class:level:race:guild
     local payload = string.format("POS:%d:%.4f:%.4f:%.2f:%s:%d:%s:%s",
-        mapID, x, y, facing, myClass, myLevel, myRace:gsub(":", ""), myGuild:gsub(":", "")
+        mapID, x, y, facing, myClass, myLevel, myRace, myGuild
     )
 
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
@@ -634,7 +637,7 @@ function LocationService:initHooks()
         purgeTicker = purgeTicker + elapsed
         channelTicker = channelTicker + elapsed
 
-        if ticker >= 0.25 then
+        if ticker >= 0.75 then
             ticker = 0
             self:sendPosition(false)
         end

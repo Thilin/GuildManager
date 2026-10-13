@@ -602,7 +602,7 @@ function WorldMapView:updateRealtimePins()
     self:updateRealtimeBadge()
 end
 
---- Cria frame filho de atualização contínua a 20 FPS (0.05s) para renderização ultra-suave
+--- Cria frame filho de atualização contínua a 10 FPS (0.10s) para renderização suave com baixo uso de CPU
 function WorldMapView:initUpdateFrame()
     if self._updateFrame or not WorldMapFrame then return end
 
@@ -616,8 +616,9 @@ function WorldMapView:initUpdateFrame()
 
     local ticker = 0
     updateFrame:SetScript("OnUpdate", function(_, elapsed)
+        if not WorldMapFrame:IsShown() then return end
         ticker = ticker + elapsed
-        if ticker >= 0.05 then
+        if ticker >= 0.10 then
             ticker = 0
             self:updateRealtimePins()
         end

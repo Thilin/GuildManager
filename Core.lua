@@ -60,7 +60,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local settingsController = SettingsController:new(settingsService, settingsView, memberService, guildRosterService, logService, minimapButton)
 
         local locationService = LocationService:new(memberService)
-        local syncService = SyncService:new(memberService, locationService)
+        local syncService = SyncService:new(memberService, locationService, settingsService)
         memberService:setSyncService(syncService)
 
         local worldMapView = WorldMapView:new()

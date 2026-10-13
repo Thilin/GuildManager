@@ -43,6 +43,7 @@ local DEFAULTS = {
     -- Auditoria & Alertas
     notifyMemberLevelUp = false,      -- Avisar no chat local quando um membro subir de nível (desativado por padrão)
     logRejoin = true,                 -- Registrar logs de retorno à guilda (membros que já saíram)
+    enableSyncChatLog = true,         -- Exibir aba de chat exclusiva para logs de sincronização P2P
 }
 
 --- Construtor da entidade GMSettings.
@@ -104,6 +105,7 @@ function GMSettings:isHighlightSelfOnMap() return self._highlightSelfOnMap ~= fa
 function GMSettings:isAutoAssignGroupRole() return self._autoAssignGroupRole ~= false end
 function GMSettings:isNotifyMemberLevelUp() return self._notifyMemberLevelUp == true end
 function GMSettings:isLogRejoin() return self._logRejoin ~= false end
+function GMSettings:isSyncChatLogEnabled() return self._enableSyncChatLog ~= false end
 
 -- Setters
 function GMSettings:setLanguage(val)
@@ -146,6 +148,7 @@ function GMSettings:setHighlightSelfOnMap(val) self._highlightSelfOnMap = (val =
 function GMSettings:setAutoAssignGroupRole(val) self._autoAssignGroupRole = (val == true) end
 function GMSettings:setNotifyMemberLevelUp(val) self._notifyMemberLevelUp = (val == true) end
 function GMSettings:setLogRejoin(val) self._logRejoin = (val == true) end
+function GMSettings:setSyncChatLogEnabled(val) self._enableSyncChatLog = (val == true) end
 
 --- Serializa as configurações para uma tabela limpa.
 ---@return table

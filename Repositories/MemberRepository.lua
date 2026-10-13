@@ -13,8 +13,14 @@ function MemberRepository:new(db)
     if type(instance._db.members) ~= "table" then
         instance._db.members = {}
     end
+    instance._cache = {}
 
     return instance
+end
+
+--- Limpa o cache de instâncias em memória.
+function MemberRepository:clearCache()
+    self._cache = {}
 end
 
 --- Persiste ou atualiza uma entidade Member no banco de dados.
@@ -35,6 +41,7 @@ function MemberRepository:save(member)
     end
 
     self._db.members[memberName] = member:serialize()
+    self._cache[memberName] = member
     return true
 end
 
@@ -46,9 +53,16 @@ function MemberRepository:findByName(name)
         return nil
     end
 
+    local cached = self._cache[name]
+    if cached then
+        return cached
+    end
+
     local rawData = self._db.members[name]
     if rawData then
-        return Member:new(rawData)
+        local member = Member:new(rawData)
+        self._cache[name] = member
+        return member
     end
 
     return nil
@@ -62,16 +76,24 @@ function MemberRepository:findByGuid(guid)
         return nil
     end
 
-    for _, rawData in pairs(self._db.members) do
+    for name, cached in pairs(self._cache) do
+        if cached.getGuid and cached:getGuid() == guid then
+            return cached
+        end
+    end
+
+    for name, rawData in pairs(self._db.members) do
         if rawData.guid == guid then
-            return Member:new(rawData)
+            local member = self._cache[name] or Member:new(rawData)
+            self._cache[name] = member
+            return member
         end
     end
 
     return nil
 end
 
---- Retorna todas as entidades Member armazenadas no banco.
+--- Retorna todas as entidades Member armazenadas no banco reaproveitando instâncias em cache.
 ---@return Member[] @Array de instâncias de Member
 function MemberRepository:findAll()
     local result = {}
@@ -79,8 +101,13 @@ function MemberRepository:findAll()
         return result
     end
 
-    for _, rawData in pairs(self._db.members) do
-        table.insert(result, Member:new(rawData))
+    for name, rawData in pairs(self._db.members) do
+        local member = self._cache[name]
+        if not member then
+            member = Member:new(rawData)
+            self._cache[name] = member
+        end
+        table.insert(result, member)
     end
 
     return result
@@ -104,6 +131,9 @@ function MemberRepository:delete(name)
     end
 
     self._db.members[name] = nil
+    if self._cache then
+        self._cache[name] = nil
+    end
     return true
 end
 

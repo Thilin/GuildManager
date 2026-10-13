@@ -1012,10 +1012,14 @@ function SettingsView:createSettingsColumns()
     s9Sep:SetHeight(1)
     s9Sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.6)
 
+    local cbSyncChatLog = createCheckbox(rChild, L["SETTINGS_SYNC_CHAT_LOG"], L["SETTINGS_SYNC_CHAT_LOG_TIP_TITLE"], L["SETTINGS_SYNC_CHAT_LOG_TIP_DESC"])
+    cbSyncChatLog:SetPoint("TOPLEFT", s9Sep, "BOTTOMLEFT", 0, -4)
+    self._widgets.enableSyncChatLog = cbSyncChatLog
+
     -- Botões de Ação do Banco
     local purgeBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     purgeBtn:SetSize(170, 22)
-    purgeBtn:SetPoint("TOPLEFT", s9Sep, "BOTTOMLEFT", 4, -8)
+    purgeBtn:SetPoint("TOPLEFT", cbSyncChatLog, "BOTTOMLEFT", 4, -8)
     purgeBtn:SetText(L["SETTINGS_PURGE_BTN"])
     purgeBtn:SetScript("OnClick", function()
         if self._onPurgeLogsCallback then
@@ -1310,6 +1314,9 @@ function SettingsView:updateLocale()
 
     -- Seção 9
     if self._widgets.s9Header then self._widgets.s9Header:SetText(curL["SETTINGS_S9_HEADER"]) end
+    if self._widgets.enableSyncChatLog then
+        self._widgets.enableSyncChatLog:updateTexts(curL["SETTINGS_SYNC_CHAT_LOG"], curL["SETTINGS_SYNC_CHAT_LOG_TIP_TITLE"], curL["SETTINGS_SYNC_CHAT_LOG_TIP_DESC"])
+    end
     if self._widgets.purgeBtn then self._widgets.purgeBtn:SetText(curL["SETTINGS_PURGE_BTN"]) end
     if self._widgets.forceScanBtn then self._widgets.forceScanBtn:SetText(curL["SETTINGS_FORCE_SCAN_BTN"]) end
     if self._widgets.resetAllBtn then self._widgets.resetAllBtn:SetText(curL["SETTINGS_RESET_DEFAULTS_BTN"]) end
@@ -1409,6 +1416,10 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.selectedRetentionDays = settings:getLogRetentionDays()
     self:updateRetentionButtons(self._widgets.retentionButtons, self._widgets.selectedRetentionDays)
 
+    if self._widgets.enableSyncChatLog then
+        self._widgets.enableSyncChatLog:SetChecked(settings:isSyncChatLogEnabled())
+    end
+
     self._widgets.statusMsg:SetText("")
 end
 
@@ -1448,6 +1459,7 @@ function SettingsView:gatherFormData()
         logJoinLeave = w.logJoinLeave:GetChecked() == true,
         logRejoin = w.logRejoin:GetChecked() == true,
         logRetentionDays = tonumber(w.selectedRetentionDays) or 60,
+        enableSyncChatLog = w.enableSyncChatLog and (w.enableSyncChatLog:GetChecked() == true) or false,
     }
 end
 

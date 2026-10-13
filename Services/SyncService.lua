@@ -73,6 +73,7 @@ local RETRANSMIT_INTERVAL = 2.5       -- Intervalo entre retransmissões de paco
 local SEND_QUEUE_INTERVAL = 0.12      -- Intervalo compassado de envio de pacotes (evita throttle do chat)
 local PEER_LIVENESS_WINDOW = 35.0     -- Tempo em segundos sem sinal para considerar peer offline (35s)
 local MAX_RETRANSMIT_ATTEMPTS = 60    -- Limite máximo de tentativas por atualização (evita loop infinito)
+local MAX_QUEUE_SIZE = 250            -- Capacidade máxima da fila compassada para proteção contra vazamento de memória
 
 -- Registra o prefixo de mensagem imediatamente no carregamento do arquivo
 local RegisterPrefix = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
@@ -83,11 +84,13 @@ end
 --- Construtor do SyncService.
 ---@param memberService MemberService
 ---@param locationService LocationService|nil
+---@param settingsService SettingsService|nil
 ---@return SyncService
-function SyncService:new(memberService, locationService)
+function SyncService:new(memberService, locationService, settingsService)
     local instance = setmetatable({}, self)
     instance._memberService = memberService
     instance._locationService = locationService
+    instance._settingsService = settingsService
 
     -- Tabela de pares conhecidos com o Addon ativo: [peerNameLower] = { name = peerName, lastSeen = GetTime(), isActive = true }
     instance._peers = {}
@@ -98,8 +101,10 @@ function SyncService:new(memberService, locationService)
     -- Fila de envio pendente de confirmações (retransmissão): [updateId] = updateData
     instance._pendingOutbox = {}
 
-    -- Fila sequencial compassada de pacotes para envio: { { payload = ..., target = ..., channelNumber = ... }, ... }
+    -- Fila sequencial compassada de pacotes para envio (desenfileiramento O(1) com ponteiros de índice)
     instance._sendQueue = {}
+    instance._queueHead = 1
+    instance._queueTail = 0
 
     -- Histórico de IDs de atualizações já processadas localmente para evitar loops: [updateId] = timestamp
     instance._processedUpdateIds = {}
@@ -115,6 +120,24 @@ function SyncService:new(memberService, locationService)
     instance._syncChatFrame = nil
 
     return instance
+end
+
+--- Verifica se a exibição de logs de sincronização na aba dedicada de chat está ativada nas configurações.
+---@return boolean
+function SyncService:isChatLogEnabled()
+    if self._settingsService and self._settingsService.getSettings then
+        local settings = self._settingsService:getSettings()
+        if settings and settings.isSyncChatLogEnabled then
+            return settings:isSyncChatLogEnabled()
+        end
+    end
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService.getSettings then
+        local settings = _G.GM.settingsService:getSettings()
+        if settings and settings.isSyncChatLogEnabled then
+            return settings:isSyncChatLogEnabled()
+        end
+    end
+    return true
 end
 
 --- Normaliza o nome do remetente removendo o sufixo de reino e espaços.
@@ -228,9 +251,13 @@ local SYNC_CHAT_NAME = "Logs GM Sync"
 
 --- Localiza ou cria a aba de chat dedicada para as mensagens de sincronização.
 --- NUNCA retorna DEFAULT_CHAT_FRAME ou ChatFrame1, garantindo que as mensagens de sync não apareçam na janela padrão.
---- Procura pela aba exclusiva "Logs GM Sync" ou cria uma nova aba com esse nome exato.
+--- Procura pela aba exclusiva "Logs GM Sync" ou cria uma nova aba com esse nome exato se a opção estiver ativada nas configurações.
 ---@return table|nil
 function SyncService:getSyncChatFrame()
+    if not self:isChatLogEnabled() then
+        return nil
+    end
+
     if self._syncChatFrame and self._syncChatFrame.AddMessage and self._syncChatFrame ~= DEFAULT_CHAT_FRAME and self._syncChatFrame ~= _G.ChatFrame1 then
         return self._syncChatFrame
     end
@@ -276,7 +303,7 @@ function SyncService:getSyncChatFrame()
         end
     end
 
-    -- 3. Cria automaticamente a nova aba exclusiva "Logs GM Sync" usando FCF_OpenNewWindow
+    -- 3. Cria automaticamente a nova aba exclusiva "Logs GM Sync" usando FCF_OpenNewWindow somente se ativado
     if FCF_OpenNewWindow then
         local ok, newFrame = pcall(FCF_OpenNewWindow, SYNC_CHAT_NAME)
         if ok and newFrame and newFrame.AddMessage and newFrame ~= DEFAULT_CHAT_FRAME and newFrame ~= _G.ChatFrame1 then
@@ -302,33 +329,35 @@ function SyncService:getSyncChatFrame()
 end
 
 --- Imprime a mensagem de sincronização exclusivamente na aba dedicada "Logs GM Sync" (nunca na janela padrão).
+--- Se a opção estiver desativada nas configurações, nenhuma mensagem ou alerta é emitido.
 ---@param msg string
 function SyncService:printSyncNotification(msg)
+    if not self:isChatLogEnabled() then
+        return
+    end
     if not msg or msg == "" then return end
+
     local targetFrame = self:getSyncChatFrame()
+    if not targetFrame or not targetFrame.AddMessage then
+        return
+    end
+
     local timeStr = date and date("%H:%M:%S")
     local timePrefix = timeStr and string.format("|cff888888[%s]|r ", timeStr) or ""
     local fullMsg = timePrefix .. msg
 
-    if targetFrame and targetFrame.AddMessage then
-        targetFrame:AddMessage(fullMsg)
+    targetFrame:AddMessage(fullMsg)
 
-        -- Se a aba "Logs GM Sync" não estiver selecionada no momento, faz piscar para alertar o usuário
-        local selected = SELECTED_CHAT_FRAME or (FCF_GetCurrentChatFrame and FCF_GetCurrentChatFrame())
-        if targetFrame ~= selected then
-            if FCF_StartAlertFlash then
-                pcall(FCF_StartAlertFlash, targetFrame)
-            else
-                local tab = targetFrame.GetName and _G[targetFrame:GetName() .. "Tab"]
-                if tab and UIFrameFlash then
-                    pcall(UIFrameFlash, tab, 0.25, 0.25, 2.5, true, 0.1, 0.1)
-                end
+    -- Se a aba "Logs GM Sync" não estiver selecionada no momento, faz piscar para alertar o usuário
+    local selected = SELECTED_CHAT_FRAME or (FCF_GetCurrentChatFrame and FCF_GetCurrentChatFrame())
+    if targetFrame ~= selected then
+        if FCF_StartAlertFlash then
+            pcall(FCF_StartAlertFlash, targetFrame)
+        else
+            local tab = targetFrame.GetName and _G[targetFrame:GetName() .. "Tab"]
+            if tab and UIFrameFlash then
+                pcall(UIFrameFlash, tab, 0.25, 0.25, 2.5, true, 0.1, 0.1)
             end
-        end
-    else
-        -- Fallback apenas se nenhuma aba puder ser encontrada/criada
-        if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-            DEFAULT_CHAT_FRAME:AddMessage(fullMsg)
         end
     end
 end
@@ -411,24 +440,54 @@ local function makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMain)
 end
 
 --- Adiciona um pacote à fila compassada de envio para evitar throttling do chat da Blizzard.
+--- Limita o tamanho máximo a MAX_QUEUE_SIZE para prevenir crescimento descontrolado de memória.
 ---@param payload string
----@param targetChannel string|nil @"GUILD" ou "CHANNEL"
+---@param targetChannel string|nil @"GUILD", "CHANNEL", "RAID", "PARTY"
 ---@param channelNumber number|nil
 function SyncService:enqueuePacket(payload, targetChannel, channelNumber)
     if not payload or payload == "" then return end
-    table.insert(self._sendQueue, {
+
+    local currentSize = (self._queueTail or 0) - (self._queueHead or 1) + 1
+    if currentSize >= MAX_QUEUE_SIZE then
+        -- Fila no limite: descarta o pacote mais antigo avançando a cabeça para evitar leak de memória
+        if self._sendQueue and self._queueHead then
+            self._sendQueue[self._queueHead] = nil
+        end
+        self._queueHead = (self._queueHead or 1) + 1
+    end
+
+    self._queueTail = (self._queueTail or 0) + 1
+    self._sendQueue[self._queueTail] = {
         payload = payload,
         target = targetChannel or "GUILD",
         channelNumber = channelNumber,
-    })
+    }
 end
 
 --- Processa a fila compassada de envio a uma taxa segura (~0.12s por pacote = ~8 pacotes/s),
 --- garantindo que mensagens de Addon nunca sejam descartadas pelo limite da Blizzard.
+--- Utiliza desenfileiramento O(1) via ponteiros sem operações de deslocamento de array.
 function SyncService:processSendQueue()
-    if #self._sendQueue == 0 then return end
+    local head = self._queueHead or 1
+    local tail = self._queueTail or 0
 
-    local item = table.remove(self._sendQueue, 1)
+    if head > tail then
+        if head ~= 1 or tail ~= 0 then
+            self._queueHead = 1
+            self._queueTail = 0
+        end
+        return
+    end
+
+    local item = self._sendQueue[head]
+    self._sendQueue[head] = nil
+    self._queueHead = head + 1
+
+    if self._queueHead > tail then
+        self._queueHead = 1
+        self._queueTail = 0
+    end
+
     if not item or not item.payload then return end
 
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
@@ -440,6 +499,10 @@ function SyncService:processSendQueue()
         end
     elseif item.target == "CHANNEL" and item.channelNumber and item.channelNumber > 0 then
         pcall(Send, SYNC_PREFIX, item.payload, "CHANNEL", item.channelNumber)
+    elseif item.target == "RAID" and IsInRaid and IsInRaid() then
+        pcall(Send, SYNC_PREFIX, item.payload, "RAID")
+    elseif item.target == "PARTY" and IsInGroup and IsInGroup() then
+        pcall(Send, SYNC_PREFIX, item.payload, "PARTY")
     end
 end
 
@@ -566,31 +629,25 @@ function SyncService:sendUpdatePacket(updateData, immediate)
 
     if immediate and Send then
         -- Envio imediato direto
-        if IsInRaid and IsInRaid() then
+        if IsInGuild and IsInGuild() then
+            pcall(Send, SYNC_PREFIX, payload, "GUILD")
+        elseif IsInRaid and IsInRaid() then
             pcall(Send, SYNC_PREFIX, payload, "RAID")
         elseif IsInGroup and IsInGroup() then
             pcall(Send, SYNC_PREFIX, payload, "PARTY")
-        end
-
-        if IsInGuild and IsInGuild() then
-            pcall(Send, SYNC_PREFIX, payload, "GUILD")
-        end
-
-        if chNum and chNum > 0 then
+        elseif chNum and chNum > 0 then
             pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
         end
     end
 
-    -- Enfileira também na fila compassada para garantir redundância e entrega contínua
-    if IsInRaid and IsInRaid() then
+    -- Enfileira de forma otimizada na fila compassada sem disparar mensagens redundantes em múltiplos canais
+    if IsInGuild and IsInGuild() then
+        self:enqueuePacket(payload, "GUILD")
+    elseif IsInRaid and IsInRaid() then
         self:enqueuePacket(payload, "RAID")
     elseif IsInGroup and IsInGroup() then
         self:enqueuePacket(payload, "PARTY")
-    end
-
-    self:enqueuePacket(payload, "GUILD")
-
-    if chNum and chNum > 0 then
+    elseif chNum and chNum > 0 then
         self:enqueuePacket(payload, "CHANNEL", chNum)
     end
 
@@ -611,14 +668,12 @@ function SyncService:sendAckPacket(updateId, memberName)
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
     if not Send then return end
 
-    if IsInRaid and IsInRaid() then
+    if IsInGuild and IsInGuild() then
+        pcall(Send, SYNC_PREFIX, payload, "GUILD")
+    elseif IsInRaid and IsInRaid() then
         pcall(Send, SYNC_PREFIX, payload, "RAID")
     elseif IsInGroup and IsInGroup() then
         pcall(Send, SYNC_PREFIX, payload, "PARTY")
-    end
-
-    if IsInGuild and IsInGuild() then
-        pcall(Send, SYNC_PREFIX, payload, "GUILD")
     end
 
     local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
@@ -629,11 +684,12 @@ end
 
 --- Verifica se todos os outros usuários atualmente online com o Addon já confirmaram o recebimento do update.
 ---@param updateData table
+---@param activePeers table[]|nil
 ---@return boolean
-function SyncService:isUpdateFullyAcknowledged(updateData)
+function SyncService:isUpdateFullyAcknowledged(updateData, activePeers)
     if not updateData then return true end
 
-    local activePeers = self:getActivePeers()
+    activePeers = activePeers or self:getActivePeers()
 
     -- Se não há nenhum outro peer ativo no momento, pausamos a retransmissão
     -- até que algum peer apareça online e confirme.
@@ -661,21 +717,19 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     if not prefix or not message or isSecretValue(prefix) or isSecretValue(message) or (sender and isSecretValue(sender)) then
         return
     end
-    if type(message) ~= "string" then return end
+    if type(message) ~= "string" or not sender or sender == "" then return end
 
-    local pUpper = prefix:upper()
-    if pUpper ~= SYNC_PREFIX then
-        -- Se recebeu sinal de presença do LocationService, aproveita para registrar liveness do peer
-        if pUpper == "GM_POS" or pUpper == "AJ_POS" then
-            self:touchPeer(sender)
-        end
+    -- Ignora rigorosamente as mensagens enviadas pelo próprio jogador antes de qualquer processamento
+    if self:isSelf(sender) then
         return
     end
 
-    if not sender or sender == "" then return end
-
-    -- Ignora rigorosamente as mensagens enviadas pelo próprio jogador
-    if self:isSelf(sender) then
+    local pUpper = prefix:upper()
+    if pUpper ~= SYNC_PREFIX then
+        -- Se recebeu sinal de presença do LocationService de outro jogador, aproveita para registrar liveness do peer
+        if pUpper == "GM_POS" or pUpper == "AJ_POS" then
+            self:touchPeer(sender)
+        end
         return
     end
 
@@ -1072,30 +1126,43 @@ end
 --- O emissor sempre continua enviando até que todos os pares recebam.
 --- Quando todos tiverem recebido, o item é removido e não é mais transmitido.
 function SyncService:processRetransmission()
+    -- Se a outbox estiver vazia, retorna imediatamente sem alocar tabelas
+    if next(self._pendingOutbox) == nil then
+        return
+    end
+
     local activePeers = self:getActivePeers()
     local hasActivePeers = (#activePeers > 0)
-    local now = GetTime and GetTime() or 0
+    if not hasActivePeers then
+        -- Sem pares ativos online: aguarda conexão de algum colega para retransmitir
+        return
+    end
 
-    local toRemove = {}
+    local now = GetTime and GetTime() or 0
+    local toRemove = nil
 
     for updateId, update in pairs(self._pendingOutbox) do
-        -- Verifica se todos os pares ativos já confirmaram
-        if hasActivePeers and self:isUpdateFullyAcknowledged(update) then
+        -- Verifica se todos os pares ativos já confirmaram (reutilizando a lista de peers)
+        if self:isUpdateFullyAcknowledged(update, activePeers) then
+            toRemove = toRemove or {}
             table.insert(toRemove, updateId)
-        elseif hasActivePeers then
+        else
             -- Retransmite se passou tempo suficiente desde o último envio
             if (now - (update.lastSent or 0)) >= RETRANSMIT_INTERVAL then
                 if (update.sendCount or 0) < MAX_RETRANSMIT_ATTEMPTS then
                     self:sendUpdatePacket(update)
                 else
                     -- Proteção após limite máximo de tentativas
+                    toRemove = toRemove or {}
                     table.insert(toRemove, updateId)
                 end
             end
         end
     end
 
-    for _, id in ipairs(toRemove) do
-        self._pendingOutbox[id] = nil
+    if toRemove then
+        for _, id in ipairs(toRemove) do
+            self._pendingOutbox[id] = nil
+        end
     end
 end

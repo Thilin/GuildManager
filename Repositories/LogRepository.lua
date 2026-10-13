@@ -607,28 +607,43 @@ end
 ---@param activeRosterNames table|nil
 ---@return number @Quantidade de registros removidos
 function LogRepository:removeInvalidLeftLogs(memberService, activeRosterNames)
-    if not memberService or type(self._db.logs) ~= "table" then
+    if not memberService or type(self._db.logs) ~= "table" or #self._db.logs == 0 then
         return 0
+    end
+
+    -- Pre-indexa logs do tipo JOINED em O(N) para consultas O(1) imediatas
+    local joinedByName = {}
+    local joinedByGuid = {}
+    for idx, rawData in ipairs(self._db.logs) do
+        if rawData.event == "JOINED" or rawData.event == "join" or (LogEvent and rawData.event == LogEvent.JOINED) then
+            if rawData.name and rawData.name ~= "" then
+                joinedByName[rawData.name:lower()] = rawData
+            end
+            if rawData.guid and rawData.guid ~= "" then
+                joinedByGuid[rawData.guid] = rawData
+            end
+        end
     end
 
     local removedCount = 0
     for i = #self._db.logs, 1, -1 do
         local rawData = self._db.logs[i]
-        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED") then
+        if rawData and (rawData.event == "LEFT" or rawData.event == "LEAVED" or (LogEvent and rawData.event == LogEvent.LEFT)) then
             local name = rawData.name or ""
             local lowerName = name:lower()
             local member = memberService:getMember(name)
             local isInRoster = (activeRosterNames and (activeRosterNames[name] or activeRosterNames[lowerName])) or (member and member:isInGuild())
 
             if isInRoster then
-                local joinedLog = self:findJoinedLog(name, member and member:getGuid())
+                local mGuid = member and member:getGuid()
+                local rawJoined = joinedByName[lowerName] or (mGuid and mGuid ~= "" and joinedByGuid[mGuid])
                 local isFalsePositive = false
 
-                if joinedLog then
+                if rawJoined then
                     local leftTime = rawData.timestamp or 0
-                    local joinedTime = joinedLog:getTimestamp() or 0
+                    local joinedTime = rawJoined.timestamp or 0
                     local leftDate = rawData.date or ""
-                    local joinedDate = joinedLog:getDate() or ""
+                    local joinedDate = rawJoined.date or ""
 
                     if leftTime > 0 and joinedTime > 0 then
                         if math.abs(leftTime - joinedTime) <= 600 then
