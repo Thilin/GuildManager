@@ -106,7 +106,7 @@ function GuildRosterService:getAndProcessMember(index)
     local name, rankName, rankIndex, level, classDisplayName, zone,
           publicNote, officerNote, isOnline, status, class,
           achievementPoints, achievementRank, isMobile, canSoR,
-          repStanding, guid = GetGuildRosterInfo(index)
+          _, guid = GetGuildRosterInfo(index)
 
     if not name or name == "" then
         return nil
@@ -161,7 +161,6 @@ function GuildRosterService:getAndProcessMember(index)
         class = class or "",
         achievementPoints = achievementPoints or 0,
         achievementRank = achievementRank or 0,
-        repStanding = repStanding or 0,
         guid = guid or "",
         isInGuild = true,
     }

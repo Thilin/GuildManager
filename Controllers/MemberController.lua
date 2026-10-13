@@ -753,7 +753,6 @@ function MemberController:resolveMemberByName(targetName)
                             class = "",
                             achievementPoints = 0,
                             achievementRank = 0,
-                            repStanding = 0,
                             guid = info.guid or "",
                             isInGuild = true,
                         }

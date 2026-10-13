@@ -12,7 +12,6 @@
 ---@field _isOnline boolean @Indica se o jogador está online no momento
 ---@field _status number @Status do jogador (0: Online, 1: AFK/Ausente, 2: DND/Não Perturbe)
 ---@field _class string @Token em inglês da classe (ex: "WARRIOR", "MAGE" - usado para cores de classe)
----@field _repStanding number @Nível de reputação com a guilda (0: Odiado até 8: Exaltado)
 ---@field _guid string @Identificador único global do personagem no WoW (GUID)
 ---
 --- [Campos Customizados do Addon]
@@ -54,7 +53,6 @@ function Member:new(data)
     instance._class = data.class or ""
     instance._achievementPoints = tonumber(data.achievementPoints) or 0
     instance._achievementRank = tonumber(data.achievementRank) or 0
-    instance._repStanding = data.repStanding or 0
     instance._guid = data.guid or ""
 
         -- Atributos customizados e gerenciais do Addon:
@@ -367,7 +365,6 @@ function Member:serialize()
         class = self._class,
         achievementPoints = self._achievementPoints,
         achievementRank = self._achievementRank,
-        repStanding = self._repStanding,
         guid = self._guid,
 
         -- Campos customizados do Addon
@@ -403,7 +400,6 @@ function Member:updateFromRoster(data)
     if data.class then self._class = data.class end
     if data.achievementPoints ~= nil then self._achievementPoints = tonumber(data.achievementPoints) or self._achievementPoints end
     if data.achievementRank ~= nil then self._achievementRank = tonumber(data.achievementRank) or self._achievementRank end
-    if data.repStanding ~= nil then self._repStanding = tonumber(data.repStanding) or self._repStanding end
     if data.guid and data.guid ~= "" then self._guid = data.guid end
     if data.race ~= nil then self._race = tostring(data.race) end
     if data.raceName ~= nil then self._race = tostring(data.raceName) end
@@ -466,19 +462,6 @@ function Member:setStatus(status)
     local n = tonumber(status)
     if n then
         self._status = n
-    end
-end
-
----@return number
-function Member:getRepStanding()
-    return self._repStanding
-end
-
----@param repStanding number
-function Member:setRepStanding(repStanding)
-    local n = tonumber(repStanding)
-    if n then
-        self._repStanding = n
     end
 end
 

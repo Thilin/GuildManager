@@ -34,28 +34,6 @@ local function getRaceInPortuguese(race)
     return RACE_TRANSLATION_PT[clean] or race
 end
 
-local REPUTATION_NAMES = {
-    [1] = "|cffcc2222Odiado|r",
-    [2] = "|cffff0000Hostil|r",
-    [3] = "|cffee6622Desfavorável|r",
-    [4] = "|cffffff00Neutro|r",
-    [5] = "|cff00ff00Amigável|r",
-    [6] = "|cff00ff88Honrado|r",
-    [7] = "|cff00ffffReverenciado|r",
-    [8] = "|cff9966ffExaltado|r",
-}
-
-local function getReputationText(standing)
-    local n = tonumber(standing)
-    if n and REPUTATION_NAMES[n] then
-        return REPUTATION_NAMES[n]
-    end
-    if n and _G["FACTION_STANDING_LABEL" .. n] then
-        return _G["FACTION_STANDING_LABEL" .. n]
-    end
-    return "|cff888888Neutro|r"
-end
-
 ---@class MemberView
 MemberView = {}
 MemberView.__index = MemberView
@@ -78,7 +56,6 @@ function MemberView:new()
     instance._levelVal = nil
     instance._classVal = nil
     instance._rankVal = nil
-    instance._repVal = nil
     instance._recruiterBtn = nil
     instance._recruiterBtnText = nil
     instance._recruiterPickerFrame = nil
@@ -446,18 +423,9 @@ function MemberView:createUI()
     dateJoinHit:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
     -- Coluna Direita do Inset 1:
-    -- Reputação
-    local repLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    repLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 170, -6)
-    repLabel:SetText("|cffffd200" .. L["MEMBER_REPUTATION"] .. "|r")
-    self._repLabel = repLabel
-    local repVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    repVal:SetPoint("LEFT", repLabel, "RIGHT", 6, 0)
-    self._repVal = repVal
-
     -- Status
     local statusLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    statusLabel:SetPoint("TOPLEFT", repLabel, "BOTTOMLEFT", 0, -4)
+    statusLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 170, -6)
     statusLabel:SetText("|cffffd200" .. L["MEMBER_STATUS"] .. "|r")
     self._statusLabel = statusLabel
     local statusVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -971,7 +939,6 @@ function MemberView:updateLocale()
     if self._classLabel then self._classLabel:SetText("|cffffd200" .. L["MEMBER_CLASS"] .. "|r") end
     if self._rankLabel then self._rankLabel:SetText("|cffffd200" .. L["MEMBER_RANK"] .. "|r") end
     if self._dateJoinLabel then self._dateJoinLabel:SetText("|cffffd200" .. L["MEMBER_JOIN_DATE"] .. "|r") end
-    if self._repLabel then self._repLabel:SetText("|cffffd200" .. L["MEMBER_REPUTATION"] .. "|r") end
     if self._statusLabel then self._statusLabel:SetText("|cffffd200" .. L["MEMBER_STATUS"] .. "|r") end
     if self._zoneLabel then self._zoneLabel:SetText("|cffffd200" .. L["MEMBER_ZONE"] .. "|r") end
     if self._publicNoteLabel then self._publicNoteLabel:SetText("|cffffd200" .. L["MEMBER_PUBLIC_NOTE"] .. "|r") end
@@ -1113,9 +1080,6 @@ function MemberView:showMember(member, isLocked)
     local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     local rankName = member:getRankName() or ""
     self._rankVal:SetText(rankName ~= "" and rankName or (isEn and "Member" or "Membro"))
-
-    local repStanding = member:getRepStanding() or 0
-    self._repVal:SetText(getReputationText(repStanding))
 
     if member:isOnline() then
         self._statusVal:SetText("|cff40ff40Online|r")
