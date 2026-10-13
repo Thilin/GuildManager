@@ -23,6 +23,12 @@ function SettingsService:new(db, logRepository, memberService, guildRosterServic
     end
     instance._db.settings.notifyMemberLevelUp = false
 
+    -- Garante que a flag de mensagens de sincronização no chat inicie como false por padrão
+    if not instance._db.settings._syncChatFlagInit then
+        instance._db.settings.enableSyncChatLog = false
+        instance._db.settings._syncChatFlagInit = true
+    end
+
     instance._logRepository = logRepository
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService

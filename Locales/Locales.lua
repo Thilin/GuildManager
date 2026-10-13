@@ -240,9 +240,12 @@ Locales.strings["enUS"] = {
 
     -- Seção 9: Manutenção & Ferramentas
     ["SETTINGS_S9_HEADER"] = "|cffffd2009. MAINTENANCE & TOOLS|r",
-    ["SETTINGS_SYNC_CHAT_LOG"] = "Show dedicated 'Logs GM Sync' chat tab",
-    ["SETTINGS_SYNC_CHAT_LOG_TIP_TITLE"] = "Sync Chat Tab",
-    ["SETTINGS_SYNC_CHAT_LOG_TIP_DESC"] = "When enabled, creates a separate chat tab for real-time P2P sync logs. Uncheck to disable notifications and save chat resources.",
+    ["SETTINGS_SYNC_CHAT_LOG"] = "Show Sync Messages in Chat",
+    ["SETTINGS_SYNC_CHAT_LOG_TIP_TITLE"] = "Sync Chat Messages",
+    ["SETTINGS_SYNC_CHAT_LOG_TIP_DESC"] = "When enabled, displays real-time P2P sync notifications in the main chat. Changing this option requires reloading the UI.",
+    ["SETTINGS_RELOAD_SYNC_PROMPT"] = "Changing the sync messages in chat setting requires reloading the UI (/reload).\n\nDo you want to reload the UI now?",
+    ["RELOAD_UI"] = "Reload UI",
+    ["CANCEL"] = "Cancel",
     ["SETTINGS_PURGE_BTN"] = "Purge Old Logs",
     ["SETTINGS_FORCE_SCAN_BTN"] = "Force Scan Now",
     ["SETTINGS_RESET_DEFAULTS_BTN"] = "Reset to Defaults",
@@ -695,9 +698,12 @@ Locales.strings["ptBR"] = {
 
     -- Seção 9: Manutenção & Ferramentas
     ["SETTINGS_S9_HEADER"] = "|cffffd2009. SEGURANÇA & MANUTENÇÃO|r",
-    ["SETTINGS_SYNC_CHAT_LOG"] = "Ativar aba de chat exclusiva 'Logs GM Sync'",
-    ["SETTINGS_SYNC_CHAT_LOG_TIP_TITLE"] = "Aba de Chat do Sync",
-    ["SETTINGS_SYNC_CHAT_LOG_TIP_DESC"] = "Quando ativado, cria uma aba exclusiva no chat para mensagens de sincronização P2P. Desative para não exibir os logs e economizar recursos.",
+    ["SETTINGS_SYNC_CHAT_LOG"] = "Mostrar Mensagens de Sync no Chat",
+    ["SETTINGS_SYNC_CHAT_LOG_TIP_TITLE"] = "Mensagens de Sync no Chat",
+    ["SETTINGS_SYNC_CHAT_LOG_TIP_DESC"] = "Quando ativado, exibe notificações de sincronização P2P no chat principal. A alteração desta opção requer o recarregamento da interface (/reload).",
+    ["SETTINGS_RELOAD_SYNC_PROMPT"] = "Alterar a exibição de mensagens de sincronização no chat requer o recarregamento da interface (/reload).\n\nDeseja recarregar a interface agora?",
+    ["RELOAD_UI"] = "Recarregar UI",
+    ["CANCEL"] = "Cancelar",
     ["SETTINGS_PURGE_BTN"] = "Limpar Logs Antigos",
     ["SETTINGS_FORCE_SCAN_BTN"] = "Forçar Varredura Agora",
     ["SETTINGS_RESET_DEFAULTS_BTN"] = "Restaurar Padrões",

@@ -122,7 +122,7 @@ function SyncService:new(memberService, locationService, settingsService)
     return instance
 end
 
---- Verifica se a exibição de logs de sincronização na aba dedicada de chat está ativada nas configurações.
+--- Verifica se a exibição de logs de sincronização no chat está ativada nas configurações.
 ---@return boolean
 function SyncService:isChatLogEnabled()
     if self._settingsService and self._settingsService.getSettings then
@@ -137,7 +137,7 @@ function SyncService:isChatLogEnabled()
             return settings:isSyncChatLogEnabled()
         end
     end
-    return true
+    return false
 end
 
 --- Normaliza o nome do remetente removendo o sufixo de reino e espaços.
@@ -247,89 +247,17 @@ function SyncService:touchPeer(peerName)
     end
 end
 
-local SYNC_CHAT_NAME = "Logs GM Sync"
-
---- Localiza ou cria a aba de chat dedicada para as mensagens de sincronização.
---- NUNCA retorna DEFAULT_CHAT_FRAME ou ChatFrame1, garantindo que as mensagens de sync não apareçam na janela padrão.
---- Procura pela aba exclusiva "Logs GM Sync" ou cria uma nova aba com esse nome exato se a opção estiver ativada nas configurações.
+--- Retorna o chat frame padrão se a flag de exibição de sincronização no chat estiver ativa.
 ---@return table|nil
 function SyncService:getSyncChatFrame()
     if not self:isChatLogEnabled() then
         return nil
     end
-
-    if self._syncChatFrame and self._syncChatFrame.AddMessage and self._syncChatFrame ~= DEFAULT_CHAT_FRAME and self._syncChatFrame ~= _G.ChatFrame1 then
-        return self._syncChatFrame
-    end
-
-    local numWindows = NUM_CHAT_WINDOWS or 10
-
-    -- 1. Procura se a aba exclusiva "Logs GM Sync" já existe
-    for i = 1, numWindows do
-        local cf = _G["ChatFrame" .. i]
-        if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 then
-            local name = GetChatWindowInfo(i)
-            if name and name == SYNC_CHAT_NAME then
-                if ChatFrame_RemoveAllMessageGroups then
-                    pcall(ChatFrame_RemoveAllMessageGroups, cf)
-                end
-                if ChatFrame_RemoveAllChannels then
-                    pcall(ChatFrame_RemoveAllChannels, cf)
-                end
-                self._syncChatFrame = cf
-                return cf
-            end
-        end
-    end
-
-    -- 2. Migração: Se o usuário possuía uma aba antiga ("GuildManager", "GM Sync", "Sync", "Sincronização"), renomeia para "Logs GM Sync"
-    for i = 1, numWindows do
-        local cf = _G["ChatFrame" .. i]
-        if cf and cf ~= DEFAULT_CHAT_FRAME and cf ~= _G.ChatFrame1 then
-            local name = GetChatWindowInfo(i)
-            if name and (name == "GuildManager" or name == "GM Sync" or name == "Sync" or name == "Sincronização" or name == "Sincronizacao") then
-                if FCF_SetWindowName then
-                    pcall(FCF_SetWindowName, cf, SYNC_CHAT_NAME)
-                end
-                if ChatFrame_RemoveAllMessageGroups then
-                    pcall(ChatFrame_RemoveAllMessageGroups, cf)
-                end
-                if ChatFrame_RemoveAllChannels then
-                    pcall(ChatFrame_RemoveAllChannels, cf)
-                end
-                self._syncChatFrame = cf
-                return cf
-            end
-        end
-    end
-
-    -- 3. Cria automaticamente a nova aba exclusiva "Logs GM Sync" usando FCF_OpenNewWindow somente se ativado
-    if FCF_OpenNewWindow then
-        local ok, newFrame = pcall(FCF_OpenNewWindow, SYNC_CHAT_NAME)
-        if ok and newFrame and newFrame.AddMessage and newFrame ~= DEFAULT_CHAT_FRAME and newFrame ~= _G.ChatFrame1 then
-            -- Remove grupos convencionais (Say, Yell, Guild, Whispers, Party etc.) para mantê-la 100% exclusiva de Sync
-            if ChatFrame_RemoveAllMessageGroups then
-                pcall(ChatFrame_RemoveAllMessageGroups, newFrame)
-            end
-            if ChatFrame_RemoveAllChannels then
-                pcall(ChatFrame_RemoveAllChannels, newFrame)
-            end
-
-            local welcome = L("SYNC_LOG_TAB_CREATED", SYNC_CHAT_NAME)
-            local timeStr = date and date("%H:%M:%S")
-            local timePrefix = timeStr and string.format("|cff888888[%s]|r ", timeStr) or ""
-            newFrame:AddMessage(timePrefix .. welcome)
-
-            self._syncChatFrame = newFrame
-            return newFrame
-        end
-    end
-
-    return nil
+    return DEFAULT_CHAT_FRAME or _G.ChatFrame1
 end
 
---- Imprime a mensagem de sincronização exclusivamente na aba dedicada "Logs GM Sync" (nunca na janela padrão).
---- Se a opção estiver desativada nas configurações, nenhuma mensagem ou alerta é emitido.
+--- Imprime a mensagem de sincronização diretamente no chat principal caso a flag esteja ativada nas configurações.
+--- Se a flag estiver desativada (padrão), nenhuma mensagem de sincronização é emitida no chat.
 ---@param msg string
 function SyncService:printSyncNotification(msg)
     if not self:isChatLogEnabled() then
@@ -338,27 +266,14 @@ function SyncService:printSyncNotification(msg)
     if not msg or msg == "" then return end
 
     local targetFrame = self:getSyncChatFrame()
-    if not targetFrame or not targetFrame.AddMessage then
-        return
-    end
-
     local timeStr = date and date("%H:%M:%S")
     local timePrefix = timeStr and string.format("|cff888888[%s]|r ", timeStr) or ""
     local fullMsg = timePrefix .. msg
 
-    targetFrame:AddMessage(fullMsg)
-
-    -- Se a aba "Logs GM Sync" não estiver selecionada no momento, faz piscar para alertar o usuário
-    local selected = SELECTED_CHAT_FRAME or (FCF_GetCurrentChatFrame and FCF_GetCurrentChatFrame())
-    if targetFrame ~= selected then
-        if FCF_StartAlertFlash then
-            pcall(FCF_StartAlertFlash, targetFrame)
-        else
-            local tab = targetFrame.GetName and _G[targetFrame:GetName() .. "Tab"]
-            if tab and UIFrameFlash then
-                pcall(UIFrameFlash, tab, 0.25, 0.25, 2.5, true, 0.1, 0.1)
-            end
-        end
+    if targetFrame and targetFrame.AddMessage then
+        targetFrame:AddMessage(fullMsg)
+    elseif print then
+        print(fullMsg)
     end
 end
 
@@ -1039,9 +954,8 @@ function SyncService:initHooks()
             end
         end
 
-        -- Garante que a aba de chat dedicada para sincronização seja inicializada
-        local syncFrame = self:getSyncChatFrame()
-        if syncFrame and not self._sessionLogged then
+        -- Notifica o início de sessão no chat caso a flag esteja ativada
+        if self:isChatLogEnabled() and not self._sessionLogged then
             self._sessionLogged = true
             local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Player"
             self:printSyncNotification(L("SYNC_LOG_INIT", myName))

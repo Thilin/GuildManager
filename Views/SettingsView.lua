@@ -1016,6 +1016,55 @@ function SettingsView:createSettingsColumns()
     cbSyncChatLog:SetPoint("TOPLEFT", s9Sep, "BOTTOMLEFT", 0, -4)
     self._widgets.enableSyncChatLog = cbSyncChatLog
 
+    cbSyncChatLog:SetScript("OnClick", function(cb)
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or 856) end
+
+        local newVal = (cb:GetChecked() == true)
+        local oldVal = not newVal
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+
+        if StaticPopupDialogs and StaticPopup_Show then
+            StaticPopupDialogs["GM_CONFIRM_RELOAD_SYNC_CHAT"] = {
+                text = curL["SETTINGS_RELOAD_SYNC_PROMPT"] or "Alterar a exibição de mensagens de sincronização no chat requer o recarregamento da interface (/reload).\n\nDeseja recarregar a interface agora?",
+                button1 = curL["RELOAD_UI"] or _G.RELOADUI or "Recarregar UI",
+                button2 = curL["CANCEL"] or _G.CANCEL or "Cancelar",
+                OnAccept = function()
+                    if _G.GM and _G.GM.settingsService then
+                        _G.GM.settingsService:set("enableSyncChatLog", newVal)
+                    end
+                    if self._onSaveCallback then
+                        local formData = self:gatherFormData()
+                        formData.enableSyncChatLog = newVal
+                        self._onSaveCallback(formData, true)
+                    end
+                    if ReloadUI then
+                        ReloadUI()
+                    end
+                end,
+                OnCancel = function()
+                    cb:SetChecked(oldVal)
+                end,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+            }
+            StaticPopup_Show("GM_CONFIRM_RELOAD_SYNC_CHAT")
+        else
+            if _G.GM and _G.GM.settingsService then
+                _G.GM.settingsService:set("enableSyncChatLog", newVal)
+            end
+            if self._onSaveCallback then
+                local formData = self:gatherFormData()
+                formData.enableSyncChatLog = newVal
+                self._onSaveCallback(formData, true)
+            end
+            if ReloadUI then
+                ReloadUI()
+            end
+        end
+    end)
+
     -- Botões de Ação do Banco
     local purgeBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     purgeBtn:SetSize(170, 22)

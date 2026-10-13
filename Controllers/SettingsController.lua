@@ -36,7 +36,10 @@ function SettingsController:setupCallbacks()
     local view = self._settingsView
     local service = self._settingsService
 
-    view:setOnSaveCallback(function(formData)
+    view:setOnSaveCallback(function(formData, skipReloadPrompt)
+        local oldSyncChatLog = service:get("enableSyncChatLog") == true
+        local newSyncChatLog = formData and (formData.enableSyncChatLog == true)
+
         for key, val in pairs(formData) do
             service:set(key, val)
         end
@@ -66,9 +69,30 @@ function SettingsController:setupCallbacks()
         local savedMsg = curL["SETTINGS_STATUS_SAVED"] or "Settings saved and applied successfully!"
         print("|cff00ff00[GuildManager]|r " .. savedMsg)
         view:showStatus(savedMsg, false)
+
+        if not skipReloadPrompt and (oldSyncChatLog ~= newSyncChatLog) and StaticPopupDialogs and StaticPopup_Show then
+            StaticPopupDialogs["GM_CONFIRM_RELOAD_SYNC_CHAT"] = {
+                text = curL["SETTINGS_RELOAD_SYNC_PROMPT"] or "Alterar a exibição de mensagens de sincronização no chat requer o recarregamento da interface (/reload).\n\nDeseja recarregar a interface agora?",
+                button1 = curL["RELOAD_UI"] or _G.RELOADUI or "Recarregar UI",
+                button2 = curL["CANCEL"] or _G.CANCEL or "Cancelar",
+                OnAccept = function()
+                    if ReloadUI then ReloadUI() end
+                end,
+                OnCancel = function()
+                    service:set("enableSyncChatLog", oldSyncChatLog)
+                    view:renderSettings(service:getSettings(), service:getGuildStats())
+                end,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+            }
+            StaticPopup_Show("GM_CONFIRM_RELOAD_SYNC_CHAT")
+        end
     end)
 
     view:setOnResetCallback(function()
+        local wasSyncChatLog = service:get("enableSyncChatLog") == true
         service:resetToDefaults()
         local settings = service:getSettings()
         local stats = service:getGuildStats()
@@ -87,6 +111,26 @@ function SettingsController:setupCallbacks()
         local resetMsg = curL["SETTINGS_STATUS_RESTORED"] or "Settings restored to defaults!"
         print("|cffffff00[GuildManager]|r " .. resetMsg)
         view:showStatus(resetMsg, false)
+
+        if wasSyncChatLog and StaticPopupDialogs and StaticPopup_Show then
+            StaticPopupDialogs["GM_CONFIRM_RELOAD_SYNC_CHAT"] = {
+                text = curL["SETTINGS_RELOAD_SYNC_PROMPT"] or "Alterar a exibição de mensagens de sincronização no chat requer o recarregamento da interface (/reload).\n\nDeseja recarregar a interface agora?",
+                button1 = curL["RELOAD_UI"] or _G.RELOADUI or "Recarregar UI",
+                button2 = curL["CANCEL"] or _G.CANCEL or "Cancelar",
+                OnAccept = function()
+                    if ReloadUI then ReloadUI() end
+                end,
+                OnCancel = function()
+                    service:set("enableSyncChatLog", true)
+                    view:renderSettings(service:getSettings(), stats)
+                end,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+            }
+            StaticPopup_Show("GM_CONFIRM_RELOAD_SYNC_CHAT")
+        end
     end)
 
     view:setOnPurgeLogsCallback(function()
