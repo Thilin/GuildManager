@@ -533,40 +533,59 @@ function WorldMapView:getMapCanvas()
     return canvas, cw, ch
 end
 
---- Ajusta a ancoragem do botão da guilda no canto superior direito do WorldMapFrame.
+--- Ajusta a ancoragem dos botões do GuildManager no cabeçalho do WorldMapFrame (Peer Badge e Map Button).
+function WorldMapView:reanchorHeaderButtons()
+    if not WorldMapFrame then return end
+
+    local maxMinBtn = (WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.MaximizeMinimizeFrame)
+        or WorldMapFrame.MaximizeMinimizeFrame
+        or WorldMapFrameSizeDownButton
+        or WorldMapFrameSizeUpButton
+
+    local closeBtn = WorldMapFrameCloseButton
+        or (WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.CloseButton)
+        or WorldMapFrame.CloseButton
+
+    -- 1. Ancoragem do Badge de Membros com Addon (realtimeBadge)
+    if self._realtimeBadge then
+        self._realtimeBadge:ClearAllPoints()
+        self._realtimeBadge:SetFrameStrata("HIGH")
+        self._realtimeBadge:SetFrameLevel(3000)
+
+        if maxMinBtn and maxMinBtn:IsShown() then
+            self._realtimeBadge:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
+        elseif closeBtn and closeBtn:IsShown() then
+            self._realtimeBadge:SetPoint("RIGHT", closeBtn, "LEFT", -34, 0)
+        elseif maxMinBtn then
+            self._realtimeBadge:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
+        elseif closeBtn then
+            self._realtimeBadge:SetPoint("RIGHT", closeBtn, "LEFT", -34, 0)
+        else
+            self._realtimeBadge:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -175, -5)
+        end
+        self._realtimeBadge:Show()
+    end
+
+    -- 2. Ancoragem do Botão de Membros na Região (mapButton)
+    if self._mapButton then
+        self._mapButton:ClearAllPoints()
+        self._mapButton:SetFrameStrata("HIGH")
+        self._mapButton:SetFrameLevel(3000)
+
+        if self._realtimeBadge then
+            self._mapButton:SetPoint("RIGHT", self._realtimeBadge, "LEFT", -6, 0)
+        elseif maxMinBtn and maxMinBtn:IsShown() then
+            self._mapButton:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
+        elseif closeBtn and closeBtn:IsShown() then
+            self._mapButton:SetPoint("RIGHT", closeBtn, "LEFT", -34, 0)
+        else
+            self._mapButton:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -75, -5)
+        end
+    end
+end
+
 function WorldMapView:reanchorMapButton()
-    local mapButton = self._mapButton
-    if not mapButton or not WorldMapFrame then return end
-
-    mapButton:ClearAllPoints()
-    local anchorFrame = nil
-    if WorldMapFrame.MaximizeMinimizeFrame and WorldMapFrame.MaximizeMinimizeFrame:IsShown() then
-        anchorFrame = WorldMapFrame.MaximizeMinimizeFrame
-    elseif WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.MaximizeMinimizeFrame and WorldMapFrame.BorderFrame.MaximizeMinimizeFrame:IsShown() then
-        anchorFrame = WorldMapFrame.BorderFrame.MaximizeMinimizeFrame
-    elseif WorldMapFrameSizeDownButton and WorldMapFrameSizeDownButton:IsShown() then
-        anchorFrame = WorldMapFrameSizeDownButton
-    elseif WorldMapFrameSizeUpButton and WorldMapFrameSizeUpButton:IsShown() then
-        anchorFrame = WorldMapFrameSizeUpButton
-    elseif WorldMapFrameCloseButton and WorldMapFrameCloseButton:IsShown() then
-        anchorFrame = WorldMapFrameCloseButton
-    elseif WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.CloseButton and WorldMapFrame.BorderFrame.CloseButton:IsShown() then
-        anchorFrame = WorldMapFrame.BorderFrame.CloseButton
-    elseif WorldMapFrameCloseButton then
-        anchorFrame = WorldMapFrameCloseButton
-    elseif WorldMapFrame.CloseButton then
-        anchorFrame = WorldMapFrame.CloseButton
-    end
-
-    if anchorFrame then
-        local isCloseBtn = (anchorFrame == WorldMapFrameCloseButton)
-            or (WorldMapFrame.BorderFrame and anchorFrame == WorldMapFrame.BorderFrame.CloseButton)
-            or (anchorFrame == WorldMapFrame.CloseButton)
-        local xOffset = isCloseBtn and -32 or -6
-        mapButton:SetPoint("RIGHT", anchorFrame, "LEFT", xOffset, 0)
-    else
-        mapButton:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -65, -4)
-    end
+    self:reanchorHeaderButtons()
 end
 
 --- Cria ou obtém um pino persistente diretamente no canvas para o jogador remoto
@@ -688,10 +707,10 @@ function WorldMapView:ensureRealtimeBadge()
     if self._realtimeBadge or not WorldMapFrame then return end
 
     local badgeBtn = CreateFrame("Button", "GM_WorldMapPeerBadge", WorldMapFrame, "UIPanelButtonTemplate")
-    badgeBtn:SetSize(140, 22)
-    badgeBtn:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -180, -2)
+    badgeBtn:SetSize(126, 21)
     badgeBtn:SetFrameStrata("HIGH")
     badgeBtn:SetFrameLevel(3000)
+    badgeBtn:Show()
     local curL = (_G.GM and _G.GM.L) or _G.L or L
     badgeBtn:SetText(curL["MAP_BADGE_MEMBERS_ZERO"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Members (0)|r")
 
@@ -759,6 +778,15 @@ function WorldMapView:ensureRealtimeBadge()
     end)
 
     self._realtimeBadge = badgeBtn
+    self:reanchorHeaderButtons()
+
+    if not self._headerHooksInstalled then
+        self._headerHooksInstalled = true
+        if WorldMapFrame.HookScript then
+            WorldMapFrame:HookScript("OnShow", function() self:reanchorHeaderButtons() end)
+            WorldMapFrame:HookScript("OnSizeChanged", function() self:reanchorHeaderButtons() end)
+        end
+    end
 end
 
 --- Atualiza o texto do badge superior com a contagem ao vivo
@@ -774,6 +802,7 @@ function WorldMapView:updateRealtimeBadge()
     else
         self._realtimeBadge:SetText(cL["MAP_BADGE_MEMBERS_ZERO"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Members (0)|r")
     end
+    self:reanchorHeaderButtons()
 end
 
 --- Atualiza a renderização contínua de todos os pinos de jogadores remotos no mapa oficial da Blizzard

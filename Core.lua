@@ -111,6 +111,10 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         worldMapController:initHooks()
         chatMentionController:initHooks()
 
+        if minimapButton and minimapButton.initLocationListener then
+            minimapButton:initLocationListener(locationService)
+        end
+
         -- Registra o listener para atualização de idioma em tempo real ("na hora")
         if GM.RegisterLocaleListener then
             GM.RegisterLocaleListener(function(newLang)
@@ -146,9 +150,19 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                 if locationService then
                     locationService:toggleTestPeer()
                 end
+            elseif arg == "login" then
+                if minimapButton and minimapButton.flashPeerLogin then
+                    minimapButton:flashPeerLogin()
+                    print("|cff00ffff[GuildManager]|r Teste visual: Pulso de LOGIN (azul) no botão do minimapa.")
+                end
+            elseif arg == "logout" then
+                if minimapButton and minimapButton.flashPeerLogout then
+                    minimapButton:flashPeerLogout()
+                    print("|cffff2020[GuildManager]|r Teste visual: Pulso de LOGOUT (vermelho) no botão do minimapa.")
+                end
             else
                 local count = locationService and locationService:getPeerCount() or 0
-                print(string.format("|cff00ff00[GuildManager]|r Posições em tempo real ativas. Membros conectados: |cffffff00%d|r. Digite |cffffff00/gmloc test|r para alternar um membro simulado.", count))
+                print(string.format("|cff00ff00[GuildManager]|r Posições em tempo real ativas. Membros conectados: |cffffff00%d|r. Digite |cffffff00/gmloc test|r para alternar um membro simulado, ou |cffffff00/gmloc login|r / |cffffff00/gmloc logout|r para testar as animações.", count))
             end
         end
 
