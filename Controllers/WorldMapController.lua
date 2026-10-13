@@ -405,11 +405,13 @@ function WorldMapController:initHooks()
     if WorldMapFrame.OnMapChanged then
         pcall(hooksecurefunc, WorldMapFrame, "OnMapChanged", function()
             if self._worldMapView then self._worldMapView:updateRealtimePins() end
+            self:scanCurrentZone()
         end)
     end
     if WorldMapFrame.SetMapID then
         pcall(hooksecurefunc, WorldMapFrame, "SetMapID", function()
             if self._worldMapView then self._worldMapView:updateRealtimePins() end
+            self:scanCurrentZone()
         end)
     end
 
@@ -600,6 +602,36 @@ function WorldMapController:scanCurrentZone()
                 }
                 table.insert(regionMembers, data)
                 registerAddedName(mName)
+            end
+        end
+    end
+
+    -- 3. Membros que usam o AddOn (LocationService peers, incluindo simulações de teste como /gmloc test)
+    if self._locationService then
+        local peers = self._locationService:getPeers() or {}
+        for pName, p in pairs(peers) do
+            local cleanPName = cleanString(pName)
+            local lowerPName = pName:lower()
+            if not addedByName[lowerPName] and not addedByName[cleanPName] and not (self._locationService.isSelf and self._locationService:isSelf(pName)) then
+                local peerZone = p.zoneName or ""
+                local match = isWorld or self:isZoneMatch(peerZone, currentMapName, currentMapID)
+                if match then
+                    local pData = {
+                        name = p.name,
+                        level = p.level or 1,
+                        class = p.classFile or "WARRIOR",
+                        classDisplayName = p.classFile or "Warrior",
+                        rankName = (p.guild and p.guild ~= "") and p.guild or "GPS AddOn",
+                        publicNote = "Sincronizado via GPS AddOn",
+                        officerNote = "",
+                        zone = peerZone,
+                        isOnline = true,
+                        isSelf = false,
+                        isAddonUser = true,
+                    }
+                    table.insert(regionMembers, pData)
+                    registerAddedName(pName)
+                end
             end
         end
     end

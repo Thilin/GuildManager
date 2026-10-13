@@ -479,18 +479,15 @@ function LocationService:toggleTestPeer()
         return false
     end
 
-    local mapID = nil
-    if WorldMapFrame and WorldMapFrame:IsShown() then
-        if WorldMapFrame.GetMapID then
+    local playerMapID, px, py = self:getLocalPosition()
+    local mapID = playerMapID
+    if not mapID or mapID <= 0 then
+        if WorldMapFrame and WorldMapFrame:IsShown() and WorldMapFrame.GetMapID then
             local ok, id = pcall(WorldMapFrame.GetMapID, WorldMapFrame)
-            if ok and id and id > 0 then mapID = id end
+            if ok and id and id > 0 and id ~= 947 and id ~= 946 and id ~= 1414 and id ~= 1415 then
+                mapID = id
+            end
         end
-        if not mapID and WorldMapFrame.mapID and WorldMapFrame.mapID > 0 then
-            mapID = WorldMapFrame.mapID
-        end
-    end
-    if not mapID then
-        mapID = select(1, self:getLocalPosition())
     end
     mapID = mapID or 1429
 

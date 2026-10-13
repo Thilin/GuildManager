@@ -112,26 +112,47 @@ local function GetCurrentWorldMapID()
     return nil
 end
 
---- Identifica se o mapa é um continente, mundo ou mapa global
-local function IsContinentOrWorld(mapID)
+--- Verifica se o mapa é o Mapa Mundi (Azeroth, Cósmico ou Mapa Global)
+local function IsWorldOrCosmicMap(mapID)
     if not mapID then return false end
-    if mapID == 947 or mapID == 946 or mapID == 1414 or mapID == 1415 or mapID == 1945 or mapID == 113 then
-        return true
-    end
+    if mapID == 947 or mapID == 946 then return true end
     if C_Map and C_Map.GetMapInfo then
         local ok, info = pcall(C_Map.GetMapInfo, mapID)
         if ok and info and info.mapType ~= nil then
-            if info.mapType == 0 or info.mapType == 1 or info.mapType == 2 then
+            if info.mapType == 0 or info.mapType == 1 then
                 return true
             end
             if Enum and Enum.UIMapType then
-                if info.mapType == Enum.UIMapType.Continent or info.mapType == Enum.UIMapType.World or info.mapType == Enum.UIMapType.Cosmic then
+                if info.mapType == Enum.UIMapType.Cosmic or info.mapType == Enum.UIMapType.World then
                     return true
                 end
             end
         end
     end
     return false
+end
+
+--- Verifica se o mapa é um continente
+local function IsContinentMap(mapID)
+    if not mapID then return false end
+    if mapID == 1414 or mapID == 1415 or mapID == 1945 or mapID == 113 or mapID == 424 or mapID == 572 then
+        return true
+    end
+    if C_Map and C_Map.GetMapInfo then
+        local ok, info = pcall(C_Map.GetMapInfo, mapID)
+        if ok and info and info.mapType ~= nil then
+            if info.mapType == 2 then return true end
+            if Enum and Enum.UIMapType and info.mapType == Enum.UIMapType.Continent then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--- Identifica se o mapa é um continente, mundo ou mapa global
+local function IsContinentOrWorld(mapID)
+    return IsWorldOrCosmicMap(mapID) or IsContinentMap(mapID)
 end
 
 --- Verifica se o mapa de origem é uma subzona/micro-mapa dentro da zona visualizada
@@ -148,16 +169,19 @@ end
 
 --- Extrai a posição mundial a partir da posição no mapa de forma segura
 local function SafeGetWorldPos(sourceMapID, sourceX, sourceY)
-    if not (C_Map and C_Map.GetWorldPosFromMapPos) then return nil, nil end
+    if not (C_Map and C_Map.GetWorldPosFromMapPos) or not sourceMapID or not sourceX or not sourceY then
+        return nil, nil
+    end
     local v = MakeVector2D(sourceX, sourceY)
     local ok, r1, r2 = pcall(C_Map.GetWorldPosFromMapPos, sourceMapID, v)
-    if not ok or not r1 then return nil, nil end
-
-    if type(r1) == "number" and (type(r2) == "table" or type(r2) == "userdata") then
-        return r1, r2
-    elseif (type(r1) == "table" or type(r1) == "userdata") and type(r2) == "number" then
-        return r2, r1
-    elseif (type(r1) == "table" or type(r1) == "userdata") then
+    if ok and r1 and r2 then
+        if type(r1) == "number" and (type(r2) == "table" or type(r2) == "userdata") then
+            return r1, r2
+        elseif (type(r1) == "table" or type(r1) == "userdata") and type(r2) == "number" then
+            return r2, r1
+        end
+    end
+    if ok and (type(r1) == "table" or type(r1) == "userdata") then
         local cID = 0
         if C_Map.GetMapInfo then
             local info = C_Map.GetMapInfo(sourceMapID)
@@ -165,18 +189,55 @@ local function SafeGetWorldPos(sourceMapID, sourceX, sourceY)
         end
         return cID, r1
     end
+
+    -- Fallback: se falhar na subzona, tenta calcular via mapa pai
+    if C_Map and C_Map.GetMapInfo then
+        local okInfo, info = pcall(C_Map.GetMapInfo, sourceMapID)
+        if okInfo and info and info.parentMapID and info.parentMapID > 0 and info.parentMapID ~= sourceMapID then
+            if C_Map.GetMapRectOnMap then
+                local okR, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, sourceMapID, info.parentMapID)
+                if okR and minX and maxX and minY and maxY and (maxX > minX) and (maxY > minY) then
+                    local parentX = minX + sourceX * (maxX - minX)
+                    local parentY = minY + sourceY * (maxY - minY)
+                    local vParent = MakeVector2D(parentX, parentY)
+                    local okP, pr1, pr2 = pcall(C_Map.GetWorldPosFromMapPos, info.parentMapID, vParent)
+                    if okP and pr1 and pr2 then
+                        if type(pr1) == "number" and (type(pr2) == "table" or type(pr2) == "userdata") then
+                            return pr1, pr2
+                        elseif (type(pr1) == "table" or type(pr1) == "userdata") and type(pr2) == "number" then
+                            return pr2, pr1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     return nil, nil
 end
 
---- Extrai as coordenadas (x, y) normalizadas no mapa alvo de forma universal
+--- Extrai as coordenadas (x, y) normalizadas no mapa alvo de forma universal e robusta
 local function SafeGetMapPos(continentID, worldPos, targetMapID)
-    if not (C_Map and C_Map.GetMapPosFromWorldPos) then return nil, nil end
-    local ok, r1, r2 = pcall(C_Map.GetMapPosFromWorldPos, continentID, worldPos, targetMapID)
-    if not ok or not r1 then return nil, nil end
-
-    if type(r1) == "number" and type(r2) == "number" then
-        return r1, r2
+    if not (C_Map and C_Map.GetMapPosFromWorldPos) or not worldPos or not targetMapID then
+        return nil, nil
     end
+    local ok, r1, r2 = pcall(C_Map.GetMapPosFromWorldPos, continentID, worldPos, targetMapID)
+    if not ok then return nil, nil end
+
+    -- Caso 1: r1 é targetMapID (número) e r2 é Vector2D (tabela ou userdata) [padrão nativo do WoW]
+    if type(r2) == "table" or type(r2) == "userdata" then
+        if r2.GetXY then
+            local okXY, x, y = pcall(r2.GetXY, r2)
+            if okXY and type(x) == "number" and type(y) == "number" then
+                return x, y
+            end
+        end
+        if type(r2.x) == "number" and type(r2.y) == "number" then
+            return r2.x, r2.y
+        end
+    end
+
+    -- Caso 2: r1 é Vector2D (tabela ou userdata)
     if type(r1) == "table" or type(r1) == "userdata" then
         if r1.GetXY then
             local okXY, x, y = pcall(r1.GetXY, r1)
@@ -188,10 +249,82 @@ local function SafeGetMapPos(continentID, worldPos, targetMapID)
             return r1.x, r1.y
         end
     end
+
+    -- Caso 3: r1 e r2 são diretamente números x, y
+    if type(r1) == "number" and type(r2) == "number" then
+        return r1, r2
+    end
+
     return nil, nil
 end
 
---- Traduz coordenadas entre zonas, continentes e subzonas no mapa oficial da Blizzard
+-- Parâmetros oficiais de projeção para o Mapa Mundi de Azeroth (mapID 947)
+-- Baseado no UIMapAssignment da Blizzard e HereBeDragons-2.0
+local AZEROTH_WORLD_MAP_DATA = {
+    -- Eastern Kingdoms (Reinos do Leste) - instance 0
+    [0] = { width = 44688.53, height = 29795.11, left = 32601.04, top = 9894.93 },
+    -- Kalimdor - instance 1
+    [1] = { width = 44878.66, height = 29916.10, left = 8723.96, top = 14824.53 },
+    -- Northrend (Nortúndria) - instance 571
+    [571] = { width = 47662.70, height = 31772.19, left = 25198.53, top = 11072.07 },
+    -- Pandaria - instance 870
+    [870] = { width = 53103.22, height = 35408.03, left = 28648.80, top = 30726.23 },
+}
+
+-- Compatibilidade dinâmica com versões de cliente
+local buildNum = tonumber((select(4, GetBuildInfo()))) or 11506
+if buildNum >= 30000 and buildNum < 50000 then
+    -- Wrath / Cata
+    AZEROTH_WORLD_MAP_DATA[0] = { width = 48033.24, height = 32020.80, left = 36867.97, top = 14848.84 }
+    AZEROTH_WORLD_MAP_DATA[1] = { width = 47908.72, height = 31935.28, left = 8552.61, top = 18467.83 }
+elseif buildNum >= 100000 then
+    -- Retail
+    AZEROTH_WORLD_MAP_DATA[0] = { width = 76153.14, height = 50748.62, left = 65008.24, top = 23827.51 }
+    AZEROTH_WORLD_MAP_DATA[1] = { width = 77621.12, height = 51854.98, left = 12444.40, top = 28030.61 }
+end
+
+--- Extrai coordenadas mundiais absolutas (northSouth, westEast) em jardas de forma segura
+local function ExtractWorldCoordinates(worldPos)
+    if not worldPos then return nil, nil end
+    local northSouth, westEast = nil, nil
+    if worldPos.GetXY then
+        local ok, r1, r2 = pcall(worldPos.GetXY, worldPos)
+        if ok and type(r1) == "number" and type(r2) == "number" then
+            northSouth, westEast = r1, r2
+        end
+    end
+    if not northSouth and type(worldPos.x) == "number" and type(worldPos.y) == "number" then
+        northSouth, westEast = worldPos.x, worldPos.y
+    end
+    return northSouth, westEast
+end
+
+--- Mapeia continentID / uiMapID para instanceID de coordenadas mundiais
+local function GetInstanceIDForContinent(continentID, sourceMapID)
+    if continentID == 0 or continentID == 1 or continentID == 571 or continentID == 870 or continentID == 530 then
+        return continentID
+    end
+    if continentID == 1415 then return 0 end
+    if continentID == 1414 then return 1 end
+    if continentID == 113 then return 571 end
+    if continentID == 1945 then return 530 end
+
+    if sourceMapID and C_Map and C_Map.GetMapInfo then
+        local cur = sourceMapID
+        for _ = 1, 6 do
+            local info = C_Map.GetMapInfo(cur)
+            if not info or not info.parentMapID or info.parentMapID == 0 then break end
+            if info.parentMapID == 1415 then return 0 end
+            if info.parentMapID == 1414 then return 1 end
+            if info.parentMapID == 113 then return 571 end
+            if info.parentMapID == 1945 then return 530 end
+            cur = info.parentMapID
+        end
+    end
+    return continentID or 0
+end
+
+--- Traduz coordenadas entre zonas, continentes, subzonas e Mapa Mundi oficial da Blizzard
 ---@param sourceMapID number
 ---@param sourceX number
 ---@param sourceY number
@@ -200,30 +333,115 @@ end
 local function TranslateCoordsToViewMap(sourceMapID, sourceX, sourceY, viewMapID)
     if not sourceMapID or not viewMapID or not sourceX or not sourceY then return nil, nil end
 
-    -- Caso 1: Mesma zona exata
+    -- Nível 1: Mesma zona exata
     if sourceMapID == viewMapID then
         return sourceX, sourceY
     end
 
-    -- Caso 2: O mapa visualizado é um CONTINENTE ou MUNDO (ex: Kalimdor, Reinos do Leste)
-    if IsContinentOrWorld(viewMapID) then
-        local continentID, worldPos = SafeGetWorldPos(sourceMapID, sourceX, sourceY)
-        if not continentID or not worldPos then return nil, nil end
-
-        local mx, my = SafeGetMapPos(continentID, worldPos, viewMapID)
-        if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
-            return mx, my
+    -- Nível 2: Bounding box direto do mapa via C_Map.GetMapRectOnMap (nativo da Blizzard)
+    if C_Map and C_Map.GetMapRectOnMap then
+        local okR, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, sourceMapID, viewMapID)
+        if okR and minX and maxX and minY and maxY and (maxX > minX) and (maxY > minY) then
+            local rx = minX + sourceX * (maxX - minX)
+            local ry = minY + sourceY * (maxY - minY)
+            if rx >= 0 and rx <= 1 and ry >= 0 and ry <= 1 then
+                return rx, ry
+            end
         end
-        return nil, nil
     end
 
-    -- Caso 3: O jogador remoto está em uma micro-zona/caverna cujo mapa-mãe é a zona visualizada
+    -- Nível 3: Projeção direta para MAPA MUNDI (Azeroth 947 ou Cósmico 946)
+    if IsWorldOrCosmicMap(viewMapID) then
+        local continentID, worldPos = SafeGetWorldPos(sourceMapID, sourceX, sourceY)
+        if continentID and worldPos then
+            -- 3A. Tenta conversão nativa da API se suportada pelo cliente para o mapa alvo
+            local mx, my = SafeGetMapPos(continentID, worldPos, viewMapID)
+            if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
+                return mx, my
+            end
+
+            -- 3B. Projeção matemática precisa do Mapa Mundi de Azeroth (mapID 947) via coordenadas mundiais
+            local instID = GetInstanceIDForContinent(continentID, sourceMapID)
+            local projData = AZEROTH_WORLD_MAP_DATA[instID]
+            if projData and projData.width > 0 and projData.height > 0 then
+                local northSouth, westEast = ExtractWorldCoordinates(worldPos)
+                if northSouth and westEast then
+                    local azX = (projData.left - westEast) / projData.width
+                    local azY = (projData.top - northSouth) / projData.height
+
+                    if viewMapID == 947 or viewMapID ~= 946 then
+                        if azX >= 0 and azX <= 1 and azY >= 0 and azY <= 1 then
+                            return azX, azY
+                        end
+                    elseif viewMapID == 946 then
+                        -- Projeção do Mapa Mundi de Azeroth para o Mapa Cósmico (946)
+                        if C_Map and C_Map.GetMapRectOnMap then
+                            local okC, cMinX, cMaxX, cMinY, cMaxY = pcall(C_Map.GetMapRectOnMap, 947, 946)
+                            if okC and cMinX and cMaxX and cMinY and cMaxY and (cMaxX > cMinX) and (cMaxY > cMinY) then
+                                local cx = cMinX + azX * (cMaxX - cMinX)
+                                local cy = cMinY + azY * (cMaxY - cMinY)
+                                if cx >= 0 and cx <= 1 and cy >= 0 and cy <= 1 then
+                                    return cx, cy
+                                end
+                            end
+                        end
+                        if azX >= 0 and azX <= 1 and azY >= 0 and azY <= 1 then
+                            return azX, azY
+                        end
+                    end
+                end
+            end
+
+            -- 3C. Caso seja Terralém (Outland 530) visualizada no mapa cósmico (946)
+            if instID == 530 and (viewMapID == 946 or viewMapID == 947) then
+                if C_Map and C_Map.GetMapRectOnMap then
+                    local okO, oMinX, oMaxX, oMinY, oMaxY = pcall(C_Map.GetMapRectOnMap, 1945, viewMapID)
+                    if okO and oMinX and oMaxX and oMinY and oMaxY then
+                        local ox, oy = SafeGetMapPos(530, worldPos, 1945)
+                        if ox and oy then
+                            local rx = oMinX + ox * (oMaxX - oMinX)
+                            local ry = oMinY + oy * (oMaxY - oMinY)
+                            if rx >= 0 and rx <= 1 and ry >= 0 and ry <= 1 then
+                                return rx, ry
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Nível 4: Visualização em Continente (ex: Kalimdor 1414, Reinos do Leste 1415, Nortúndria 113)
+    if IsContinentMap(viewMapID) then
+        local continentID, worldPos = SafeGetWorldPos(sourceMapID, sourceX, sourceY)
+        if continentID and worldPos then
+            local mx, my = SafeGetMapPos(continentID, worldPos, viewMapID)
+            if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
+                return mx, my
+            end
+        end
+    end
+
+    -- Nível 5: Micro-zona ou caverna cujo mapa pai é a zona visualizada
     if IsChildOfViewZone(viewMapID, sourceMapID) then
         local continentID, worldPos = SafeGetWorldPos(sourceMapID, sourceX, sourceY)
         if continentID and worldPos then
             local mx, my = SafeGetMapPos(continentID, worldPos, viewMapID)
             if mx and my and mx >= 0 and mx <= 1 and my >= 0 and my <= 1 then
                 return mx, my
+            end
+        end
+    end
+
+    -- Nível 6: Resolução recursiva subindo pela árvore de pais (subzona -> zona -> mapa visualizado)
+    if C_Map and C_Map.GetMapInfo then
+        local info = C_Map.GetMapInfo(sourceMapID)
+        if info and info.parentMapID and info.parentMapID > 0 and info.parentMapID ~= sourceMapID then
+            local okR, minX, maxX, minY, maxY = pcall(C_Map.GetMapRectOnMap, sourceMapID, info.parentMapID)
+            if okR and minX and maxX and minY and maxY and (maxX > minX) and (maxY > minY) then
+                local px = minX + sourceX * (maxX - minX)
+                local py = minY + sourceY * (maxY - minY)
+                return TranslateCoordsToViewMap(info.parentMapID, px, py, viewMapID)
             end
         end
     end
@@ -370,6 +588,7 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
     pin:SetFrameStrata("HIGH")
     pin:SetFrameLevel(2500)
     pin:EnableMouse(true)
+    pin:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
     -- Glow/Halo pulsante com a cor da classe
     local glow = pin:CreateTexture(nil, "BACKGROUND", nil, -1)
@@ -415,7 +634,8 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
 
         GameTooltip:SetOwner(p, "ANCHOR_RIGHT")
         GameTooltip:ClearLines()
-        GameTooltip:AddLine(string.format("%s%s|r", c.hex, d.name), 1, 1, 1)
+        local selfTag = d.isSelf and " |cff00ff00(Você)|r" or ""
+        GameTooltip:AddLine(string.format("%s%s|r%s", c.hex, d.name, selfTag), 1, 1, 1)
 
         if d.guild and d.guild ~= "" then
             GameTooltip:AddLine(string.format("|cff20ff20<%s>|r", d.guild), 0.2, 1, 0.2)
@@ -432,6 +652,9 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
 
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(curL["MAP_PIN_LCLICK_WHISPER"] or "|cffaaaaaaLeft-Click to whisper|r", 0.6, 0.6, 0.6)
+        if d.mapID and not d.isSelf then
+            GameTooltip:AddLine(curL["MAP_PIN_RCLICK_ZOOM"] or "|cff00e5ffRight-Click to view member's zone|r", 0.4, 0.8, 1.0)
+        end
         GameTooltip:AddLine(curL["MAP_PIN_SYNC_TITLE"] or "|cff00ff00GuildManager • Real-Time Sync|r", 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
@@ -441,7 +664,15 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
     end)
 
     pin:SetScript("OnClick", function(p, btn)
-        if (btn == "LeftButton" or not btn) and p.peerData and p.peerData.name then
+        if not p.peerData then return end
+        if btn == "RightButton" and p.peerData.mapID and WorldMapFrame and WorldMapFrame.SetMapID then
+            local currentMapID = GetCurrentWorldMapID()
+            if p.peerData.mapID ~= currentMapID then
+                WorldMapFrame:SetMapID(p.peerData.mapID)
+                return
+            end
+        end
+        if (btn == "LeftButton" or not btn) and p.peerData.name then
             if ChatFrame_OpenChat then
                 ChatFrame_OpenChat("/w " .. p.peerData.name .. " ")
             end
@@ -558,8 +789,24 @@ function WorldMapView:updateRealtimePins()
     local viewMapID = GetCurrentWorldMapID()
     if not viewMapID then return end
 
-    local peers = locService:getPeers() or {}
+    -- Respeita a opção de marcadores nas configurações
+    local showPins = true
+    if _G.GM and _G.GM.settingsService then
+        if _G.GM.settingsService:get("showMapPins") == false then
+            showPins = false
+        end
+    end
 
+    if not showPins then
+        self:clearPins()
+        self:updateRealtimeBadge()
+        return
+    end
+
+    local peers = locService:getPeers() or {}
+    local renderedPins = {}
+
+    -- 1. Renderiza os pinos de membros remotos que usam o AddOn
     for name, peer in pairs(peers) do
         if not (locService and locService.isSelf and locService:isSelf(peer.name)) then
             local rx, ry = TranslateCoordsToViewMap(peer.mapID, peer.x, peer.y, viewMapID)
@@ -584,16 +831,77 @@ function WorldMapView:updateRealtimePins()
 
                 pin.label:SetText(string.format("%s%s|r", c.hex or "|cffffffff", peer.name))
                 pin:Show()
+                renderedPins[name] = true
             else
                 pin:Hide()
             end
         end
     end
 
-    -- Esconde pinos de jogadores que não estão mais conectados
+    -- 2. Renderiza o próprio jogador no Mapa Mundi (caso Blizzard não desenhe a seta nativa)
+    local highlightSelf = true
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("highlightSelfOnMap") == false then
+        highlightSelf = false
+    end
+
+    local selfPinName = "__GM_SELF_PLAYER__"
+    if highlightSelf and IsWorldOrCosmicMap(viewMapID) then
+        local myMapID, myX, myY, myFacing = locService:getLocalPosition()
+        if myMapID and myX and myY then
+            local rx, ry = TranslateCoordsToViewMap(myMapID, myX, myY, viewMapID)
+            if rx and ry then
+                local selfPin = self:getOrCreateNamedPin(selfPinName, canvas)
+                local _, myClass = UnitClass("player")
+                local cls = (myClass or "WARRIOR"):upper()
+                local myName = UnitName("player") or "Você"
+                local myGuild = (GetGuildInfo and GetGuildInfo("player")) or ""
+
+                selfPin.peerData = {
+                    name = myName,
+                    isSelf = true,
+                    mapID = myMapID,
+                    x = myX,
+                    y = myY,
+                    facing = myFacing or 0,
+                    classFile = cls,
+                    level = UnitLevel("player") or 1,
+                    race = select(1, UnitRace("player")) or "",
+                    guild = myGuild,
+                    zoneName = GetRealZoneText() or GetZoneText() or "Azeroth",
+                    lastSeen = GetTime and GetTime() or 0,
+                }
+
+                selfPin:ClearAllPoints()
+                selfPin:SetPoint("CENTER", canvas, "TOPLEFT", rx * cw, -ry * ch)
+
+                selfPin.arrow:SetVertexColor(1.0, 0.85, 0.20, 1.0)
+                selfPin.glow:SetVertexColor(1.0, 0.85, 0.20, 0.95)
+
+                ApplyClassIcon(selfPin.classIcon, cls)
+                if selfPin.arrow.SetRotation then
+                    pcall(selfPin.arrow.SetRotation, selfPin.arrow, myFacing or 0)
+                end
+
+                selfPin.label:SetText(string.format("|cffffd200%s (Você)|r", myName))
+                selfPin:Show()
+                renderedPins[selfPinName] = true
+            else
+                local p = self._pins and self._pins[selfPinName]
+                if p then p:Hide() end
+            end
+        else
+            local p = self._pins and self._pins[selfPinName]
+            if p then p:Hide() end
+        end
+    else
+        local p = self._pins and self._pins[selfPinName]
+        if p then p:Hide() end
+    end
+
+    -- Esconde pinos que não foram renderizados nesta passada
     if self._pins then
         for name, pin in pairs(self._pins) do
-            if not peers[name] then
+            if not renderedPins[name] then
                 pin:Hide()
             end
         end
