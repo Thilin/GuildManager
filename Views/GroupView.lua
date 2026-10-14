@@ -195,21 +195,36 @@ local function getRoleFormatted(role)
     return "|cff888888[-]|r"
 end
 
---- Busca um membro na lista de membros da guilda por nome (tolerante a realms e maiúsculas).
+--- Busca um membro na lista de membros da guilda por nome (valida nome e sobrenome).
 function GroupView:findGuildMember(name)
     if not name or name == "" then return nil end
     local clean = (name:match("^[^-]+") or name):match("^%s*(.-)%s*$")
     local cleanLower = clean:lower()
-    local firstClean = (clean:match("^(%S+)") or clean):lower()
 
+    -- 1. Busca exata / case-insensitive pelo nome completo (nome e sobrenome)
     for _, m in ipairs(self._guildMembers or {}) do
         local mName = m:getName() or ""
         local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
-        local mFirst = (mClean:match("^(%S+)") or mClean):lower()
-        if mClean:lower() == cleanLower or mFirst == firstClean then
+        if mClean:lower() == cleanLower then
             return m
         end
     end
+
+    -- 2. Se a busca não tem espaço (apenas primeiro nome), tenta resolver nome completo único
+    if not clean:find("%s") and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
+        local full = _G.GM.memberService:resolveFullName(clean)
+        if full and full ~= "" and full:find("%s") then
+            local fullLower = full:lower()
+            for _, m in ipairs(self._guildMembers or {}) do
+                local mName = m:getName() or ""
+                local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+                if mClean:lower() == fullLower then
+                    return m
+                end
+            end
+        end
+    end
+
     return nil
 end
 
@@ -234,15 +249,19 @@ function GroupView:resolveMemberClass(name, fallbackClass)
 
     local clean = name:match("^[^-]+") or name
     clean = clean:match("^%s*(.-)%s*$") or clean
+    if not clean:find("%s") and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
+        local full = _G.GM.memberService:resolveFullName(clean)
+        if full and full ~= "" and full:find("%s") then
+            clean = full
+        end
+    end
     local cleanLower = clean:lower()
-    local firstCleanLower = (clean:match("^(%S+)") or clean):lower()
 
     -- 1. Busca na lista em cache de membros da guilda (self._guildMembers)
     for _, m in ipairs(self._guildMembers or {}) do
         local mName = m:getName() or ""
         local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
-        local mFirst = (mClean:match("^(%S+)") or mClean):lower()
-        if mClean:lower() == cleanLower or mFirst == firstCleanLower then
+        if mClean:lower() == cleanLower then
             local c = m:getClass()
             if c and c ~= "" then
                 local tok = CLASS_NAME_TO_TOKEN[c:upper()] or c:upper()
@@ -266,7 +285,7 @@ function GroupView:resolveMemberClass(name, fallbackClass)
             for _, cand in ipairs(_G.GM.memberService:getAllMembers() or {}) do
                 local cName = cand:getName() or ""
                 local cClean = (cName:match("^[^-]+") or cName):match("^%s*(.-)%s*$") or cName
-                if cClean:lower() == cleanLower or (cClean:match("^(%S+)") or ""):lower() == firstCleanLower then
+                if cClean:lower() == cleanLower then
                     m = cand
                     break
                 end
@@ -308,8 +327,7 @@ function GroupView:resolveMemberClass(name, fallbackClass)
             local gName, _, _, _, gClassDisp, _, _, _, _, _, gClass = GetGuildRosterInfo(i)
             if gName then
                 local gClean = (gName:match("^[^-]+") or gName):match("^%s*(.-)%s*$") or gName
-                local gFirst = (gClean:match("^(%S+)") or gClean):lower()
-                if gClean:lower() == cleanLower or gFirst == firstCleanLower then
+                if gClean:lower() == cleanLower then
                     if gClass and gClass ~= "" then
                         local tok = CLASS_NAME_TO_TOKEN[gClass:upper()] or gClass:upper()
                         if CLASS_ICON_COORDS[tok] then return tok end

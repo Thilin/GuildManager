@@ -65,6 +65,20 @@ function MemberRepository:findByName(name)
         return member
     end
 
+    -- Fallback case-insensitive se a chave exata não foi encontrada
+    local clean = name:match("^[^-]+") or name
+    clean = clean:match("^%s*(.-)%s*$") or clean
+    local cleanLower = clean:lower()
+    for mName, raw in pairs(self._db.members) do
+        local mClean = mName:match("^[^-]+") or mName
+        mClean = mClean:match("^%s*(.-)%s*$") or mClean
+        if mClean:lower() == cleanLower then
+            local member = self._cache[mName] or Member:new(raw)
+            self._cache[mName] = member
+            return member
+        end
+    end
+
     return nil
 end
 

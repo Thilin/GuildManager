@@ -126,8 +126,9 @@ function LocationService:getGuildAddonUsers()
     local users = {}
     local now = GetTime and GetTime() or 0
 
-    -- Adiciona o jogador local
-    local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Você"
+    -- Adiciona o jogador local com nome completo (nome e sobrenome)
+    local myFullName = self:getLocalPlayerFullName()
+    local myName = (myFullName and myFullName ~= "") and myFullName or (self._myPlayerName or (UnitName and UnitName("player")) or "Você")
     local _, myClass = UnitClass and UnitClass("player") or nil
     local myLevel = UnitLevel and UnitLevel("player") or 1
     local myZone = GetRealZoneText and GetRealZoneText() or ""
@@ -251,6 +252,43 @@ function LocationService:getLocalPosition()
     return mapID, x, y, facing
 end
 
+--- Obtém o nome completo (nome e sobrenome) do jogador local
+---@return string
+function LocationService:getLocalPlayerFullName()
+    if self._myFullName and self._myFullName ~= "" and self._myFullName:find("%s") then
+        return self._myFullName
+    end
+
+    local myGUID = UnitGUID and UnitGUID("player")
+    if myGUID and myGUID ~= "" and self._memberService then
+        if self._memberService.getMemberByGuid then
+            local m = self._memberService:getMemberByGuid(myGUID)
+            if m and m:getName() and m:getName() ~= "" and m:getName():find("%s") then
+                self._myFullName = m:getName()
+                return self._myFullName
+            end
+        end
+        if self._memberService.resolvePlayerFullName then
+            local res = self._memberService:resolvePlayerFullName()
+            if res and res ~= "" and res:find("%s") then
+                self._myFullName = res
+                return self._myFullName
+            end
+        end
+    end
+
+    if _G.GM and _G.GM.memberController and _G.GM.memberController.resolvePlayerFullName then
+        local res = _G.GM.memberController:resolvePlayerFullName()
+        if res and res ~= "" and res:find("%s") then
+            self._myFullName = res
+            return self._myFullName
+        end
+    end
+
+    local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
+    return myName
+end
+
 --- Transmite as coordenadas do jogador em tempo real para todos os canais disponíveis
 ---@param force boolean|nil
 function LocationService:sendPosition(force)
@@ -307,9 +345,10 @@ function LocationService:sendPosition(force)
         end
     end
 
-    -- Payload oficial compacto: POS:mapID:x:y:facing:class:level:race:guild
-    local payload = string.format("POS:%d:%.4f:%.4f:%.2f:%s:%d:%s:%s",
-        mapID, x, y, facing, myClass, myLevel, myRace, myGuild
+    -- Payload oficial compacto: POS:mapID:x:y:facing:class:level:race:guild:fullName
+    local myFullName = self:getLocalPlayerFullName()
+    local payload = string.format("POS:%d:%.4f:%.4f:%.2f:%s:%d:%s:%s:%s",
+        mapID, x, y, facing, myClass, myLevel, myRace, myGuild, myFullName
     )
 
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
@@ -337,9 +376,13 @@ function LocationService:sendPosition(force)
 end
 
 --- Verifica com precisão se o remetente é o próprio jogador local (evita ghosting)
+--- Valida obrigatoriamente nome e sobrenome para evitar falsos positivos entre membros com mesmo primeiro nome.
+--- Verifica com precisão se o remetente é o próprio jogador local (evita ghosting)
+--- Valida obrigatoriamente nome e sobrenome para evitar falsos positivos entre membros com mesmo primeiro nome.
 ---@param sender string
+---@param rawFullName string|nil
 ---@return boolean
-function LocationService:isSelf(sender)
+function LocationService:isSelf(sender, rawFullName)
     if not sender or sender == "" then return true end
     if UnitIsUnit and UnitIsUnit(sender, "player") then return true end
 
@@ -348,16 +391,39 @@ function LocationService:isSelf(sender)
         myName = UnitName("player")
         self._myPlayerName = myName
     end
-    if not myName or myName == "" then return false end
+    local myFullName = self:getLocalPlayerFullName()
 
     local senderClean = sender:match("^([^-]+)") or sender
-    local sLower = senderClean:lower():gsub("%s+", "")
-    local mLower = myName:lower():gsub("%s+", "")
-    if sLower == mLower then return true end
+    senderClean = senderClean:match("^%s*(.-)%s*$") or senderClean
 
-    local sFirst = senderClean:match("^(%S+)") or senderClean
-    local mFirst = myName:match("^(%S+)") or myName
-    if sFirst ~= "" and mFirst ~= "" and sFirst:lower() == mFirst:lower() then
+    local sLower = senderClean:lower()
+    local mLower = (myName or ""):lower()
+    local mfLower = (myFullName or ""):lower()
+
+    -- 1. Se rawFullName (do payload da mensagem) foi fornecido, valida prioritariamente nome e sobrenome
+    if rawFullName and rawFullName ~= "" then
+        local rClean = rawFullName:match("^([^-]+)"):lower():match("^%s*(.-)%s*$")
+        if rClean ~= "" and mfLower ~= "" then
+            if rClean:find("%s") and mfLower:find("%s") then
+                return rClean == mfLower
+            elseif rClean == mfLower then
+                return true
+            end
+        end
+    end
+
+    -- 2. Se ambos têm nome e sobrenome, valida obrigatoriamente nome e sobrenome
+    if mfLower ~= "" and mfLower:find("%s") and sLower:find("%s") then
+        return sLower == mfLower
+    end
+
+    -- 3. Se o remetente tem nome e sobrenome e compara com o nome completo local
+    if mfLower ~= "" and sLower == mfLower then
+        return true
+    end
+
+    -- 4. Se o remetente não tem sobrenome e confere com o nome do jogador local
+    if mLower ~= "" and sLower == mLower then
         return true
     end
 
@@ -383,15 +449,16 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
 
     if not sender or sender == "" then return end
 
-    -- Ignora rigorosamente o próprio jogador
-    if self:isSelf(sender) then
+    local senderClean = sender:match("^([^-]+)") or sender
+    senderClean = senderClean:match("^%s*(.-)%s*$") or senderClean
+
+    -- Parsing do payload formato POS:mapID:x:y:facing:class:level:race:guild:fullName
+    local tag, rawMapID, rawX, rawY, rawFacing, classFile, rawLevel, race, guild, rawFullName = strsplit(":", message)
+
+    -- Ignora rigorosamente o próprio jogador validando nome e sobrenome
+    if self:isSelf(sender, rawFullName) then
         return
     end
-
-    local senderClean = sender:match("^([^-]+)") or sender
-
-    -- Parsing do payload formato POS:mapID:x:y:facing:class:level:race:guild
-    local tag, rawMapID, rawX, rawY, rawFacing, classFile, rawLevel, race, guild = strsplit(":", message)
 
     if tag == "POS" then
         local mapID = tonumber(rawMapID)
@@ -408,6 +475,25 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
         local now = GetTime and GetTime() or 0
         local clock = time and time() or 0
 
+        -- Validação rigorosa de Nome e Sobrenome para definir quem é o personagem
+        local resolvedFullName = nil
+        if rawFullName and not isSecretValue(rawFullName) and rawFullName ~= "" then
+            local cleanRaw = rawFullName:match("^[^-]+") or rawFullName
+            cleanRaw = cleanRaw:match("^%s*(.-)%s*$") or cleanRaw
+            if cleanRaw:find("%s") then
+                resolvedFullName = cleanRaw
+            end
+        end
+
+        if not resolvedFullName and self._memberService and self._memberService.resolveFullName then
+            local resolved = self._memberService:resolveFullName(senderClean)
+            if resolved and resolved ~= "" and resolved:find("%s") then
+                resolvedFullName = resolved
+            end
+        end
+
+        local finalName = resolvedFullName or senderClean
+
         -- Nome amigável da zona
         local zoneName = "Azeroth"
         if C_Map and C_Map.GetMapInfo then
@@ -416,8 +502,9 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
         end
 
         local peerData = {
-            name = senderClean,
-            fullName = sender,
+            name = finalName,
+            fullName = finalName,
+            senderUnit = senderClean,
             mapID = mapID,
             zoneName = zoneName,
             x = x,
@@ -433,7 +520,7 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
         }
 
         self._peers[senderClean] = peerData
-        self:notifyListeners("PEER_UPDATE", senderClean, peerData)
+        self:notifyListeners("PEER_UPDATE", finalName, peerData)
 
     -- Parsing do payload formato legado LOC:version:name:x:y:mapID:worldX:worldY:instanceID:class:level:zone
     elseif tag == "LOC" then
@@ -443,9 +530,17 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
         local y = tonumber(rawY)
         if mapID and x and y then
             local now = GetTime and GetTime() or 0
+            local finalName = senderClean
+            if self._memberService and self._memberService.resolveFullName then
+                local resolved = self._memberService:resolveFullName(senderClean)
+                if resolved and resolved ~= "" and resolved:find("%s") then
+                    finalName = resolved
+                end
+            end
             local peerData = {
-                name = senderClean,
-                fullName = sender,
+                name = finalName,
+                fullName = finalName,
+                senderUnit = senderClean,
                 mapID = mapID,
                 zoneName = rawZone or "Azeroth",
                 x = x,
@@ -459,8 +554,9 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
                 lastSeen = now,
                 lastSeenClock = time and time() or 0,
             }
+
             self._peers[senderClean] = peerData
-            self:notifyListeners("PEER_UPDATE", senderClean, peerData)
+            self:notifyListeners("PEER_UPDATE", finalName, peerData)
         end
     end
 end

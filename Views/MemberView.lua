@@ -1246,21 +1246,14 @@ function MemberView:formatColoredMemberName(name)
         member = _G.GM.memberService:getMember(clean)
     end
 
-    -- 2. Se não encontrou, busca no repositório de membros pelo primeiro nome (suporte ao WoW Forever onde o nome do recrutador foi gravado só com primeiro nome)
-    if not member and _G.GM and _G.GM.memberService then
-        local all = _G.GM.memberService:getAllMembers()
-        local cleanLower = clean:lower()
-        for _, m in ipairs(all) do
-            local mName = m:getName() or ""
-            local first = mName:match("^(%S+)") or mName
-            if first:lower() == cleanLower or mName:lower() == cleanLower then
-                member = m
-                -- Se o recrutador salvo no membro atual era apenas o primeiro nome, atualiza automaticamente para o nome completo com sobrenome
-                if self._currentMember and self._currentMember:getRecruiter():lower() == cleanLower and mName ~= self._currentMember:getRecruiter() then
-                    self._currentMember:setRecruiter(mName)
-                    self:saveCurrentMember()
-                end
-                break
+    -- 2. Se não encontrou, resolve via resolveFullName (validação rigorosa de nome e sobrenome)
+    if not member and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
+        local resolved = _G.GM.memberService:resolveFullName(clean)
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            member = _G.GM.memberService:getMember(resolved)
+            if self._currentMember and self._currentMember:getRecruiter():lower() == clean:lower() and resolved ~= self._currentMember:getRecruiter() then
+                self._currentMember:setRecruiter(resolved)
+                self:saveCurrentMember()
             end
         end
     end
@@ -1269,7 +1262,7 @@ function MemberView:formatColoredMemberName(name)
         return member:getColoredName()
     end
 
-    -- 3. Tenta buscar no Roster da Blizzard se disponível (exato e por primeiro nome)
+    -- 3. Tenta buscar no Roster da Blizzard se disponível (validação de nome e sobrenome)
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
         local cleanLower = clean:lower()
@@ -1278,8 +1271,7 @@ function MemberView:formatColoredMemberName(name)
             if gName then
                 local gClean = gName:match("^[^-]+") or gName
                 gClean = gClean:match("^%s*(.-)%s*$") or gClean
-                local first = gClean:match("^(%S+)") or gClean
-                if gClean:lower() == cleanLower or first:lower() == cleanLower then
+                if gClean:lower() == cleanLower then
                     if self._currentMember and self._currentMember:getRecruiter():lower() == cleanLower and gClean ~= self._currentMember:getRecruiter() then
                         self._currentMember:setRecruiter(gClean)
                         self:saveCurrentMember()

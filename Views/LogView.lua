@@ -1082,14 +1082,20 @@ function LogView:formatColoredName(name, guid, fallbackClass)
 
     -- 3. Tenta obter pelo MemberService do GuildManager
     if _G.GM and _G.GM.memberService then
+        if not clean:find("%s") and _G.GM.memberService.resolveFullName then
+            local full = _G.GM.memberService:resolveFullName(clean)
+            if full and full ~= "" and full:find("%s") then
+                clean = full
+            end
+        end
+
         local member = _G.GM.memberService:getMember(clean)
         if not member then
             local cleanLower = clean:lower()
             local all = _G.GM.memberService:getAllMembers()
             for _, m in ipairs(all) do
                 local mName = m:getName() or ""
-                local first = mName:match("^(%S+)") or mName
-                if mName:lower() == cleanLower or first:lower() == cleanLower then
+                if mName:lower() == cleanLower then
                     member = m
                     break
                 end
@@ -1112,8 +1118,7 @@ function LogView:formatColoredName(name, guid, fallbackClass)
             if gName then
                 local gClean = gName:match("^[^-]+") or gName
                 gClean = gClean:match("^%s*(.-)%s*$") or gClean
-                local first = gClean:match("^(%S+)") or gClean
-                if gClean:lower() == cleanLower or first:lower() == cleanLower then
+                if gClean:lower() == cleanLower then
                     local hex = getClassColorHex(gClass)
                     if hex then
                         return hex .. clean .. "|r"

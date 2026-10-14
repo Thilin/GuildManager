@@ -209,25 +209,116 @@ function MemberService:setMemberRecruiter(memberName, recruiterName)
     return nil
 end
 
+--- Resolve o nome completo (nome e sobrenome) de um personagem a partir do nome simples ou completo.
+--- Valida obrigatoriamente nome e sobrenome para definir com precisão quem é o personagem.
+---@param name string
+---@return string
+function MemberService:resolveFullName(name)
+    if not name or name == "" then return "" end
+    local clean = name:match("^[^-]+") or name
+    clean = clean:match("^%s*(.-)%s*$") or clean
+    if clean == "" then return "" end
+
+    -- 1. Se já possui nome e sobrenome (espaço)
+    if clean:find("%s") then
+        local exact = self._repository:findByName(clean)
+        if exact and exact:getName() and exact:getName() ~= "" then
+            return exact:getName()
+        end
+        local cleanLower = clean:lower()
+        for _, m in ipairs(self._repository:findAll()) do
+            local mName = m:getName() or ""
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            if mClean:lower() == cleanLower then
+                return mName
+            end
+        end
+        return clean
+    end
+
+    -- 2. Se possui apenas o primeiro nome, busca correspondência única no repositório de membros
+    local cleanLower = clean:lower()
+    local matchName = nil
+    local matchCount = 0
+    for _, m in ipairs(self._repository:findAll()) do
+        local mName = m:getName() or ""
+        if mName:find("%s") then
+            local first = mName:match("^(%S+)") or mName
+            if first:lower() == cleanLower then
+                matchName = mName
+                matchCount = matchCount + 1
+            end
+        end
+    end
+    if matchCount == 1 and matchName then
+        return matchName
+    end
+
+    -- 3. Busca no Roster nativo da Blizzard
+    if GetNumGuildMembers and GetGuildRosterInfo then
+        local num = GetNumGuildMembers() or 0
+        local rMatchName = nil
+        local rMatchCount = 0
+        for i = 1, num do
+            local gName = GetGuildRosterInfo(i)
+            if gName then
+                local gClean = gName:match("^[^-]+") or gName
+                gClean = gClean:match("^%s*(.-)%s*$") or gClean
+                if gClean:find("%s") then
+                    local first = gClean:match("^(%S+)") or gClean
+                    if first:lower() == cleanLower then
+                        rMatchName = gClean
+                        rMatchCount = rMatchCount + 1
+                    end
+                end
+            end
+        end
+        if rMatchCount == 1 and rMatchName then
+            return rMatchName
+        end
+    end
+
+    return clean
+end
+
+--- Resolve o nome completo (nome e sobrenome) do jogador local utilizando GUID prioritariamente.
+---@return string
+function MemberService:resolvePlayerFullName()
+    local myGUID = UnitGUID and UnitGUID("player")
+    if myGUID and myGUID ~= "" then
+        local m = self:getMemberByGuid(myGUID)
+        if m and m:getName() and m:getName() ~= "" and m:getName():find("%s") then
+            return m:getName()
+        end
+        for _, member in ipairs(self:getAllMembers()) do
+            if member:getGuid() == myGUID and member:getName() and member:getName():find("%s") then
+                return member:getName()
+            end
+        end
+        if GetNumGuildMembers and GetGuildRosterInfo then
+            local num = GetNumGuildMembers() or 0
+            for i = 1, num do
+                local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
+                if guid and guid == myGUID and gName then
+                    local clean = gName:match("^[^-]+") or gName
+                    clean = clean:match("^%s*(.-)%s*$") or clean
+                    if clean ~= "" and clean:find("%s") then
+                        return clean
+                    end
+                end
+            end
+        end
+    end
+
+    local myName = UnitName and UnitName("player") or ""
+    return self:resolveFullName(myName)
+end
+
 --- Resolve o nome completo (nome e sobrenome) de um recrutador buscando no repositório.
 ---@param recruiterName string
 ---@return string
 function MemberService:resolveRecruiterFullName(recruiterName)
-    if not recruiterName or recruiterName == "" then return "" end
-    if recruiterName:find("%s") then
-        local exact = self._repository:findByName(recruiterName)
-        if exact then return exact:getName() end
-    end
-    local recLower = recruiterName:lower()
-    local all = self._repository:findAll()
-    for _, m in ipairs(all) do
-        local mName = m:getName() or ""
-        local first = mName:match("^(%S+)") or mName
-        if first:lower() == recLower or mName:lower() == recLower then
-            return mName
-        end
-    end
-    return recruiterName
+    return self:resolveFullName(recruiterName)
 end
 
 --- Processa os dados de um membro obtidos do roster da Blizzard.
@@ -240,7 +331,26 @@ function MemberService:processRosterMember(rosterData)
         return nil
     end
 
-    local member = self._repository:findByName(rosterData.name)
+    -- Busca membro existente por GUID prioritariamente para evitar desvios de homônimos
+    local member = nil
+    if rosterData.guid and rosterData.guid ~= "" and self._repository and self._repository.findByGuid then
+        member = self._repository:findByGuid(rosterData.guid)
+    end
+    if not member then
+        member = self._repository:findByName(rosterData.name)
+    end
+    if not member and not rosterData.name:find("%s") then
+        local full = self:resolveFullName(rosterData.name)
+        if full and full ~= "" and full:find("%s") then
+            member = self._repository:findByName(full)
+            if member then
+                rosterData.name = member:getName()
+            end
+        end
+    end
+    if member and member:getName() and member:getName():find("%s") then
+        rosterData.name = member:getName()
+    end
     local pendingRecruiter = self:getPendingRecruiter(rosterData.name)
 
     if member then

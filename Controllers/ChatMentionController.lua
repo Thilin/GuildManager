@@ -343,7 +343,7 @@ function ChatMentionController:onMemberSelected(memberName, targetEB)
     self._completedMentions = self._completedMentions or {}
     self._completedMentions[memberName:lower()] = true
     local first = memberName:match("^(%S+)")
-    if first then
+    if first and self:isFirstNameUnique(first) then
         self._completedMentions[first:lower()] = true
     end
     self._justCompletedMember = memberName
@@ -387,6 +387,7 @@ function ChatMentionController:onMemberSelected(memberName, targetEB)
 end
 
 --- Retorna a lista atualizada de membros da guilda para o autocompletar e cache.
+--- Valida obrigatoriamente nome e sobrenome para evitar ambiguidades entre homônimos.
 ---@return table
 function ChatMentionController:getGuildMemberList()
     local list = {}
@@ -396,10 +397,24 @@ function ChatMentionController:getGuildMemberList()
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
         for i = 1, num do
-            local name, rankName, _, level, _, _, _, _, isOnline, _, classFileName = GetGuildRosterInfo(i)
+            local name, rankName, _, level, _, _, _, _, isOnline, _, classFileName, _, _, _, _, _, guid = GetGuildRosterInfo(i)
             if name then
                 local clean = name:match("^[^-]+") or name
                 clean = clean:match("^%s*(.-)%s*$") or clean
+
+                -- Resolve nome completo (com sobrenome) se disponível via GUID ou repositório
+                if guid and self._memberService and self._memberService.getMemberByGuid then
+                    local gm = self._memberService:getMemberByGuid(guid)
+                    if gm and gm:getName() and gm:getName():find("%s") then
+                        clean = gm:getName()
+                    end
+                elseif not clean:find("%s") and self._memberService and self._memberService.resolveFullName then
+                    local resolved = self._memberService:resolveFullName(clean)
+                    if resolved and resolved ~= "" and resolved:find("%s") then
+                        clean = resolved
+                    end
+                end
+
                 local cleanLower = clean:lower()
 
                 if not seenNames[cleanLower] then
@@ -459,12 +474,15 @@ function ChatMentionController:getGuildMemberList()
     return list
 end
 
---- Reconstrói o cache de consulta rápida indexado por nome completo e primeiro nome.
+--- Reconstrói o cache de consulta rápida indexado por nome completo e primeiro nome (se único).
 function ChatMentionController:rebuildMemberCache()
     self._memberCache = {}
+    self._firstNameCounts = {}
     self._memberCacheTime = GetTime and GetTime() or 0
 
     local list = self:getGuildMemberList()
+    local firstNameMap = {}
+
     for _, item in ipairs(list) do
         local fullName = item.name or ""
         local fullNameLower = fullName:lower()
@@ -478,14 +496,58 @@ function ChatMentionController:rebuildMemberCache()
             colorCode = item.colorCode or getClassColorCode(item.class),
         }
 
+        -- Indexa pelo nome completo (sempre inequívoco)
         self._memberCache[fullNameLower] = info
-        if not self._memberCache[firstNameLower] then
-            self._memberCache[firstNameLower] = info
+
+        -- Contabiliza frequência do primeiro nome para identificar homônimos
+        self._firstNameCounts[firstNameLower] = (self._firstNameCounts[firstNameLower] or 0) + 1
+
+        if not firstNameMap[firstNameLower] then
+            firstNameMap[firstNameLower] = info
+        end
+    end
+
+    -- Apenas mapeia atalho por primeiro nome se for estritamente ÚNICO na guilda.
+    -- Se houver 2 ou mais pessoas com o mesmo primeiro nome (ex: Thalendris), NÃO indexa por primeiro nome,
+    -- exigindo obrigatoriamente nome e sobrenome para desambiguação!
+    for fLower, count in pairs(self._firstNameCounts) do
+        if count == 1 and firstNameMap[fLower] then
+            self._memberCache[fLower] = firstNameMap[fLower]
         end
     end
 end
 
---- Busca as informações de um membro (incluindo cor da classe) por nome completo ou primeiro nome.
+--- Verifica se um primeiro nome é estritamente único entre os membros da guilda.
+---@param firstName string
+---@return boolean
+function ChatMentionController:isFirstNameUnique(firstName)
+    if not firstName or firstName == "" then
+        return true
+    end
+
+    local clean = firstName:match("^[^-]+") or firstName
+    clean = clean:match("^%s*(.-)%s*$") or clean
+    local firstLower = clean:match("^(%S+)") and clean:match("^(%S+)"):lower() or clean:lower()
+    if firstLower == "" then
+        return true
+    end
+
+    local now = GetTime and GetTime() or 0
+    if not self._memberCache or not self._memberCacheTime or (now - self._memberCacheTime > 5) then
+        self:rebuildMemberCache()
+    end
+
+    if self._firstNameCounts then
+        local count = self._firstNameCounts[firstLower] or 0
+        if count > 1 then
+            return false
+        end
+    end
+
+    return true
+end
+
+--- Busca as informações de um membro (incluindo cor da classe) por nome completo ou primeiro nome (se único).
 --- Se 'name' contiver espaços (ex: multi-palavras), busca ESTRITAMENTE o nome completo correspondente.
 ---@param name string
 ---@return table|nil
@@ -509,10 +571,10 @@ function ChatMentionController:findMemberInfo(name)
         if self._memberCache[cleanLower] then
             return self._memberCache[cleanLower]
         end
-        -- Fallback por primeiro nome APENAS se a busca NÃO contiver espaços
+        -- Fallback por primeiro nome APENAS se a busca NÃO contiver espaços e o primeiro nome for ÚNICO
         if not hasSpaces then
             local firstLower = clean:match("^(%S+)") and clean:match("^(%S+)"):lower() or cleanLower
-            if self._memberCache[firstLower] then
+            if self:isFirstNameUnique(firstLower) and self._memberCache[firstLower] then
                 return self._memberCache[firstLower]
             end
         end
@@ -525,7 +587,7 @@ function ChatMentionController:findMemberInfo(name)
             m = self._memberService:getMember(clean)
             if not m and not hasSpaces then
                 local firstLower = clean:match("^(%S+)") and clean:match("^(%S+)"):lower() or cleanLower
-                if firstLower ~= cleanLower then
+                if self:isFirstNameUnique(firstLower) then
                     m = self._memberService:getMember(firstLower)
                 end
             end
@@ -548,10 +610,24 @@ function ChatMentionController:findMemberInfo(name)
         local firstLower = not hasSpaces and (clean:match("^(%S+)") and clean:match("^(%S+)"):lower() or cleanLower) or nil
 
         for i = 1, num do
-            local gName, _, _, _, _, _, _, _, _, _, classFileName = GetGuildRosterInfo(i)
+            local gName, _, _, _, _, _, _, _, _, _, classFileName, _, _, _, _, _, guid = GetGuildRosterInfo(i)
             if gName then
                 local gClean = gName:match("^[^-]+") or gName
                 gClean = gClean:match("^%s*(.-)%s*$") or gClean
+
+                -- Resolve nome completo com sobrenome se disponível
+                if guid and self._memberService and self._memberService.getMemberByGuid then
+                    local gm = self._memberService:getMemberByGuid(guid)
+                    if gm and gm:getName() and gm:getName():find("%s") then
+                        gClean = gm:getName()
+                    end
+                elseif not gClean:find("%s") and self._memberService and self._memberService.resolveFullName then
+                    local res = self._memberService:resolveFullName(gClean)
+                    if res and res ~= "" and res:find("%s") then
+                        gClean = res
+                    end
+                end
+
                 local gLower = gClean:lower()
 
                 if gLower == cleanLower then
@@ -561,7 +637,7 @@ function ChatMentionController:findMemberInfo(name)
                         class = classFileName,
                         colorCode = getClassColorCode(classFileName),
                     }
-                elseif not hasSpaces and firstLower then
+                elseif not hasSpaces and firstLower and self:isFirstNameUnique(firstLower) then
                     local gFirst = gClean:match("^(%S+)") and gClean:match("^(%S+)"):lower() or gLower
                     if gFirst == firstLower or gLower == firstLower then
                         return {
@@ -580,6 +656,7 @@ function ChatMentionController:findMemberInfo(name)
 end
 
 --- Verifica se o nome mencionado corresponde ao jogador logado ou a algum de seus alts/main.
+--- Valida obrigatoriamente nome e sobrenome para evitar colisões entre membros com o mesmo primeiro nome.
 ---@param targetName string
 ---@return boolean
 function ChatMentionController:isCurrentPlayerOrAlt(targetName)
@@ -595,21 +672,33 @@ function ChatMentionController:isCurrentPlayerOrAlt(targetName)
     local cleanTarget = targetName:match("^[^-]+"):lower():match("^%s*(.-)%s*$")
     local cleanMyName = myName:match("^[^-]+"):lower():match("^%s*(.-)%s*$")
 
-    local targetFirst = cleanTarget:match("^(%S+)") or cleanTarget
-    local myFirst = cleanMyName:match("^(%S+)") or cleanMyName
-
-    -- 1. Comparação direta (nome completo ou primeiro nome)
-    if cleanTarget == cleanMyName or targetFirst == myFirst or cleanTarget == myFirst or targetFirst == cleanMyName then
-        return true
+    -- 1. Tenta resolver nome completo (nome e sobrenome) do jogador local
+    local myFullName = cleanMyName
+    if self._memberService and self._memberService.resolvePlayerFullName then
+        local resolved = self._memberService:resolvePlayerFullName()
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            myFullName = resolved:match("^[^-]+"):lower():match("^%s*(.-)%s*$")
+        end
+    elseif self._memberService and self._memberService.resolveFullName then
+        local resolved = self._memberService:resolveFullName(myName)
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            myFullName = resolved:match("^[^-]+"):lower():match("^%s*(.-)%s*$")
+        end
     end
 
-    -- 2. Tenta resolver nome completo do jogador local
-    local myFullName = cleanMyName
-    if self._memberService and self._memberService.resolveRecruiterFullName then
-        local resolved = self._memberService:resolveRecruiterFullName(myName)
-        if resolved and resolved ~= "" then
-            myFullName = resolved:match("^[^-]+"):lower():match("^%s*(.-)%s*$")
-            if cleanTarget == myFullName or targetFirst == myFullName then
+    -- 2. Comparação com o jogador local (prioriza validação estrita de nome e sobrenome)
+    if cleanTarget:find("%s") then
+        -- Se o alvo especifica nome e sobrenome, deve bater exatamente com o nome completo do jogador
+        if cleanTarget == myFullName then
+            return true
+        end
+    else
+        -- Se o alvo for apenas o primeiro nome, só considera o jogador se:
+        -- 1. Bater com o primeiro nome do jogador, E
+        -- 2. Esse primeiro nome for estritamente ÚNICO na guilda (sem colisão de homônimos).
+        local myFirst = myFullName:match("^(%S+)") or cleanMyName
+        if cleanTarget == myFirst or cleanTarget == cleanMyName then
+            if self:isFirstNameUnique(myFirst) then
                 return true
             end
         end
@@ -617,16 +706,22 @@ function ChatMentionController:isCurrentPlayerOrAlt(targetName)
 
     -- 3. Verifica na família de alts/main do MemberService
     if self._memberService and self._memberService.getMember and self._memberService.getAltFamily then
-        local myMember = self._memberService:getMember(myName) or (myFullName ~= cleanMyName and self._memberService:getMember(myFullName))
+        local myMember = self._memberService:getMember(myFullName) or self._memberService:getMember(myName)
         if myMember then
             local family = self._memberService:getAltFamily(myMember)
             for _, fMember in ipairs(family or {}) do
                 local fName = fMember:getName()
                 if fName and fName ~= "" then
                     local fClean = fName:match("^[^-]+"):lower():match("^%s*(.-)%s*$")
-                    local fFirst = fClean:match("^(%S+)") or fClean
-                    if cleanTarget == fClean or targetFirst == fClean or cleanTarget == fFirst or targetFirst == fFirst then
-                        return true
+                    if cleanTarget:find("%s") then
+                        if cleanTarget == fClean then
+                            return true
+                        end
+                    else
+                        local fFirst = fClean:match("^(%S+)") or fClean
+                        if cleanTarget == fClean or (cleanTarget == fFirst and self:isFirstNameUnique(fFirst)) then
+                            return true
+                        end
                     end
                 end
             end
@@ -716,7 +811,9 @@ function ChatMentionController:onGuildChatMessage(chatFrame, event, msg, author,
 
             if matchedMember then
                 mentionsFound = true
-                if self:isCurrentPlayerOrAlt(matchedMember.name) or self:isCurrentPlayerOrAlt(matchedMember.firstName) then
+                -- Validação ESTRITA da identidade do membro mencionado.
+                -- Nunca faz fallback para firstName isolado para não confundir membros com mesmo primeiro nome (homônimos).
+                if self:isCurrentPlayerOrAlt(matchedMember.name) then
                     isPlayerMentioned = true
                 end
 
@@ -727,16 +824,34 @@ function ChatMentionController:onGuildChatMessage(chatFrame, event, msg, author,
                 result = result .. guildColor .. "@|r" .. colorCode .. nameStr .. "|r" .. guildColor
                 index = atPos + 1 + matchLength
             else
-                -- Menção a nome desconhecido (@ na cor da guilda, texto amarelo, sem colchetes)
-                local w1 = remaining:match("^([%w\128-\255_]+)")
-                if w1 then
-                    mentionsFound = true
-                    if self:isCurrentPlayerOrAlt(w1) then
+                -- Menção a nome não catalogado (@ na cor da guilda, texto amarelo, sem colchetes)
+                local unkName = nil
+                local unkLen = 0
+                local uw1, us1, uw2, us2, uw3 = remaining:match("^([%w\128-\255_]+)(%s+)([%w\128-\255_]+)(%s+)([%w\128-\255_]+)")
+                local uw1_2, us1_2, uw2_2 = remaining:match("^([%w\128-\255_]+)(%s+)([%w\128-\255_]+)")
+                local uw1_1 = remaining:match("^([%w\128-\255_]+)")
+
+                if uw1 and uw2 and uw3 and self:isCurrentPlayerOrAlt(uw1 .. " " .. uw2 .. " " .. uw3) then
+                    unkName = uw1 .. " " .. uw2 .. " " .. uw3
+                    unkLen = #uw1 + #us1 + #uw2 + #us2 + #uw3
+                    isPlayerMentioned = true
+                elseif uw1_2 and uw2_2 and self:isCurrentPlayerOrAlt(uw1_2 .. " " .. uw2_2) then
+                    unkName = uw1_2 .. " " .. uw2_2
+                    unkLen = #uw1_2 + #us1_2 + #uw2_2
+                    isPlayerMentioned = true
+                elseif uw1_1 then
+                    unkName = uw1_1
+                    unkLen = #uw1_1
+                    if self:isCurrentPlayerOrAlt(uw1_1) then
                         isPlayerMentioned = true
                     end
+                end
+
+                if unkName then
+                    mentionsFound = true
                     local guildColor = getGuildChatColorCode()
-                    result = result .. guildColor .. "@|r|cffffd200" .. w1 .. "|r" .. guildColor
-                    index = atPos + 1 + #w1
+                    result = result .. guildColor .. "@|r|cffffd200" .. unkName .. "|r" .. guildColor
+                    index = atPos + 1 + unkLen
                 else
                     result = result .. "@"
                     index = atPos + 1

@@ -653,8 +653,9 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
 
         GameTooltip:SetOwner(p, "ANCHOR_RIGHT")
         GameTooltip:ClearLines()
+        local displayName = d.displayName or d.fullName or d.name
         local selfTag = d.isSelf and " |cff00ff00(Você)|r" or ""
-        GameTooltip:AddLine(string.format("%s%s|r%s", c.hex, d.name, selfTag), 1, 1, 1)
+        GameTooltip:AddLine(string.format("%s%s|r%s", c.hex, displayName, selfTag), 1, 1, 1)
 
         if d.guild and d.guild ~= "" then
             GameTooltip:AddLine(string.format("|cff20ff20<%s>|r", d.guild), 0.2, 1, 0.2)
@@ -747,7 +748,14 @@ function WorldMapView:ensureRealtimeBadge()
 
         local hasAny = false
         for name, p in pairs(peers) do
-            if not (locService and locService.isSelf and locService:isSelf(p.name)) then
+            local pFull = p.fullName or p.displayName or p.name or name
+            if not pFull:find("%s") and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
+                local resolved = _G.GM.memberService:resolveFullName(pFull)
+                if resolved and resolved ~= "" and resolved:find("%s") then
+                    pFull = resolved
+                end
+            end
+            if not (locService and locService.isSelf and locService:isSelf(p.name, pFull)) then
                 hasAny = true
                 local cls = (p.classFile or p.class or "WARRIOR"):upper()
                 local c = CLASS_COLORS[cls] or { hex = "|cffffffff" }
@@ -755,7 +763,7 @@ function WorldMapView:ensureRealtimeBadge()
                 local statusStr = isHere and (cL["MAP_BADGE_IN_THIS_ZONE"] or "|cff20ff20In This Zone|r") or string.format("|cffffd200%s|r", p.zoneName or "Azeroth")
 
                 GameTooltip:AddDoubleLine(
-                    string.format("%s%s|r (Nv %d %s)", c.hex, p.name, p.level or 1, p.race or ""),
+                    string.format("%s%s|r (Nv %d %s)", c.hex, pFull, p.level or 1, p.race or ""),
                     string.format("%s (%.1f, %.1f)", statusStr, (p.x or 0) * 100, (p.y or 0) * 100),
                     1, 1, 1, 1, 1, 1
                 )
@@ -837,9 +845,18 @@ function WorldMapView:updateRealtimePins()
 
     -- 1. Renderiza os pinos de membros remotos que usam o AddOn
     for name, peer in pairs(peers) do
-        if not (locService and locService.isSelf and locService:isSelf(peer.name)) then
+        local peerFullName = peer.fullName or peer.name or name
+        if not peerFullName:find("%s") and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
+            local resolved = _G.GM.memberService:resolveFullName(peerFullName)
+            if resolved and resolved ~= "" and resolved:find("%s") then
+                peerFullName = resolved
+            end
+        end
+
+        if not (locService and locService.isSelf and locService:isSelf(name, peerFullName)) then
             local rx, ry = TranslateCoordsToViewMap(peer.mapID, peer.x, peer.y, viewMapID)
             local pin = self:getOrCreateNamedPin(name, canvas)
+            peer.displayName = peerFullName
             pin.peerData = peer
 
             if rx and ry then
@@ -858,7 +875,7 @@ function WorldMapView:updateRealtimePins()
                     pcall(pin.arrow.SetRotation, pin.arrow, peer.facing or 0)
                 end
 
-                pin.label:SetText(string.format("%s%s|r", c.hex or "|cffffffff", peer.name))
+                pin.label:SetText(string.format("%s%s|r", c.hex or "|cffffffff", peerFullName))
                 pin:Show()
                 renderedPins[name] = true
             else
@@ -882,11 +899,22 @@ function WorldMapView:updateRealtimePins()
                 local selfPin = self:getOrCreateNamedPin(selfPinName, canvas)
                 local _, myClass = UnitClass("player")
                 local cls = (myClass or "WARRIOR"):upper()
-                local myName = UnitName("player") or "Você"
+
+                -- Resolve o nome completo (nome e sobrenome) do jogador local
+                local myFullName = nil
+                if _G.GM and _G.GM.memberService and _G.GM.memberService.resolvePlayerFullName then
+                    myFullName = _G.GM.memberService:resolvePlayerFullName()
+                elseif _G.GM and _G.GM.memberController and _G.GM.memberController.resolvePlayerFullName then
+                    myFullName = _G.GM.memberController:resolvePlayerFullName()
+                end
+                if not myFullName or myFullName == "" then
+                    myFullName = UnitName("player") or "Você"
+                end
                 local myGuild = (GetGuildInfo and GetGuildInfo("player")) or ""
 
                 selfPin.peerData = {
-                    name = myName,
+                    name = myFullName,
+                    displayName = myFullName,
                     isSelf = true,
                     mapID = myMapID,
                     x = myX,
@@ -911,7 +939,7 @@ function WorldMapView:updateRealtimePins()
                     pcall(selfPin.arrow.SetRotation, selfPin.arrow, myFacing or 0)
                 end
 
-                selfPin.label:SetText(string.format("|cffffd200%s (Você)|r", myName))
+                selfPin.label:SetText(string.format("|cffffd200%s (Você)|r", myFullName))
                 selfPin:Show()
                 renderedPins[selfPinName] = true
             else

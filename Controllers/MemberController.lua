@@ -672,7 +672,7 @@ function MemberController:resolveMemberByIndex(index)
     local cleanName = name
     if Ambiguate then
         local amb = Ambiguate(name, "none")
-        if amb and amb ~= "" then
+        if amb and amb ~= "" and not (name:find("%s") and not amb:find("%s")) then
             cleanName = amb
         end
     end
@@ -696,7 +696,7 @@ function MemberController:resolveMemberByName(targetName)
     local cleanName = targetName
     if Ambiguate then
         local amb = Ambiguate(targetName, "none")
-        if amb and amb ~= "" then
+        if amb and amb ~= "" and not (targetName:find("%s") and not amb:find("%s")) then
             cleanName = amb
         end
     end
@@ -718,7 +718,7 @@ function MemberController:resolveMemberByName(targetName)
                 local c = name
                 if Ambiguate then
                     local a = Ambiguate(name, "none")
-                    if a and a ~= "" then c = a end
+                    if a and a ~= "" and not (name:find("%s") and not a:find("%s")) then c = a end
                 end
                 c = c:match("^[^-]+") or c
                 if c:lower() == targetLower or name:lower() == targetLower then
@@ -792,31 +792,38 @@ end
 --- Resolve o nome completo (primeiro nome e sobrenome) do jogador local (suporte ao WoW Forever).
 ---@return string
 function MemberController:resolvePlayerFullName()
-    local myName = UnitName and UnitName("player") or ""
-    if myName == "" then return "" end
-
-    -- 1. Tenta resolver via MemberService se já estiver no banco
-    if self._memberService and self._memberService.resolveRecruiterFullName then
-        local resolved = self._memberService:resolveRecruiterFullName(myName)
-        if resolved and resolved ~= "" and resolved ~= myName then
+    -- 1. Tenta resolver via MemberService (validação por GUID e nome completo)
+    if self._memberService and self._memberService.resolvePlayerFullName then
+        local resolved = self._memberService:resolvePlayerFullName()
+        if resolved and resolved ~= "" and resolved:find("%s") then
             return resolved
         end
     end
 
-    -- 2. Tenta buscar diretamente no Roster da guilda
+    local myGUID = UnitGUID and UnitGUID("player")
+    local myName = UnitName and UnitName("player") or ""
+    if myName == "" then return "" end
+
+    -- 2. Tenta buscar no Roster da guilda via GUID prioritariamente
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
-        local myLower = myName:lower()
         for i = 1, num do
-            local gName = GetGuildRosterInfo(i)
-            if gName then
+            local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
+            if guid and myGUID and guid == myGUID and gName then
                 local clean = gName:match("^[^-]+") or gName
                 clean = clean:match("^%s*(.-)%s*$") or clean
-                local first = clean:match("^(%S+)") or clean
-                if first:lower() == myLower or clean:lower() == myLower then
+                if clean ~= "" and clean:find("%s") then
                     return clean
                 end
             end
+        end
+    end
+
+    -- 3. Fallback via MemberService:resolveFullName
+    if self._memberService and self._memberService.resolveFullName then
+        local resolved = self._memberService:resolveFullName(myName)
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            return resolved
         end
     end
 
@@ -974,7 +981,7 @@ function MemberController:sanitizeCharacterName(rawName)
 
     if Ambiguate then
         local amb = Ambiguate(name, "none")
-        if amb and amb ~= "" then
+        if amb and amb ~= "" and not (name:find("%s") and not amb:find("%s")) then
             name = amb
         end
     end

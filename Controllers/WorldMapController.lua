@@ -484,38 +484,82 @@ function WorldMapController:scanCurrentZone()
     -- Determina o escopo do mapa visualizado (Continente, Mundo ou Zona)
     local _, isContinent, isWorld = self:isZoneMatch("dummy", currentMapName, currentMapID)
 
-    -- Identificação do jogador local
-    local myGUID = UnitGUID("player")
-    local myName = UnitName("player") or ""
-    local myFirstName = myName:match("^(%S+)") or myName
-    local cleanMyName = cleanString(myName)
-    local cleanMyFirst = cleanString(myFirstName)
+    -- Identificação rigorosa do jogador local por GUID e Nome Completo (nome e sobrenome)
+    local myGUID = UnitGUID and UnitGUID("player")
+    local myName = UnitName and UnitName("player") or ""
+    local myFullName = ""
 
-    local function registerAddedName(name)
-        if not name or name == "" then return end
-        local lower = name:lower()
-        addedByName[lower] = true
-        local clean = cleanString(name)
-        if clean ~= "" then addedByName[clean] = true end
-        local first = name:match("^(%S+)")
-        if first then
-            addedByName[first:lower()] = true
-            local cleanF = cleanString(first)
-            if cleanF ~= "" then addedByName[cleanF] = true end
+    if myGUID and myGUID ~= "" and self._memberService then
+        if self._memberService.getMemberByGuid then
+            local mByGuid = self._memberService:getMemberByGuid(myGUID)
+            if mByGuid and mByGuid:getName() and mByGuid:getName() ~= "" and mByGuid:getName():find("%s") then
+                myFullName = mByGuid:getName()
+            end
+        end
+        if myFullName == "" and self._memberService.resolvePlayerFullName then
+            local resolved = self._memberService:resolvePlayerFullName()
+            if resolved and resolved ~= "" and resolved:find("%s") then
+                myFullName = resolved
+            end
+        end
+    end
+
+    if myFullName == "" and _G.GM and _G.GM.memberController and _G.GM.memberController.resolvePlayerFullName then
+        local resolved = _G.GM.memberController:resolvePlayerFullName()
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            myFullName = resolved
+        end
+    end
+
+    if myFullName == "" and self._memberService and self._memberService.resolveFullName then
+        local resolved = self._memberService:resolveFullName(myName)
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            myFullName = resolved
+        end
+    end
+
+    if myFullName == "" then
+        myFullName = myName
+    end
+
+    local addedByName = {}
+    local addedByGuid = {}
+
+    local function registerAddedMember(name, guid)
+        if guid and guid ~= "" then
+            addedByGuid[guid] = true
+        end
+        if name and name ~= "" then
+            local lower = name:lower():match("^%s*(.-)%s*$")
+            if lower and lower ~= "" then
+                addedByName[lower] = true
+            end
+            local clean = cleanString(name)
+            if clean ~= "" then
+                addedByName[clean] = true
+            end
         end
     end
 
     local function isLocalPlayer(name, guid)
-        if guid and myGUID and guid == myGUID then
+        if guid and myGUID and guid ~= "" and guid == myGUID then
             return true
         end
         if not name or name == "" then return false end
         local cName = cleanString(name)
-        if cName == cleanMyName or cName == cleanMyFirst then
+        local cMyFull = cleanString(myFullName)
+        if cMyFull ~= "" and cName == cMyFull then
             return true
         end
-        local cFirst = cName:match("^(%S+)")
-        if cFirst and (cFirst == cleanMyName or cFirst == cleanMyFirst) then
+        -- Se name for apenas primeiro nome e bater com myName, mas o jogador tiver nome e sobrenome,
+        -- só considera o jogador local se resolver para myFullName
+        if not cName:find("%s") and self._memberService and self._memberService.resolveFullName then
+            local res = self._memberService:resolveFullName(name)
+            if res and res ~= "" and res:find("%s") then
+                return cleanString(res) == cMyFull
+            end
+        end
+        if not cName:find("%s") and not cMyFull:find("%s") and cName == cleanString(myName) then
             return true
         end
         return false
@@ -531,19 +575,26 @@ function WorldMapController:scanCurrentZone()
         end
     end
 
-    registerAddedName(myName)
-    registerAddedName(myFirstName)
+    if myGUID and myGUID ~= "" then
+        addedByGuid[myGUID] = true
+    end
+    if myFullName ~= "" then
+        registerAddedMember(myFullName, myGUID)
+    end
     if myMember then
-        registerAddedName(myMember:getName())
+        registerAddedMember(myMember:getName(), myMember:getGuid())
+    end
+    if myName ~= "" and not myFullName:find("%s") then
+        registerAddedMember(myName, myGUID)
     end
 
     -- 1. Verifica se o jogador local está na região / continente / mundo visualizado no mapa
     local myZone = GetRealZoneText() or GetZoneText() or ""
     local isLocalInZone = self:isZoneMatch(myZone, currentMapName, currentMapID)
 
-    if isLocalInZone and myName ~= "" then
+    if isLocalInZone and (myFullName ~= "" or myName ~= "") then
         local _, unitClassToken = UnitClass("player")
-        local displayName = (myMember and myMember:getName() and myMember:getName() ~= "") and myMember:getName() or myName
+        local displayName = (myFullName ~= "") and myFullName or ((myMember and myMember:getName() and myMember:getName() ~= "") and myMember:getName() or myName)
         local myRank = myMember and myMember:getRankName()
         local highlightSelf = true
         if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("highlightSelfOnMap") == false then
@@ -570,16 +621,82 @@ function WorldMapController:scanCurrentZone()
             isSelf = highlightSelf,
         }
         table.insert(regionMembers, myData)
-        registerAddedName(displayName)
+        registerAddedMember(displayName, myGUID)
     end
 
-    -- 2. Membros online da guilda cuja zona no Roster coincide com a região / continente visualizado
+    -- 2. Varre diretamente a API do Roster nativo da Blizzard (dados ao vivo de quem está online)
+    -- Valida e resolve nome e sobrenome rigorosamente para garantir a presença e distinção de homônimos
+    if GetNumGuildMembers and GetGuildRosterInfo then
+        local num = GetNumGuildMembers() or 0
+        for i = 1, num do
+            local gName, gRankName, _, gLevel, gClassDisplayName, gZone,
+                  gPublicNote, gOfficerNote, gIsOnline, _, gClassFileName,
+                  _, _, _, _, _, gGuid = GetGuildRosterInfo(i)
+            if gName then
+                local gClean = gName:match("^[^-]+") or gName
+                gClean = gClean:match("^%s*(.-)%s*$") or gClean
+
+                -- Resolve nome completo com sobrenome via GUID ou repositório
+                if gGuid and gGuid ~= "" and self._memberService and self._memberService.getMemberByGuid then
+                    local gm = self._memberService:getMemberByGuid(gGuid)
+                    if gm and gm:getName() and gm:getName():find("%s") then
+                        gClean = gm:getName()
+                    end
+                end
+                if not gClean:find("%s") and self._memberService and self._memberService.resolveFullName then
+                    local res = self._memberService:resolveFullName(gClean)
+                    if res and res ~= "" and res:find("%s") then
+                        gClean = res
+                    end
+                end
+
+                local gLower = gClean:lower()
+                local gCleanStr = cleanString(gClean)
+                local isOnline = (gIsOnline == 1 or gIsOnline == true)
+
+                if isOnline
+                    and not isLocalPlayer(gClean, gGuid)
+                    and not (gGuid and gGuid ~= "" and addedByGuid[gGuid])
+                    and not addedByName[gLower]
+                    and not addedByName[gCleanStr] then
+
+                    local match = self:isZoneMatch(gZone, currentMapName, currentMapID)
+                    if match then
+                        local data = {
+                            name = gClean,
+                            level = tonumber(gLevel) or 1,
+                            class = gClassFileName or "",
+                            classDisplayName = gClassDisplayName or gClassFileName or "",
+                            rankName = gRankName or "",
+                            publicNote = gPublicNote or "",
+                            officerNote = gOfficerNote or "",
+                            zone = gZone or "",
+                            isOnline = true,
+                            isSelf = false,
+                        }
+                        table.insert(regionMembers, data)
+                        registerAddedMember(gClean, gGuid)
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3. Complementa com membros do banco local de membros da guilda (preservando nome e sobrenome)
     for _, m in ipairs(allRosterMembers) do
+        local mGuid = m:getGuid()
         local mName = m:getName()
+        if not mName:find("%s") and self._memberService and self._memberService.resolveFullName then
+            local res = self._memberService:resolveFullName(mName)
+            if res and res ~= "" and res:find("%s") then
+                mName = res
+            end
+        end
         local lowerName = mName:lower()
         local cleanMName = cleanString(mName)
 
-        if not isLocalPlayer(mName, m:getGuid())
+        if not isLocalPlayer(mName, mGuid)
+            and not (mGuid and mGuid ~= "" and addedByGuid[mGuid])
             and not addedByName[lowerName]
             and not addedByName[cleanMName]
             and m:isInGuild()
@@ -589,7 +706,7 @@ function WorldMapController:scanCurrentZone()
 
             if match then
                 local data = {
-                    name = m:getName(),
+                    name = mName,
                     level = m:getLevel(),
                     class = m:getClass(),
                     classDisplayName = m:getClassDisplayName(),
@@ -601,23 +718,35 @@ function WorldMapController:scanCurrentZone()
                     isSelf = false,
                 }
                 table.insert(regionMembers, data)
-                registerAddedName(mName)
+                registerAddedMember(mName, mGuid)
             end
         end
     end
 
-    -- 3. Membros que usam o AddOn (LocationService peers, incluindo simulações de teste como /gmloc test)
+    -- 4. Membros que usam o AddOn (LocationService peers, incluindo simulações de teste como /gmloc test)
     if self._locationService then
         local peers = self._locationService:getPeers() or {}
         for pName, p in pairs(peers) do
-            local cleanPName = cleanString(pName)
-            local lowerPName = pName:lower()
-            if not addedByName[lowerPName] and not addedByName[cleanPName] and not (self._locationService.isSelf and self._locationService:isSelf(pName)) then
+            local peerFullName = p.fullName or p.name or pName
+            if self._memberService and not peerFullName:find("%s") and self._memberService.resolveFullName then
+                local res = self._memberService:resolveFullName(peerFullName)
+                if res and res ~= "" and res:find("%s") then
+                    peerFullName = res
+                end
+            end
+            local cleanPName = cleanString(peerFullName)
+            local lowerPName = peerFullName:lower():match("^%s*(.-)%s*$")
+            local pGuid = p.guid
+            if not isLocalPlayer(peerFullName, pGuid)
+                and not (pGuid and pGuid ~= "" and addedByGuid[pGuid])
+                and not addedByName[lowerPName]
+                and not addedByName[cleanPName]
+                and not (self._locationService.isSelf and self._locationService:isSelf(pName, peerFullName)) then
                 local peerZone = p.zoneName or ""
                 local match = isWorld or self:isZoneMatch(peerZone, currentMapName, currentMapID)
                 if match then
                     local pData = {
-                        name = p.name,
+                        name = peerFullName,
                         level = p.level or 1,
                         class = p.classFile or "WARRIOR",
                         classDisplayName = p.classFile or "Warrior",
@@ -630,7 +759,7 @@ function WorldMapController:scanCurrentZone()
                         isAddonUser = true,
                     }
                     table.insert(regionMembers, pData)
-                    registerAddedName(pName)
+                    registerAddedMember(peerFullName, pGuid)
                 end
             end
         end

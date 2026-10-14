@@ -124,6 +124,26 @@ function GuildRosterService:getAndProcessMember(index)
     cleanName = cleanName:match("^[^-]+") or cleanName
     cleanName = cleanName:match("^%s*(.-)%s*$") or cleanName
 
+    -- Resolve nome completo (com sobrenome) se disponível via GUID ou MemberService
+    if guid and guid ~= "" and self._memberService and self._memberService.getMemberByGuid then
+        local gm = self._memberService:getMemberByGuid(guid)
+        if gm and gm:getName() and gm:getName():find("%s") then
+            cleanName = gm:getName()
+        end
+    end
+    if not cleanName:find("%s") and guid and UnitGUID and guid == UnitGUID("player") and self._memberService and self._memberService.resolvePlayerFullName then
+        local myFull = self._memberService:resolvePlayerFullName()
+        if myFull and myFull ~= "" and myFull:find("%s") then
+            cleanName = myFull
+        end
+    end
+    if not cleanName:find("%s") and self._memberService and self._memberService.resolveFullName then
+        local resolved = self._memberService:resolveFullName(cleanName)
+        if resolved and resolved ~= "" and resolved:find("%s") then
+            cleanName = resolved
+        end
+    end
+
     local race = ""
     if guid and guid ~= "" and GetPlayerInfoByGUID then
         local _, _, locRace = GetPlayerInfoByGUID(guid)
