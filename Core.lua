@@ -69,6 +69,12 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local chatMentionView = ChatMentionView:new()
         local chatMentionController = ChatMentionController:new(memberService, guildRosterService, chatMentionView)
 
+        local craftOrderRepository = CraftOrderRepository:new(dbTable)
+        local professionRepository = ProfessionRepository:new(memberService, craftOrderRepository)
+        local professionService = ProfessionService:new(professionRepository, craftOrderRepository, memberService, guildRosterService, syncService)
+        local professionView = ProfessionView:new()
+        local professionController = ProfessionController:new(professionService, guildRosterService, memberService, professionView)
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -99,6 +105,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.worldMapController = worldMapController
         GM.chatMentionView = chatMentionView
         GM.chatMentionController = chatMentionController
+        GM.craftOrderRepository = craftOrderRepository
+        GM.professionRepository = professionRepository
+        GM.professionService = professionService
+        GM.professionView = professionView
+        GM.professionController = professionController
 
         locationService:initHooks()
         syncService:initHooks()
@@ -110,6 +121,8 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         settingsController:initHooks()
         worldMapController:initHooks()
         chatMentionController:initHooks()
+        professionService:initHooks()
+        professionController:initHooks()
 
         if minimapButton and minimapButton.initLocationListener then
             minimapButton:initLocationListener(locationService)
@@ -126,6 +139,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                 if memberView and memberView.updateLocale then memberView:updateLocale() end
                 if worldMapView and worldMapView.updateLocale then worldMapView:updateLocale() end
                 if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
+                if professionView and professionView.updateLocale then professionView:updateLocale() end
             end)
         end
 
@@ -142,6 +156,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         if memberView and memberView.updateLocale then memberView:updateLocale() end
         if worldMapView and worldMapView.updateLocale then worldMapView:updateLocale() end
         if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
+        if professionView and professionView.updateLocale then professionView:updateLocale() end
 
         SLASH_GUILDMANAGER_LOC1 = "/gmloc"
         SlashCmdList["GUILDMANAGER_LOC"] = function(msg)
@@ -216,7 +231,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         end
 
         local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        local welcomeMsg = curL["WELCOME_LOADED"] or "AddOn loaded successfully! Type |cffffff00/gm|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r or |cffffff00/gmconfig|r to open."
+        local welcomeMsg = curL["WELCOME_LOADED"] or "AddOn loaded successfully! Type |cffffff00/gm|r, |cffffff00/gmcraft|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r or |cffffff00/gmconfig|r to open."
         print("|cff00ff00[GuildManager]|r " .. welcomeMsg)
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído

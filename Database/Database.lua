@@ -48,6 +48,14 @@ function Database:init()
         _G.GM_DB.events = {}
     end
 
+    if type(_G.GM_DB.craftOrders) ~= "table" then
+        _G.GM_DB.craftOrders = {}
+    end
+
+    if type(_G.GM_DB.professions) ~= "table" then
+        _G.GM_DB.professions = {}
+    end
+
     if not _G.GM_DB.version then
         _G.GM_DB.version = self._version
     end

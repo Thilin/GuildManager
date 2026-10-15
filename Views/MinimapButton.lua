@@ -183,6 +183,8 @@ function MinimapButton:createUI()
                 _G.GM.groupController:toggle()
             elseif defTab == "agenda" and _G.GM and _G.GM.agendaController then
                 _G.GM.agendaController:toggle()
+            elseif defTab == "professions" and _G.GM and _G.GM.professionController then
+                _G.GM.professionController:toggle()
             elseif defTab == "settings" and _G.GM and _G.GM.settingsController then
                 _G.GM.settingsController:toggle()
             elseif _G.GM and _G.GM.auditController then

@@ -273,7 +273,7 @@ function MemberService:resolveFullName(name)
                 end
             end
         end
-        if rMatchCount == 1 and rMatchName then
+        if rMatchCount >= 1 and rMatchName then
             return rMatchName
         end
     end
@@ -285,6 +285,9 @@ end
 ---@return string
 function MemberService:resolvePlayerFullName()
     local myGUID = UnitGUID and UnitGUID("player")
+    local myName = UnitName and UnitName("player") or ""
+    local myNameLower = myName:lower()
+
     if myGUID and myGUID ~= "" then
         local m = self:getMemberByGuid(myGUID)
         if m and m:getName() and m:getName() ~= "" and m:getName():find("%s") then
@@ -299,18 +302,23 @@ function MemberService:resolvePlayerFullName()
             local num = GetNumGuildMembers() or 0
             for i = 1, num do
                 local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
-                if guid and guid == myGUID and gName then
+                if gName then
                     local clean = gName:match("^[^-]+") or gName
                     clean = clean:match("^%s*(.-)%s*$") or clean
                     if clean ~= "" and clean:find("%s") then
-                        return clean
+                        if guid and guid == myGUID then
+                            return clean
+                        end
+                        local first = clean:match("^(%S+)") or clean
+                        if myNameLower ~= "" and first:lower() == myNameLower then
+                            return clean
+                        end
                     end
                 end
             end
         end
     end
 
-    local myName = UnitName and UnitName("player") or ""
     return self:resolveFullName(myName)
 end
 
@@ -890,6 +898,12 @@ end
 ---@return Member[]
 function MemberService:getAllMembers()
     return self._repository:findAll()
+end
+
+--- Alias para compatibilidade com findAll de repositório
+---@return Member[]
+function MemberService:findAll()
+    return self:getAllMembers()
 end
 
 --- Salva um membro diretamente através do repositório e transmite atualizações de dados customizados.

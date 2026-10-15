@@ -291,6 +291,16 @@ function MemberController:initHooks()
                 _G.GM.groupController:toggle()
                 return
             end
+        elseif arg == "agenda" or arg == "events" or arg == "eventos" or arg == "calendar" or arg == "calendario" then
+            if _G.GM and _G.GM.agendaController then
+                _G.GM.agendaController:toggle()
+                return
+            end
+        elseif arg == "prof" or arg == "profs" or arg == "profissoes" or arg == "profissões" or arg == "craft" or arg == "crafting" or arg == "pedidos" or arg == "pedido" then
+            if _G.GM and _G.GM.professionController then
+                _G.GM.professionController:toggle()
+                return
+            end
         elseif arg == "config" or arg == "settings" or arg == "opcoes" or arg == "opções" then
             if _G.GM and _G.GM.settingsController then
                 _G.GM.settingsController:toggle()
@@ -804,16 +814,23 @@ function MemberController:resolvePlayerFullName()
     local myName = UnitName and UnitName("player") or ""
     if myName == "" then return "" end
 
-    -- 2. Tenta buscar no Roster da guilda via GUID prioritariamente
+    -- 2. Tenta buscar no Roster da guilda via GUID ou primeiro nome
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
+        local myNameLower = myName:lower()
         for i = 1, num do
             local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
-            if guid and myGUID and guid == myGUID and gName then
+            if gName then
                 local clean = gName:match("^[^-]+") or gName
                 clean = clean:match("^%s*(.-)%s*$") or clean
                 if clean ~= "" and clean:find("%s") then
-                    return clean
+                    if guid and myGUID and guid == myGUID then
+                        return clean
+                    end
+                    local first = clean:match("^(%S+)") or clean
+                    if myNameLower ~= "" and first:lower() == myNameLower then
+                        return clean
+                    end
                 end
             end
         end

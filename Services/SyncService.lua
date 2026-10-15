@@ -334,6 +334,21 @@ function SyncService:syncWithPeer(peerName)
         end
     end
 
+    -- Sincroniza profissões do próprio jogador e pedidos de profissão ativos com o colega
+    if self.broadcastPlayerProfessions then
+        pcall(function() self:broadcastPlayerProfessions() end)
+    end
+    if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
+        pcall(function()
+            local orders = _G.GM.craftOrderRepository:findAll()
+            for _, ord in ipairs(orders) do
+                if ord:getStatus() ~= "CANCELLED" then
+                    self:broadcastCraftOrder(ord, "UPDATE")
+                end
+            end
+        end)
+    end
+
     return count
 end
 
@@ -809,6 +824,123 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     elseif tag == "SYNC_REQ" then
         -- Quando um novo membro conecta e pede sincronização, envia dados que temos para ele
         self:syncWithPeer(senderClean)
+
+    -- =========================================================================
+    -- RECEBIMENTO DE RESUMO DE PROFISSÃO (PROF_SUM)
+    -- =========================================================================
+    elseif tag == "PROF_SUM" then
+        local pName = arg1
+        local profKey = arg2
+        local rank = tonumber(arg3) or 0
+        local maxRank = tonumber(arg4) or 300
+        if not pName or pName == "" or not profKey then return end
+
+        local mClean = cleanName(pName)
+        local member = self._memberService and self._memberService:getMember(mClean)
+        if not member then
+            member = Member:new({ name = mClean, isInGuild = true })
+        end
+        local currentRecipes = {}
+        local existingProf = member:getProfession(profKey)
+        if existingProf and existingProf.recipes then
+            currentRecipes = existingProf.recipes
+        end
+        member:setProfession(profKey, rank, maxRank, currentRecipes)
+        if self._memberService then
+            self._memberService:saveMember(member, true)
+        end
+        if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
+            _G.GM.professionService:notifyChanged()
+        end
+        self:refreshActiveViews(mClean)
+
+    -- =========================================================================
+    -- RECEBIMENTO DE RECEITAS DE PROFISSÃO (PROF_REC)
+    -- =========================================================================
+    elseif tag == "PROF_REC" then
+        local pName = arg1
+        local profKey = arg2
+        local chunkIdx = tonumber(arg3) or 1
+        local totalChunks = tonumber(arg4) or 1
+        local idsCsv = arg5 or ""
+        if not pName or pName == "" or not profKey or idsCsv == "" then return end
+
+        local mClean = cleanName(pName)
+        local member = self._memberService and self._memberService:getMember(mClean)
+        if not member then
+            member = Member:new({ name = mClean, isInGuild = true })
+        end
+
+        for rId in string.gmatch(idsCsv, "([^,]+)") do
+            member:addRecipe(profKey, rId)
+        end
+
+        if self._memberService then
+            self._memberService:saveMember(member, true)
+        end
+        if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
+            _G.GM.professionService:notifyChanged()
+        end
+        self:refreshActiveViews(mClean)
+
+    -- =========================================================================
+    -- RECEBIMENTO DE PEDIDO DE FABRICAÇÃO (ORDER)
+    -- =========================================================================
+    elseif tag == "ORDER" then
+        local p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13 = strsplit("~", message)
+        local action = p2 or "UPDATE"
+        local orderId = p3
+        local requester = p4 or ""
+        local crafter = p5 or ""
+        local profKey = p6 or "ALCHEMY"
+        local recipeId = p7 or 0
+        local recipeName = p8 or ""
+        local itemCount = tonumber(p9) or 1
+        local tipCopper = tonumber(p10) or 0
+        local status = p11 or "PENDING"
+        local acceptedBy = p12 or ""
+        local updatedAt = tonumber(p13) or 0
+
+        if not orderId or orderId == "" then return end
+
+        local orderRepo = (_G.GM and _G.GM.craftOrderRepository)
+        if orderRepo then
+            if action == "DELETE" or action == "CANCEL" or status == "CANCELLED" then
+                orderRepo:delete(orderId)
+                if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
+                    _G.GM.professionService:notifyChanged()
+                end
+            else
+                local order = orderRepo:findById(orderId)
+                if not order then
+                    order = CraftOrder:new({
+                        id = orderId,
+                        requester = requester,
+                        crafter = crafter,
+                        professionKey = profKey,
+                        recipeId = recipeId,
+                        recipeName = recipeName,
+                        itemCount = itemCount,
+                        tipCopper = tipCopper,
+                        status = status,
+                        acceptedBy = acceptedBy,
+                        updatedAt = updatedAt,
+                    })
+                else
+                    order:setCrafter(crafter)
+                    order:setItemCount(itemCount)
+                    order:setTipCopper(tipCopper)
+                    order:setStatus(status)
+                    order:setAcceptedBy(acceptedBy)
+                end
+                orderRepo:save(order)
+            end
+        end
+
+        if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
+            _G.GM.professionService:notifyChanged()
+        end
+        self:refreshActiveViews(requester)
     end
 end
 
@@ -840,6 +972,89 @@ function SyncService:refreshActiveViews(memberName)
             _G.GM.agendaController:refreshAgenda()
         end
     end
+
+    -- Atualiza tela de profissões e pedidos se aberta
+    if _G.GM and _G.GM.professionController and _G.GM.professionController.refreshView then
+        local pView = _G.GM.professionView
+        if pView and pView.isShown and pView:isShown() then
+            _G.GM.professionController:refreshView()
+        end
+    end
+end
+
+--- Transmite as informações de profissões e receitas do jogador local para os colegas da guilda.
+--- Divide as receitas em blocos seguros (~15 IDs por pacote) para respeitar o limite de 255 bytes da Blizzard.
+---@param member Member|nil
+---@param specificProfKey string|nil
+function SyncService:broadcastPlayerProfessions(member, specificProfKey)
+    local myName = self._myPlayerName or (UnitName and UnitName("player"))
+    member = member or (self._memberService and self._memberService:getMember(myName))
+    if not member or not member.getProfessions then return end
+
+    local memberName = cleanName(member:getName())
+    if memberName == "" then return end
+
+    local profs = member:getProfessions()
+    for profKey, profData in pairs(profs) do
+        if not specificProfKey or specificProfKey == profKey then
+            local rank = profData.rank or 0
+            local maxRank = profData.maxRank or 300
+            local now = getCurrentTimestamp()
+
+            -- 1. Pacote de Resumo da Profissão: PROF_SUM~playerName~profKey~rank~maxRank~timestamp
+            local sumPayload = string.format("PROF_SUM~%s~%s~%d~%d~%d", memberName, profKey, rank, maxRank, now)
+            self:enqueuePacket(sumPayload, "GUILD")
+
+            -- 2. Pacotes de Receitas Conhecidas: PROF_REC~playerName~profKey~chunk~total~csvIds
+            local recipeIds = {}
+            if type(profData.recipes) == "table" then
+                for rId, v in pairs(profData.recipes) do
+                    if v == true then
+                        table.insert(recipeIds, tostring(rId))
+                    end
+                end
+            end
+
+            if #recipeIds > 0 then
+                local CHUNK_SIZE = 15
+                local totalChunks = math.ceil(#recipeIds / CHUNK_SIZE)
+                for c = 1, totalChunks do
+                    local startIdx = (c - 1) * CHUNK_SIZE + 1
+                    local endIdx = math.min(c * CHUNK_SIZE, #recipeIds)
+                    local chunkIds = {}
+                    for i = startIdx, endIdx do
+                        table.insert(chunkIds, recipeIds[i])
+                    end
+                    local recPayload = string.format("PROF_REC~%s~%s~%d~%d~%s", memberName, profKey, c, totalChunks, table.concat(chunkIds, ","))
+                    self:enqueuePacket(recPayload, "GUILD")
+                end
+            end
+        end
+    end
+end
+
+--- Transmite a criação ou alteração de um pedido de fabricação para a guilda.
+--- Formato: ORDER~action~id~requester~crafter~profKey~recipeId~recipeName~itemCount~tipCopper~status~acceptedBy~updatedAt
+---@param order CraftOrder
+---@param action string @"CREATE", "UPDATE", "DELETE"
+function SyncService:broadcastCraftOrder(order, action)
+    if not order or not order.getId then return end
+    action = action or "UPDATE"
+    local payload = string.format("ORDER~%s~%s~%s~%s~%s~%s~%s~%d~%d~%s~%s~%d",
+        action,
+        order:getId(),
+        cleanName(order:getRequester()),
+        cleanName(order:getCrafter()),
+        order:getProfessionKey() or "ALCHEMY",
+        tostring(order:getRecipeId() or 0),
+        order:getRecipeName() or "",
+        order:getItemCount() or 1,
+        order:getTipCopper() or 0,
+        order:getStatus() or "PENDING",
+        cleanName(order:getAcceptedBy()),
+        order:getUpdatedAt() or 0
+    )
+    self:enqueuePacket(payload, "GUILD")
 end
 
 --- Força manualmente a sincronização de todos os dados customizados de todos os membros da guilda.

@@ -40,6 +40,19 @@ function MemberRepository:save(member)
         self._db.members = {}
     end
 
+    -- Se o nome foi atualizado (ex: adicionado sobrenome), limpa chave legada sem sobrenome com mesmo GUID
+    local guid = member.getGuid and member:getGuid()
+    if guid and guid ~= "" and memberName:find("%s") then
+        local first = memberName:match("^(%S+)")
+        if first and self._db.members[first] then
+            local oldRaw = self._db.members[first]
+            if oldRaw and (oldRaw.guid == guid or oldRaw.name == first) then
+                self._db.members[first] = nil
+                if self._cache then self._cache[first] = nil end
+            end
+        end
+    end
+
     self._db.members[memberName] = member:serialize()
     self._cache[memberName] = member
     return true
@@ -76,6 +89,15 @@ function MemberRepository:findByName(name)
             local member = self._cache[mName] or Member:new(raw)
             self._cache[mName] = member
             return member
+        end
+        -- Permite encontrar "Nome Sobrenome" mesmo se pesquisado apenas pelo primeiro nome
+        if mClean:find("%s") then
+            local first = mClean:match("^(%S+)") or mClean
+            if first:lower() == cleanLower then
+                local member = self._cache[mName] or Member:new(raw)
+                self._cache[mName] = member
+                return member
+            end
         end
     end
 

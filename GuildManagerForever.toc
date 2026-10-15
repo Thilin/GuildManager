@@ -6,6 +6,7 @@
 ## SavedVariables: GM_DB
 
 Database/Database.lua
+Database/ProfessionData.lua
 Locales/Locales.lua
 
 Models/Member.lua
@@ -13,11 +14,14 @@ Models/Log.lua
 Models/Group.lua
 Models/Event.lua
 Models/Settings.lua
+Models/CraftOrder.lua
 
 Repositories/MemberRepository.lua
 Repositories/LogRepository.lua
 Repositories/GroupRepository.lua
 Repositories/EventRepository.lua
+Repositories/ProfessionRepository.lua
+Repositories/CraftOrderRepository.lua
 
 Services/LogService.lua
 Services/MemberService.lua
@@ -27,6 +31,7 @@ Services/EventService.lua
 Services/SettingsService.lua
 Services/LocationService.lua
 Services/SyncService.lua
+Services/ProfessionService.lua
 
 Views/MemberView.lua
 Views/LogView.lua
@@ -34,6 +39,7 @@ Views/AuditView.lua
 Views/GroupView.lua
 Views/AgendaView.lua
 Views/SettingsView.lua
+Views/ProfessionView.lua
 Views/MinimapButton.lua
 Views/WorldMapView.lua
 Views/ChatMentionView.lua
@@ -46,5 +52,6 @@ Controllers/AgendaController.lua
 Controllers/SettingsController.lua
 Controllers/WorldMapController.lua
 Controllers/ChatMentionController.lua
+Controllers/ProfessionController.lua
 
 Core.lua

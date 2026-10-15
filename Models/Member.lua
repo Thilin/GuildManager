@@ -75,6 +75,7 @@ function Member:new(data)
     end
     instance._recruiter = data.recruiter or ""
     instance._customDataTimestamp = tonumber(data.customDataTimestamp) or 0
+    instance._professions = data.professions or {}
 
     return instance
 end
@@ -379,6 +380,7 @@ function Member:serialize()
         isInGuild = self._isInGuild,
         recruiter = self._recruiter,
         customDataTimestamp = self._customDataTimestamp or 0,
+        professions = self._professions or {},
     }
 end
 
@@ -565,3 +567,166 @@ end
 function Member:setCustomDataTimestamp(timestamp)
     self._customDataTimestamp = tonumber(timestamp) or 0
 end
+
+--- Obtém a tabela de profissões do membro: [profKey] = { name = string, rank = number, maxRank = number, recipes = table<recipeId, boolean> }
+---@return table<string, table>
+function Member:getProfessions()
+    if type(self._professions) ~= "table" then
+        self._professions = {}
+    end
+    return self._professions
+end
+
+--- Define todas as profissões do membro
+---@param professions table
+function Member:setProfessions(professions)
+    self._professions = type(professions) == "table" and professions or {}
+end
+
+--- Define ou atualiza uma profissão específica do membro
+---@param profKey string @"ALCHEMY", "TAILORING", "LEATHERWORKING", "ENCHANTING", "BLACKSMITHING", "ENGINEERING"
+---@param rank number|nil
+---@param maxRank number|nil
+---@param recipes table|nil
+function Member:setProfession(profKey, rank, maxRank, recipes)
+    if not profKey or profKey == "" then return end
+    if type(self._professions) ~= "table" then
+        self._professions = {}
+    end
+    self._professions[profKey] = self._professions[profKey] or {}
+    local prof = self._professions[profKey]
+    if rank ~= nil then prof.rank = tonumber(rank) or 0 end
+    if maxRank ~= nil then prof.maxRank = tonumber(maxRank) or 300 end
+    if type(recipes) == "table" then
+        prof.recipes = prof.recipes or {}
+        for rId, v in pairs(recipes) do
+            prof.recipes[rId] = (v == true)
+        end
+    end
+end
+
+--- Retorna os dados de uma profissão específica
+---@param profKey string
+---@return table|nil
+function Member:getProfession(profKey)
+    if not profKey or type(self._professions) ~= "table" then return nil end
+    return self._professions[profKey]
+end
+
+--- Verifica se o membro possui uma determinada profissão primária
+---@param profKey string
+---@return boolean
+function Member:hasProfession(profKey)
+    if not profKey or type(self._professions) ~= "table" then return false end
+    local prof = self._professions[profKey]
+    return prof ~= nil and (prof.rank or 0) > 0
+end
+
+--- Verifica se o membro conhece uma receita específica
+---@param profKey string
+---@param recipeId number|string|table
+---@return boolean
+function Member:knowsRecipe(profKey, recipeId)
+    if not profKey or not recipeId or type(self._professions) ~= "table" then return false end
+    local prof = self._professions[profKey]
+    if not prof or (prof.rank or 0) <= 0 then return false end
+
+    local recipeDef = nil
+    local rawId = recipeId
+    if type(recipeId) == "table" then
+        recipeDef = recipeId
+        rawId = recipeDef.id
+    elseif ProfessionData and ProfessionData.getRecipeById then
+        recipeDef = ProfessionData.getRecipeById(recipeId, profKey)
+    end
+
+    local recDict = prof.recipes or {}
+
+    -- 1. Correspondência direta por ID no dicionário de receitas salvas (número ou string)
+    if rawId then
+        if recDict[rawId] == true then return true end
+        local numId = tonumber(rawId)
+        if numId and recDict[numId] == true then return true end
+        local strId = tostring(rawId)
+        if recDict[strId] == true then return true end
+    end
+
+    -- 2. Correspondência cruzada com o catálogo de receitas (id, itemId, name, namePT e normalização)
+    if recipeDef then
+        if recipeDef.id and (recDict[recipeDef.id] == true or recDict[tostring(recipeDef.id)] == true) then
+            return true
+        end
+        if recipeDef.itemId and (recDict[recipeDef.itemId] == true or recDict[tostring(recipeDef.itemId)] == true) then
+            return true
+        end
+        if recipeDef.name and recDict[recipeDef.name] == true then
+            return true
+        end
+        if recipeDef.namePT and recDict[recipeDef.namePT] == true then
+            return true
+        end
+        if ProfessionData and ProfessionData.normalizeText then
+            local n1 = ProfessionData.normalizeText(recipeDef.name)
+            if n1 ~= "" and recDict[n1] == true then return true end
+            local n2 = ProfessionData.normalizeText(recipeDef.namePT)
+            if n2 ~= "" and recDict[n2] == true then return true end
+        end
+    end
+
+    -- 3. Se rawId for uma string com o nome da receita
+    if type(rawId) == "string" then
+        local lower = rawId:lower()
+        for k, v in pairs(recDict) do
+            if v == true and type(k) == "string" and k:lower() == lower then
+                return true
+            end
+        end
+    end
+
+    -- 4. Verificação em tempo real para o jogador local via Grimório/IsSpellKnown
+    local localName = UnitName and UnitName("player")
+    local isLocalPlayer = false
+    if localName and self.getName then
+        local c1 = (self:getName():match("^[^-]+") or self:getName()):lower():gsub("%s+", "")
+        local c2 = (localName:match("^[^-]+") or localName):lower():gsub("%s+", "")
+        if c1 == c2 then isLocalPlayer = true end
+    end
+
+    if isLocalPlayer and recipeDef and recipeDef.id and type(recipeDef.id) == "number" then
+        if (IsSpellKnown and IsSpellKnown(recipeDef.id)) or (IsPlayerSpell and IsPlayerSpell(recipeDef.id)) then
+            self:addRecipe(profKey, recipeDef.id)
+            if recipeDef.itemId then self:addRecipe(profKey, recipeDef.itemId) end
+            return true
+        end
+    end
+
+    -- 5. Lógica de Perícia e Treinador (Baseline Trainer Recipes):
+    -- No WoW Classic, as receitas aprendidas no treinador acompanham a evolução natural da perícia.
+    -- Se o membro possui nível de perícia >= perícia requerida e a receita é de treinador (não sendo drop raro, reputação ou raid),
+    -- ele tem capacidade de fabricar a receita para a guilda.
+    local reqSkill = (recipeDef and recipeDef.skill) or 1
+    local isSpecial = recipeDef and (recipeDef.source == "drop" or recipeDef.source == "reputation" or recipeDef.source == "raid")
+    if not isSpecial and (prof.rank or 0) >= reqSkill then
+        return true
+    end
+
+    return false
+end
+
+--- Adiciona uma receita aprendida ao registro da profissão do membro
+---@param profKey string
+---@param recipeId number|string
+function Member:addRecipe(profKey, recipeId)
+    if not profKey or not recipeId then return end
+    if type(self._professions) ~= "table" then
+        self._professions = {}
+    end
+    self._professions[profKey] = self._professions[profKey] or { rank = 0, maxRank = 300, recipes = {} }
+    self._professions[profKey].recipes = self._professions[profKey].recipes or {}
+    self._professions[profKey].recipes[recipeId] = true
+    local numId = tonumber(recipeId)
+    if numId then
+        self._professions[profKey].recipes[numId] = true
+    end
+end
+

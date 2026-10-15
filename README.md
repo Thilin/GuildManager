@@ -28,7 +28,7 @@
 [X] criar uma tela de agenda para mostrar aniversários e outros eventos da guilda. Os eventos devem ser possiveis adicionar, excluir e alterar e também ser possível convidar membros para o evento pelo próprio addon. a agenda tenha um layout organizado e em em uma parte da tela da agenda precisa ter a lista dos próximos aniversariantes da guilda. É preciso criar um model de eventos contendo essas informações (criação e edição restritas a Oficial ou Líder da Guilda).
 
 [X] compartilhar informações com outro membro da guilda que use o addon (sincronização P2P automática de Entrada, Aniversário, Alts Vinculados e Recrutador; retransmissão contínua com confirmação ACK até todos receberem; sincronização automática ao identificar login de membro com o Addon; opção de forçar sincronização manual via /gmsync, /gm sync, Configurações e tela de Auditoria; e exibição de avisos de sincronização em aba de chat dedicada "GuildManager", sem poluir a janela de chat padrão)
-[] mostrar quais membros podem fazer quais receitas de cada profissão
+[X] mostrar quais membros podem fazer quais receitas de cada profissão (aba de Pedidos de Profissão com as 6 profissões primárias de fabricação [Alquimia, Alfaiataria, Couraria, Encantamento, Ferraria, Engenharia], catálogo completo de receitas do jogo com busca e filtros, visualização de artesãos que conhecem cada receita com status online/skill e botão de sussurro, sistema integrado de pedidos de fabricação com comissão e notas, escaneamento local automático de perícias e receitas conhecidas mesmo jogando sozinho, e sincronização P2P entre usuários do addon)
 
 PÓS LANÇAMENTO DO WOW FOREVER
 [] mostrar o banco da guilda no addon

@@ -686,10 +686,62 @@ function GroupView:createSideTabs()
         end
     end)
 
-    -- Aba 5: Configurações do Addon
+    -- Aba 5: Pedidos de Profissão & Artesãos
+    local tabProf = CreateFrame("Button", "GM_GroupSideTab_Professions", frame, template)
+    tabProf:SetSize(36, 36)
+    tabProf:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
+    if tabProf.SetBackdrop then
+        tabProf:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabProf:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabProf:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+    local profIcon = tabProf:CreateTexture(nil, "ARTWORK")
+    profIcon:SetPoint("TOPLEFT", tabProf, "TOPLEFT", 4, -4)
+    profIcon:SetPoint("BOTTOMRIGHT", tabProf, "BOTTOMRIGHT", -4, 4)
+    profIcon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
+    profIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    profIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabProf.icon = profIcon
+
+    tabProf:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        profIcon:SetVertexColor(1.0, 1.0, 1.0)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200" .. (curL["TAB_PROFESSIONS_TOOLTIP"] or "Pedidos de Profissão") .. "|r")
+        GameTooltip:AddLine(curL["TAB_PROFESSIONS_TOOLTIP_DESC"] or "Consulte receitas, veja quem faz na guilda e faça pedidos de fabricação.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabProf:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        profIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+    tabProf:SetScript("OnClick", function()
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+        local profCtrl = (_G.GM and _G.GM.professionController) or _G.professionController
+        if profCtrl then
+            profCtrl:show()
+            local pFrame = (_G.GM and _G.GM.professionView and _G.GM.professionView.getFrame and _G.GM.professionView:getFrame()) or (profCtrl._professionView and profCtrl._professionView:getFrame())
+            if pFrame and point then
+                pFrame:ClearAllPoints()
+                if relativeTo then pFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else pFrame:SetPoint(point, xOfs, yOfs) end
+            end
+        end
+    end)
+
+    -- Aba 6: Configurações do Addon
     local tabSettings = CreateFrame("Button", "GM_GroupSideTab_Settings", frame, template)
     tabSettings:SetSize(36, 36)
-    tabSettings:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
+    tabSettings:SetPoint("TOPLEFT", tabProf, "BOTTOMLEFT", 0, -8)
     if tabSettings.SetBackdrop then
         tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
         tabSettings:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
@@ -741,6 +793,8 @@ function GroupView:createSideTabs()
     self._tabAudit = tabAudit
     self._tabLogs = tabLogs
     self._tabGroups = tabGroups
+    self._tabAgenda = tabAgenda
+    self._tabProf = tabProf
     self._tabSettings = tabSettings
 end
 

@@ -437,10 +437,62 @@ function SettingsView:createSideTabs()
         end
     end)
 
-    -- Aba 5: Configurações (Ativa!)
+    -- Aba 5: Pedidos de Profissão & Artesãos
+    local tabProf = CreateFrame("Button", "GM_SettingsSideTab_Professions", frame, template)
+    tabProf:SetSize(36, 36)
+    tabProf:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
+    if tabProf.SetBackdrop then
+        tabProf:SetBackdrop(SIDE_TAB_BACKDROP)
+        tabProf:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        tabProf:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    end
+    local profIcon = tabProf:CreateTexture(nil, "ARTWORK")
+    profIcon:SetPoint("TOPLEFT", tabProf, "TOPLEFT", 4, -4)
+    profIcon:SetPoint("BOTTOMRIGHT", tabProf, "BOTTOMRIGHT", -4, 4)
+    profIcon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
+    profIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    profIcon:SetVertexColor(0.65, 0.65, 0.65)
+    tabProf.icon = profIcon
+
+    tabProf:SetScript("OnEnter", function(btn)
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+        end
+        profIcon:SetVertexColor(1.0, 1.0, 1.0)
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("|cffffd200" .. (curL["TAB_PROFESSIONS_TOOLTIP"] or "Pedidos de Profissão") .. "|r")
+        GameTooltip:AddLine(curL["TAB_PROFESSIONS_TOOLTIP_DESC"] or "Consulte receitas, veja quem faz na guilda e faça pedidos de fabricação.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    tabProf:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+        end
+        profIcon:SetVertexColor(0.65, 0.65, 0.65)
+        GameTooltip:Hide()
+    end)
+    tabProf:SetScript("OnClick", function()
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
+        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
+        self:hide()
+        local profCtrl = (_G.GM and _G.GM.professionController) or _G.professionController
+        if profCtrl then
+            profCtrl:show()
+            local pFrame = (_G.GM and _G.GM.professionView and _G.GM.professionView.getFrame and _G.GM.professionView:getFrame()) or (profCtrl._professionView and profCtrl._professionView:getFrame())
+            if pFrame and point then
+                pFrame:ClearAllPoints()
+                if relativeTo then pFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else pFrame:SetPoint(point, xOfs, yOfs) end
+            end
+        end
+    end)
+
+    -- Aba 6: Configurações (Ativa!)
     local tabSettings = CreateFrame("Button", "GM_SettingsSideTab_Settings", frame, template)
     tabSettings:SetSize(36, 36)
-    tabSettings:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
+    tabSettings:SetPoint("TOPLEFT", tabProf, "BOTTOMLEFT", 0, -8)
     if tabSettings.SetBackdrop then
         tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
         tabSettings:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
@@ -637,17 +689,20 @@ function SettingsView:createSettingsColumns()
     self._widgets.tabDefLabel = tabDefLabel
 
     local tabDefs = {
-        { id = "audit",    key = "TAB_AUDIT" },
-        { id = "logs",     key = "TAB_LOGS" },
-        { id = "groups",   key = "TAB_GROUPS" },
-        { id = "agenda",   key = "TAB_AGENDA" },
-        { id = "settings", key = "TAB_SETTINGS" },
+        { id = "audit",       key = "TAB_AUDIT" },
+        { id = "logs",        key = "TAB_LOGS" },
+        { id = "groups",      key = "TAB_GROUPS" },
+        { id = "agenda",      key = "TAB_AGENDA" },
+        { id = "professions", key = "TAB_PROFESSIONS" },
+        { id = "settings",    key = "TAB_SETTINGS" },
     }
     local tabButtons = {}
     for i, tDef in ipairs(tabDefs) do
         local btn = CreateFrame("Button", nil, lChild, template)
-        btn:SetSize(62, 20)
-        btn:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", (i - 1) * 65, -4)
+        local row = (i > 3) and 2 or 1
+        local col = (i - 1) % 3
+        btn:SetSize(82, 20)
+        btn:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", col * 86, -4 - (row - 1) * 24)
         if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
         local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
@@ -663,7 +718,7 @@ function SettingsView:createSettingsColumns()
     self._widgets.tabButtons = tabButtons
 
     local cbTime24 = createCheckbox(lChild, L["SETTINGS_TIME_24H"], L["SETTINGS_TIME_24H_TIP_TITLE"], L["SETTINGS_TIME_24H_TIP_DESC"])
-    cbTime24:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", 0, -32)
+    cbTime24:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", 0, -56)
     self._widgets.timeFormat24 = cbTime24
 
     -- --- SEÇÃO 2: CHAT & MENÇÕES (@) ---
