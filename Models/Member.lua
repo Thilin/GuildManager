@@ -76,6 +76,7 @@ function Member:new(data)
     instance._recruiter = data.recruiter or ""
     instance._customDataTimestamp = tonumber(data.customDataTimestamp) or 0
     instance._professions = data.professions or {}
+    instance._professionsTimestamp = tonumber(data.professionsTimestamp) or 0
 
     return instance
 end
@@ -381,6 +382,7 @@ function Member:serialize()
         recruiter = self._recruiter,
         customDataTimestamp = self._customDataTimestamp or 0,
         professions = self._professions or {},
+        professionsTimestamp = self._professionsTimestamp or 0,
     }
 end
 
@@ -568,7 +570,19 @@ function Member:setCustomDataTimestamp(timestamp)
     self._customDataTimestamp = tonumber(timestamp) or 0
 end
 
---- Obtém a tabela de profissões do membro: [profKey] = { name = string, rank = number, maxRank = number, recipes = table<recipeId, boolean> }
+--- Obtém o timestamp da última atualização de profissões deste membro.
+---@return number
+function Member:getProfessionsTimestamp()
+    return self._professionsTimestamp or 0
+end
+
+--- Define o timestamp da última atualização de profissões deste membro.
+---@param timestamp number
+function Member:setProfessionsTimestamp(timestamp)
+    self._professionsTimestamp = tonumber(timestamp) or 0
+end
+
+--- Obtém a tabela de profissões do membro: [profKey] = { name = string, rank = number, maxRank = number, recipes = table<recipeId, boolean>, updatedAt = number }
 ---@return table<string, table>
 function Member:getProfessions()
     if type(self._professions) ~= "table" then
@@ -588,7 +602,8 @@ end
 ---@param rank number|nil
 ---@param maxRank number|nil
 ---@param recipes table|nil
-function Member:setProfession(profKey, rank, maxRank, recipes)
+---@param updatedAt number|nil
+function Member:setProfession(profKey, rank, maxRank, recipes, updatedAt)
     if not profKey or profKey == "" then return end
     if type(self._professions) ~= "table" then
         self._professions = {}
@@ -601,6 +616,22 @@ function Member:setProfession(profKey, rank, maxRank, recipes)
         prof.recipes = prof.recipes or {}
         for rId, v in pairs(recipes) do
             prof.recipes[rId] = (v == true)
+        end
+    end
+    local ts = tonumber(updatedAt)
+    if not ts or ts == 0 then
+        if GetServerTime then
+            local st = GetServerTime()
+            if st and st > 0 then ts = st end
+        end
+        if not ts or ts == 0 then
+            ts = time and time() or 0
+        end
+    end
+    if ts and ts > 0 then
+        prof.updatedAt = ts
+        if (self._professionsTimestamp or 0) < ts then
+            self._professionsTimestamp = ts
         end
     end
 end
@@ -727,6 +758,67 @@ function Member:addRecipe(profKey, recipeId)
     local numId = tonumber(recipeId)
     if numId then
         self._professions[profKey].recipes[numId] = true
+        self._professions[profKey].recipes[tostring(numId)] = true
     end
+    if ProfessionData and ProfessionData.getRecipeById then
+        local rDef = ProfessionData.getRecipeById(recipeId, profKey)
+        if rDef then
+            if rDef.id then
+                self._professions[profKey].recipes[rDef.id] = true
+                self._professions[profKey].recipes[tostring(rDef.id)] = true
+            end
+            if rDef.itemId then
+                self._professions[profKey].recipes[rDef.itemId] = true
+                self._professions[profKey].recipes[tostring(rDef.itemId)] = true
+            end
+        end
+    end
+
+    local ts = nil
+    if GetServerTime then
+        local st = GetServerTime()
+        if st and st > 0 then ts = st end
+    end
+    if not ts or ts == 0 then ts = time and time() or 0 end
+    if ts and ts > 0 then
+        self._professions[profKey].updatedAt = ts
+        if (self._professionsTimestamp or 0) < ts then
+            self._professionsTimestamp = ts
+        end
+    end
+end
+
+--- Retorna um array ordenado e deduplicado com os IDs canônicos das receitas que o membro conhece
+---@param profKey string
+---@return number[]
+function Member:getCanonicalRecipeIds(profKey)
+    local result = {}
+    if not profKey or type(self._professions) ~= "table" then return result end
+    local prof = self._professions[profKey]
+    if not prof or type(prof.recipes) ~= "table" then return result end
+
+    local seen = {}
+    for rKey, val in pairs(prof.recipes) do
+        if val == true then
+            local canonId = nil
+            local num = tonumber(rKey)
+            if num then
+                canonId = num
+            end
+            if ProfessionData and ProfessionData.getRecipeById then
+                local rDef = ProfessionData.getRecipeById(rKey, profKey)
+                if rDef and rDef.id and type(rDef.id) == "number" then
+                    canonId = rDef.id
+                end
+            end
+            if canonId and not seen[canonId] then
+                seen[canonId] = true
+                table.insert(result, canonId)
+            end
+        end
+    end
+
+    table.sort(result)
+    return result
 end
 

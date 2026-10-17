@@ -729,8 +729,13 @@ function ProfessionService:scanTradeSkillFrame(member)
 
     self:notifyChanged()
 
-    if self._syncService and self._syncService.broadcastPlayerProfessions then
-        self._syncService:broadcastPlayerProfessions(member, profKey)
+    local sync = self._syncService or (_G.GM and _G.GM.syncService)
+    if sync then
+        if sync.broadcastMemberProfessions then
+            sync:broadcastMemberProfessions(member, profKey)
+        elseif sync.broadcastPlayerProfessions then
+            sync:broadcastPlayerProfessions(member, profKey)
+        end
     end
 
     return learnedCount
@@ -834,8 +839,13 @@ function ProfessionService:scanCraftFrame(member)
 
     self:notifyChanged()
 
-    if self._syncService and self._syncService.broadcastPlayerProfessions then
-        self._syncService:broadcastPlayerProfessions(member, "ENCHANTING")
+    local sync = self._syncService or (_G.GM and _G.GM.syncService)
+    if sync then
+        if sync.broadcastMemberProfessions then
+            sync:broadcastMemberProfessions(member, "ENCHANTING")
+        elseif sync.broadcastPlayerProfessions then
+            sync:broadcastPlayerProfessions(member, "ENCHANTING")
+        end
     end
 
     return learnedCount
@@ -872,8 +882,12 @@ function ProfessionService:scanAll()
     end
     self:notifyChanged()
 
-    if self._syncService and self._syncService.broadcastPlayerProfessions then
-        self._syncService:broadcastPlayerProfessions(member)
+    if sync then
+        if sync.broadcastMemberProfessions then
+            sync:broadcastMemberProfessions(member)
+        elseif sync.broadcastPlayerProfessions then
+            sync:broadcastPlayerProfessions(member)
+        end
     end
 
     local count = 0

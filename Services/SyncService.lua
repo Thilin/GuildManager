@@ -112,6 +112,9 @@ function SyncService:new(memberService, locationService, settingsService)
     -- Assinaturas recentes das informações de cada membro para evitar envios redundantes: [memberNameLower] = signature
     instance._lastMemberSignatures = {}
 
+    -- Assinaturas recentes das profissões de cada membro: [memberNameLower_profKey] = signature
+    instance._lastProfSignatures = {}
+
     instance._myPlayerName = nil
     instance._myFullName = nil
     instance._channelNumber = nil
@@ -334,9 +337,33 @@ function SyncService:syncWithPeer(peerName)
         end
     end
 
-    -- Sincroniza profissões do próprio jogador e pedidos de profissão ativos com o colega
-    if self.broadcastPlayerProfessions then
-        pcall(function() self:broadcastPlayerProfessions() end)
+    -- Sincroniza profissões e receitas de todos os membros cadastrados com o colega
+    for _, m in ipairs(members) do
+        local profs = m.getProfessions and m:getProfessions()
+        if type(profs) == "table" then
+            local mName = cleanName(m:getName())
+            local mLower = mName:lower()
+            for profKey, pData in pairs(profs) do
+                if (pData.rank or 0) > 0 or (pData.recipes and next(pData.recipes) ~= nil) then
+                    local existingUpdate = nil
+                    for _, u in pairs(self._pendingOutbox) do
+                        if u.type == "PROFESSION" and u.memberName:lower() == mLower and u.profKey == profKey then
+                            existingUpdate = u
+                            break
+                        end
+                    end
+
+                    if existingUpdate then
+                        existingUpdate.acknowledgedPeers[peerLower] = nil
+                        self:sendUpdatePacket(existingUpdate)
+                        count = count + 1
+                    else
+                        local ok = self:broadcastMemberProfessions(m, profKey, true)
+                        if ok then count = count + 1 end
+                    end
+                end
+            end
+        end
     end
     if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
         pcall(function()
@@ -543,6 +570,43 @@ end
 function SyncService:sendUpdatePacket(updateData, immediate)
     if not updateData then return end
 
+    -- Suporte a retransmissão de atualizações de profissões e receitas
+    if updateData.type == "PROFESSION" then
+        local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+        local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
+        local packets = updateData.packets or {}
+
+        for idx, payload in ipairs(packets) do
+            if immediate and idx == 1 and Send then
+                if IsInGuild and IsInGuild() then
+                    pcall(Send, SYNC_PREFIX, payload, "GUILD")
+                elseif IsInRaid and IsInRaid() then
+                    pcall(Send, SYNC_PREFIX, payload, "RAID")
+                elseif IsInGroup and IsInGroup() then
+                    pcall(Send, SYNC_PREFIX, payload, "PARTY")
+                elseif chNum and chNum > 0 then
+                    pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+                end
+            end
+
+            if IsInGuild and IsInGuild() then
+                self:enqueuePacket(payload, "GUILD")
+            elseif IsInRaid and IsInRaid() then
+                self:enqueuePacket(payload, "RAID")
+            elseif IsInGroup and IsInGroup() then
+                self:enqueuePacket(payload, "PARTY")
+            elseif chNum and chNum > 0 then
+                self:enqueuePacket(payload, "CHANNEL", chNum)
+            else
+                self:enqueuePacket(payload, "GUILD")
+            end
+        end
+
+        updateData.sendCount = (updateData.sendCount or 0) + 1
+        updateData.lastSent = GetTime and GetTime() or 0
+        return
+    end
+
     local payload = string.format("DATA~%s~%s~%s~%s~%s~%s~%s~%d",
         updateData.updateId,
         updateData.memberName,
@@ -579,6 +643,8 @@ function SyncService:sendUpdatePacket(updateData, immediate)
         self:enqueuePacket(payload, "PARTY")
     elseif chNum and chNum > 0 then
         self:enqueuePacket(payload, "CHANNEL", chNum)
+    else
+        self:enqueuePacket(payload, "GUILD")
     end
 
     updateData.sendCount = (updateData.sendCount or 0) + 1
@@ -829,23 +895,53 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     -- RECEBIMENTO DE RESUMO DE PROFISSÃO (PROF_SUM)
     -- =========================================================================
     elseif tag == "PROF_SUM" then
-        local pName = arg1
-        local profKey = arg2
-        local rank = tonumber(arg3) or 0
-        local maxRank = tonumber(arg4) or 300
+        local updateId, pName, profKey, rank, maxRank, timestamp, totalChunks
+        if arg1 and arg1:find("^PROF_") then
+            updateId = arg1
+            pName = arg2
+            profKey = arg3
+            rank = tonumber(arg4) or 0
+            maxRank = tonumber(arg5) or 300
+            timestamp = tonumber(arg6) or 0
+            totalChunks = tonumber(arg7) or 0
+        else
+            pName = arg1
+            profKey = arg2
+            rank = tonumber(arg3) or 0
+            maxRank = tonumber(arg4) or 300
+            timestamp = tonumber(arg5) or 0
+            totalChunks = 0
+            updateId = string.format("PROF_%s_%s_%d", pName or "", profKey or "", timestamp)
+        end
+
         if not pName or pName == "" or not profKey then return end
 
         local mClean = cleanName(pName)
         local member = self._memberService and self._memberService:getMember(mClean)
+        local existingProf = member and member.getProfession and member:getProfession(profKey)
+        local localProfTimestamp = (existingProf and existingProf.updatedAt) or (member and member.getProfessionsTimestamp and member:getProfessionsTimestamp()) or 0
+
+        -- Last-Write-Wins: Se o membro já possui dados localmente e a versão local é MAIS RECENTE que o pacote recebido,
+        -- rejeita o pacote antigo, confirma o recebimento para o peer parar de retransmitir,
+        -- e transmite imediatamente a nossa versão mais recente para atualizar o colega!
+        if member and localProfTimestamp > 0 and timestamp > 0 and localProfTimestamp > timestamp then
+            self:sendAckPacket(updateId, mClean)
+            self:broadcastMemberProfessions(member, profKey, true)
+            return
+        end
+
         if not member then
             member = Member:new({ name = mClean, isInGuild = true })
         end
+
         local currentRecipes = {}
-        local existingProf = member:getProfession(profKey)
         if existingProf and existingProf.recipes then
             currentRecipes = existingProf.recipes
         end
-        member:setProfession(profKey, rank, maxRank, currentRecipes)
+
+        local appliedTs = (timestamp > 0) and timestamp or getCurrentTimestamp()
+        member:setProfession(profKey, rank, maxRank, currentRecipes, appliedTs)
+
         if self._memberService then
             self._memberService:saveMember(member, true)
         end
@@ -854,15 +950,41 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         end
         self:refreshActiveViews(mClean)
 
+        -- Se não há blocos de receitas a esperar (totalChunks == 0), finaliza e confirma com ACK
+        if totalChunks == 0 then
+            self:sendAckPacket(updateId, mClean)
+
+            local isNew = not self._processedUpdateIds[updateId]
+            self._processedUpdateIds[updateId] = GetTime and GetTime() or 0
+            if isNew then
+                local profDef = ProfessionData and ProfessionData.PROFESSIONS and ProfessionData.PROFESSIONS[profKey]
+                local pDisp = profDef and profDef.name or profKey
+                local infoStr = string.format("%s (%d/%d) de %s", pDisp, rank, maxRank, mClean)
+                self:printSyncNotification(L("SYNC_LOG_DATA_SYNCED", senderClean, infoStr))
+            end
+        end
+
     -- =========================================================================
     -- RECEBIMENTO DE RECEITAS DE PROFISSÃO (PROF_REC)
     -- =========================================================================
     elseif tag == "PROF_REC" then
-        local pName = arg1
-        local profKey = arg2
-        local chunkIdx = tonumber(arg3) or 1
-        local totalChunks = tonumber(arg4) or 1
-        local idsCsv = arg5 or ""
+        local updateId, pName, profKey, chunkIdx, totalChunks, idsCsv
+        if arg1 and arg1:find("^PROF_") then
+            updateId = arg1
+            pName = arg2
+            profKey = arg3
+            chunkIdx = tonumber(arg4) or 1
+            totalChunks = tonumber(arg5) or 1
+            idsCsv = arg6 or ""
+        else
+            pName = arg1
+            profKey = arg2
+            chunkIdx = tonumber(arg3) or 1
+            totalChunks = tonumber(arg4) or 1
+            idsCsv = arg5 or ""
+            updateId = string.format("PROF_%s_%s", pName or "", profKey or "")
+        end
+
         if not pName or pName == "" or not profKey or idsCsv == "" then return end
 
         local mClean = cleanName(pName)
@@ -872,16 +994,34 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         end
 
         for rId in string.gmatch(idsCsv, "([^,]+)") do
-            member:addRecipe(profKey, rId)
+            local num = tonumber(rId)
+            member:addRecipe(profKey, num or rId)
         end
 
-        if self._memberService then
-            self._memberService:saveMember(member, true)
+        -- Quando o último chunk chega (ou único), salva, atualiza views e envia ACK
+        if chunkIdx >= totalChunks then
+            if self._memberService then
+                self._memberService:saveMember(member, true)
+            end
+            if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
+                _G.GM.professionService:notifyChanged()
+            end
+            self:refreshActiveViews(mClean)
+            self:sendAckPacket(updateId, mClean)
+
+            local isNew = not self._processedUpdateIds[updateId]
+            self._processedUpdateIds[updateId] = GetTime and GetTime() or 0
+            if isNew then
+                local profDef = ProfessionData and ProfessionData.PROFESSIONS and ProfessionData.PROFESSIONS[profKey]
+                local pDisp = profDef and profDef.name or profKey
+                local recCount = (member.getCanonicalRecipeIds and #member:getCanonicalRecipeIds(profKey)) or 0
+                local pProf = member:getProfession(profKey)
+                local pRank = pProf and pProf.rank or 0
+                local pMax = pProf and pProf.maxRank or 300
+                local infoStr = string.format("%s (%d/%d, %d receitas) de %s", pDisp, pRank, pMax, recCount, mClean)
+                self:printSyncNotification(L("SYNC_LOG_DATA_SYNCED", senderClean, infoStr))
+            end
         end
-        if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
-            _G.GM.professionService:notifyChanged()
-        end
-        self:refreshActiveViews(mClean)
 
     -- =========================================================================
     -- RECEBIMENTO DE PEDIDO DE FABRICAÇÃO (ORDER)
@@ -982,55 +1122,149 @@ function SyncService:refreshActiveViews(memberName)
     end
 end
 
---- Transmite as informações de profissões e receitas do jogador local para os colegas da guilda.
---- Divide as receitas em blocos seguros (~15 IDs por pacote) para respeitar o limite de 255 bytes da Blizzard.
+--- Transmite as informações de profissões e receitas de um membro para os colegas da guilda.
+--- Divide as receitas em blocos seguros (~20 IDs por pacote) para respeitar o limite de 255 bytes da Blizzard.
+--- Mantém retransmissão contínua com confirmação ACK até que todos os pares recebam.
 ---@param member Member|nil
 ---@param specificProfKey string|nil
-function SyncService:broadcastPlayerProfessions(member, specificProfKey)
+---@param force boolean|nil
+---@return boolean @Retorna true se algum pacote foi transmitido/enfileirado
+function SyncService:broadcastMemberProfessions(member, specificProfKey, force)
     local myName = self._myPlayerName or (UnitName and UnitName("player"))
     member = member or (self._memberService and self._memberService:getMember(myName))
-    if not member or not member.getProfessions then return end
+    if not member or not member.getProfessions then return false end
 
     local memberName = cleanName(member:getName())
-    if memberName == "" then return end
+    if memberName == "" then return false end
 
     local profs = member:getProfessions()
+    if type(profs) ~= "table" then return false end
+
+    local enqueuedAny = false
+    local memberLower = memberName:lower()
+
     for profKey, profData in pairs(profs) do
         if not specificProfKey or specificProfKey == profKey then
             local rank = profData.rank or 0
             local maxRank = profData.maxRank or 300
-            local now = getCurrentTimestamp()
-
-            -- 1. Pacote de Resumo da Profissão: PROF_SUM~playerName~profKey~rank~maxRank~timestamp
-            local sumPayload = string.format("PROF_SUM~%s~%s~%d~%d~%d", memberName, profKey, rank, maxRank, now)
-            self:enqueuePacket(sumPayload, "GUILD")
-
-            -- 2. Pacotes de Receitas Conhecidas: PROF_REC~playerName~profKey~chunk~total~csvIds
             local recipeIds = {}
-            if type(profData.recipes) == "table" then
+            if member.getCanonicalRecipeIds then
+                recipeIds = member:getCanonicalRecipeIds(profKey) or {}
+            elseif type(profData.recipes) == "table" then
+                local seen = {}
                 for rId, v in pairs(profData.recipes) do
                     if v == true then
-                        table.insert(recipeIds, tostring(rId))
+                        local n = tonumber(rId) or rId
+                        if not seen[n] then
+                            seen[n] = true
+                            table.insert(recipeIds, n)
+                        end
                     end
                 end
             end
 
-            if #recipeIds > 0 then
-                local CHUNK_SIZE = 15
-                local totalChunks = math.ceil(#recipeIds / CHUNK_SIZE)
-                for c = 1, totalChunks do
-                    local startIdx = (c - 1) * CHUNK_SIZE + 1
-                    local endIdx = math.min(c * CHUNK_SIZE, #recipeIds)
-                    local chunkIds = {}
-                    for i = startIdx, endIdx do
-                        table.insert(chunkIds, recipeIds[i])
+            if rank > 0 or #recipeIds > 0 then
+                local profTimestamp = profData.updatedAt or (member.getProfessionsTimestamp and member:getProfessionsTimestamp()) or 0
+                if profTimestamp == 0 then
+                    profTimestamp = getCurrentTimestamp()
+                    profData.updatedAt = profTimestamp
+                    if member.setProfessionsTimestamp then
+                        member:setProfessionsTimestamp(profTimestamp)
                     end
-                    local recPayload = string.format("PROF_REC~%s~%s~%d~%d~%s", memberName, profKey, c, totalChunks, table.concat(chunkIds, ","))
-                    self:enqueuePacket(recPayload, "GUILD")
+                    if self._memberService then
+                        self._memberService:saveMember(member, true)
+                    end
+                end
+
+                -- Assinatura para evitar envios redundantes se nada mudou
+                local sigKey = string.format("%s_%s", memberLower, profKey)
+                local sig = string.format("%d~%d~%d~%s", rank, maxRank, profTimestamp, table.concat(recipeIds, ","))
+                if not force and self._lastProfSignatures and self._lastProfSignatures[sigKey] == sig then
+                    -- Nada mudou
+                else
+                    if self._lastProfSignatures then
+                        self._lastProfSignatures[sigKey] = sig
+                    end
+
+                    local CHUNK_SIZE = 20
+                    local totalChunks = math.ceil(#recipeIds / CHUNK_SIZE)
+                    if #recipeIds == 0 then totalChunks = 0 end
+
+                    local randomSuffix = math.random(1000, 9999)
+                    local updateId = string.format("PROF_%s_%s_%d_%d", memberName, profKey, profTimestamp, randomSuffix)
+
+                    -- Cancela envios anteriores da mesma profissão deste membro que estavam na outbox
+                    for id, u in pairs(self._pendingOutbox) do
+                        if u.type == "PROFESSION" and u.memberName:lower() == memberLower and u.profKey == profKey then
+                            self._pendingOutbox[id] = nil
+                        end
+                    end
+
+                    local packetsList = {}
+
+                    -- 1. Pacote de Resumo da Profissão:
+                    -- PROF_SUM~updateId~memberName~profKey~rank~maxRank~timestamp~totalChunks
+                    local sumPayload = string.format("PROF_SUM~%s~%s~%s~%d~%d~%d~%d",
+                        updateId, memberName, profKey, rank, maxRank, profTimestamp, totalChunks)
+                    table.insert(packetsList, sumPayload)
+
+                    -- 2. Pacotes de Receitas Conhecidas:
+                    -- PROF_REC~updateId~memberName~profKey~chunk~total~csvIds
+                    if totalChunks > 0 then
+                        for c = 1, totalChunks do
+                            local startIdx = (c - 1) * CHUNK_SIZE + 1
+                            local endIdx = math.min(c * CHUNK_SIZE, #recipeIds)
+                            local chunkIds = {}
+                            for i = startIdx, endIdx do
+                                table.insert(chunkIds, tostring(recipeIds[i]))
+                            end
+                            local recPayload = string.format("PROF_REC~%s~%s~%s~%d~%d~%s",
+                                updateId, memberName, profKey, c, totalChunks, table.concat(chunkIds, ","))
+                            table.insert(packetsList, recPayload)
+                        end
+                    end
+
+                    local updateData = {
+                        updateId = updateId,
+                        type = "PROFESSION",
+                        memberName = memberName,
+                        profKey = profKey,
+                        rank = rank,
+                        maxRank = maxRank,
+                        timestamp = profTimestamp,
+                        packets = packetsList,
+                        acknowledgedPeers = {},
+                        sendCount = 0,
+                        lastSent = 0,
+                        createdAt = GetTime and GetTime() or 0,
+                    }
+
+                    self._pendingOutbox[updateId] = updateData
+                    self:sendUpdatePacket(updateData, force)
+                    enqueuedAny = true
+
+                    if not force then
+                        local myPlayer = self._myPlayerName or (UnitName and UnitName("player")) or "Você"
+                        local profDef = ProfessionData and ProfessionData.PROFESSIONS and ProfessionData.PROFESSIONS[profKey]
+                        local pDisp = profDef and profDef.name or profKey
+                        local infoStr = string.format("%s (%d/%d, %d receitas) de %s", pDisp, rank, maxRank, #recipeIds, memberName)
+                        self:printSyncNotification(L("SYNC_LOG_DATA_SYNCED", myPlayer, infoStr))
+                    end
                 end
             end
         end
     end
+
+    return enqueuedAny
+end
+
+--- Alias de compatibilidade
+---@param member Member|nil
+---@param specificProfKey string|nil
+---@param force boolean|nil
+---@return boolean
+function SyncService:broadcastPlayerProfessions(member, specificProfKey, force)
+    return self:broadcastMemberProfessions(member, specificProfKey, force)
 end
 
 --- Transmite a criação ou alteração de um pedido de fabricação para a guilda.
@@ -1067,6 +1301,7 @@ function SyncService:forceSyncAll()
     local members = self._memberService:getAllMembers()
     local count = 0
 
+    -- 1. Sincroniza dados customizados (Entrada, Aniversário, Recrutador, Alts)
     for _, m in ipairs(members) do
         local dateJoin = m:getDateJoin() or ""
         local bday = m:getBirthday() or ""
@@ -1081,6 +1316,36 @@ function SyncService:forceSyncAll()
                 count = count + 1
             end
         end
+    end
+
+    -- 2. Sincroniza profissões e receitas de todos os membros cadastrados
+    for _, m in ipairs(members) do
+        local profs = m.getProfessions and m:getProfessions()
+        if type(profs) == "table" then
+            local mLower = cleanName(m:getName()):lower()
+            for profKey, pData in pairs(profs) do
+                if (pData.rank or 0) > 0 or (pData.recipes and next(pData.recipes) ~= nil) then
+                    if self._lastProfSignatures then
+                        self._lastProfSignatures[mLower .. "_" .. profKey] = nil
+                    end
+                    if self:broadcastMemberProfessions(m, profKey, true) then
+                        count = count + 1
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3. Sincroniza pedidos de fabricação ativos
+    if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
+        pcall(function()
+            local orders = _G.GM.craftOrderRepository:findAll()
+            for _, ord in ipairs(orders) do
+                if ord:getStatus() ~= "CANCELLED" then
+                    self:broadcastCraftOrder(ord, "UPDATE")
+                end
+            end
+        end)
     end
 
     -- Envia uma solicitação para os colegas também transmitirem o que eles possuem
@@ -1202,6 +1467,8 @@ function SyncService:initHooks()
                 self:enqueuePacket(string.format("LOGIN~%s", myName), "GUILD")
                 -- 2. Solicita os dados aos outros membros
                 self:enqueuePacket(string.format("SYNC_REQ~%s", myName), "GUILD")
+                -- 3. Transmite as profissões e receitas do jogador local para os colegas
+                pcall(function() self:broadcastMemberProfessions() end)
             end)
         end
     end

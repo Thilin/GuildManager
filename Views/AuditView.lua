@@ -380,7 +380,7 @@ function AuditView:createUI()
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
             GameTooltip:AddLine("|cffffd200" .. (curL["SYNC_P2P_TOOLTIP"] or "Forçar Sincronização P2P") .. "|r")
-            GameTooltip:AddLine(curL["SYNC_P2P_TOOLTIP_DESC"] or "Transmite na hora todos os dados customizados (Entrada, Aniversário, Alts e Recrutador) para todos os outros membros da guilda que usam o Addon.", 1, 1, 1, true)
+            GameTooltip:AddLine(curL["SYNC_P2P_TOOLTIP_DESC"] or "Transmite na hora todos os dados customizados (Entrada, Aniversário, Alts, Recrutador e Profissões/Receitas) para todos os outros membros da guilda que usam o Addon.", 1, 1, 1, true)
             GameTooltip:Show()
         end
     end)

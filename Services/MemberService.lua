@@ -59,6 +59,15 @@ function MemberService:notifyCustomDataChanged(member)
     end
 end
 
+--- Notifica que as profissões de um membro foram alteradas e transmite na hora.
+---@param member Member
+---@param profKey string|nil
+function MemberService:notifyProfessionsChanged(member, profKey)
+    if member and self._syncService and self._syncService.broadcastMemberProfessions then
+        self._syncService:broadcastMemberProfessions(member, profKey)
+    end
+end
+
 --- Define ou atualiza o serviço de logs.
 ---@param logService LogService
 function MemberService:setLogService(logService)

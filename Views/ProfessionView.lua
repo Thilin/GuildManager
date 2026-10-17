@@ -308,6 +308,10 @@ function ProfessionView:updateLocale()
     if self._scanBtn and self._scanBtn.text then
         self._scanBtn.text:SetText(curL["MY_PROF_SCAN_BTN"] or "Escanear Minhas Profissões Agora")
     end
+
+    if self._syncProfBtn and self._syncProfBtn.text then
+        self._syncProfBtn.text:SetText("|cffffd200" .. (curL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
+    end
 end
 
 --- Cria todos os componentes visuais da janela no padrão WoW Forever
@@ -2756,6 +2760,59 @@ function ProfessionView:createMyProfessionsContainer()
         end
     end)
     self._scanBtn = scanBtn
+
+    -- Botão para transmitir/sincronizar profissões e receitas com a guilda via P2P
+    local syncProfBtn = CreateFrame("Button", nil, card, template)
+    syncProfBtn:SetSize(230, 32)
+    syncProfBtn:SetPoint("LEFT", scanBtn, "RIGHT", 12, 0)
+    if syncProfBtn.SetBackdrop then
+        syncProfBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        syncProfBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
+        syncProfBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+    end
+    local syncProfTxt = syncProfBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    syncProfTxt:SetPoint("CENTER", syncProfBtn, "CENTER", 0, 0)
+    syncProfTxt:SetText("|cffffd200" .. (curL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
+    syncProfBtn.text = syncProfTxt
+
+    syncProfBtn:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
+            btn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], 0.95)
+        end
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
+            GameTooltip:AddLine("|cffffd200" .. (curL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
+            GameTooltip:AddLine(curL["SYNC_PROF_TOOLTIP"] or "Transmite suas profissões e receitas aprendidas para que todos na guilda saibam o que você fabrica.", 1, 1, 1, true)
+            GameTooltip:Show()
+        end
+    end)
+    syncProfBtn:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+            btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
+        end
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    syncProfBtn:SetScript("OnClick", function()
+        local cL = (_G.GM and _G.GM.L) or _G.L or L
+        if _G.GM and _G.GM.syncService then
+            _G.GM.syncService:broadcastMemberProfessions(nil, nil, true)
+            if syncProfBtn.text then
+                syncProfBtn.text:SetText("|cff00ff00" .. (cL["SYNCING"] or "Sincronizando...") .. "|r")
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(2.0, function()
+                        if syncProfBtn.text then
+                            local freshL = (_G.GM and _G.GM.L) or _G.L or L
+                            syncProfBtn.text:SetText("|cffffd200" .. (freshL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
+                        end
+                    end)
+                end
+            end
+            print("|cff00ff00[GuildManager]|r " .. (cL["SYNC_PROF_SENT"] or "Suas profissões e receitas foram transmitidas para os outros usuários do Addon na guilda!"))
+        end
+    end)
+    self._syncProfBtn = syncProfBtn
 
     -- Área informativa das profissões detectadas
     local statusCard = CreateFrame("Frame", nil, card, template)
