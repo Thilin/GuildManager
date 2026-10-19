@@ -158,6 +158,24 @@ function AuditView:setOnSaveCallback(callback)
     self._onSaveCallback = callback
 end
 
+--- Verifica se o jogador conectado possui cargo de Oficial ou Líder da guilda.
+---@return boolean
+function AuditView:isPlayerOfficerOrLeader()
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        return _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    end
+    if IsGuildLeader and IsGuildLeader() then
+        return true
+    end
+    if CanEditOfficerNote and CanEditOfficerNote() then
+        return true
+    end
+    if C_GuildInfo and C_GuildInfo.CanEditOfficerNote and C_GuildInfo.CanEditOfficerNote() then
+        return true
+    end
+    return false
+end
+
 --- Cria e estiliza os componentes visuais da janela de auditoria no padrão WoW Forever.
 function AuditView:createUI()
     if self._frame then
@@ -352,9 +370,28 @@ function AuditView:createUI()
         tabBtn:SetWidth(textWidth + 12)
 
         tabBtn:SetScript("OnClick", function()
+            if tabData.id == "NO_OFFICER_NOTE" and not self:isPlayerOfficerOrLeader() then
+                print("|cffff8800[GuildManager]|r O filtro de Nota de Oficial é exclusivo para Oficiais e o Líder da Guilda.")
+                return
+            end
             self._activeFilter = tabData.id
             self:updateFilterButtonsVisual()
             self:applyFilters()
+        end)
+
+        tabBtn:SetScript("OnEnter", function(btn)
+            if tabData.id == "NO_OFFICER_NOTE" and not self:isPlayerOfficerOrLeader() then
+                if GameTooltip then
+                    GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+                    GameTooltip:AddLine(L[tabData.key] or tabData.label, 1, 0.82, 0)
+                    GameTooltip:AddLine("|cffff4444SOMENTE OFICIAIS|r", 0.8, 0.8, 0.8, true)
+                    GameTooltip:Show()
+                end
+            end
+        end)
+
+        tabBtn:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
         end)
 
         self._filterButtons[tabData.id] = tabBtn
@@ -833,7 +870,11 @@ function AuditView:createUI()
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine("|cffffd200Informações Nativas da Blizzard (Somente Leitura):|r")
                 GameTooltip:AddLine(string.format("Nota Pública: |cffffffff%s|r", m:getPublicNote() ~= "" and m:getPublicNote() or "(Nenhuma)"), 0.8, 0.8, 0.8, true)
-                GameTooltip:AddLine(string.format("Nota de Oficial: |cffffffff%s|r", m:getOfficerNote() ~= "" and m:getOfficerNote() or "(Nenhuma)"), 0.8, 0.8, 0.8, true)
+                if self:isPlayerOfficerOrLeader() then
+                    GameTooltip:AddLine(string.format("Nota de Oficial: |cffffffff%s|r", m:getOfficerNote() ~= "" and m:getOfficerNote() or "(Nenhuma)"), 0.8, 0.8, 0.8, true)
+                else
+                    GameTooltip:AddLine("Nota de Oficial: |cffff4444SOMENTE OFICIAIS|r", 0.8, 0.8, 0.8, true)
+                end
 
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine("|cffffd200Informações de Gestão (Clique nos campos para editar):|r")
@@ -1921,8 +1962,10 @@ end
 
 --- Atualiza a aparência visual dos botões de filtro.
 function AuditView:updateFilterButtonsVisual()
+    local isOfficer = self:isPlayerOfficerOrLeader()
     for tabId, btn in pairs(self._filterButtons) do
         local isActive = (tabId == self._activeFilter)
+        local isRestricted = (tabId == "NO_OFFICER_NOTE" and not isOfficer)
         local bg = isActive and PALETTE.ACTIVE_TAB_BG or PALETTE.INACTIVE_TAB_BG
         local border = isActive and PALETTE.ACTIVE_TAB_BORDER or PALETTE.INACTIVE_TAB_BORDER
 
@@ -1933,10 +1976,16 @@ function AuditView:updateFilterButtonsVisual()
         end
 
         if btn.text then
-            if isActive then
-                btn.text:SetTextColor(1.0, 0.85, 0.20)
+            if isRestricted then
+                btn:SetAlpha(0.4)
+                btn.text:SetTextColor(0.55, 0.55, 0.55)
             else
-                btn.text:SetTextColor(0.80, 0.80, 0.80)
+                btn:SetAlpha(1.0)
+                if isActive then
+                    btn.text:SetTextColor(1.0, 0.85, 0.20)
+                else
+                    btn.text:SetTextColor(0.80, 0.80, 0.80)
+                end
             end
         end
     end
@@ -2196,6 +2245,7 @@ end
 function AuditView:applyFilters()
     local search = (self._filterText or ""):lower():match("^%s*(.-)%s*$")
     local filter = self._activeFilter or "ALL"
+    local isOfficer = self:isPlayerOfficerOrLeader()
 
     self._filteredRows = {}
 
@@ -2213,8 +2263,12 @@ function AuditView:applyFilters()
             local rec = m:getRecruiter() or ""
             matchFilter = (rec == "" or rec == "Desconhecido")
         elseif filter == "NO_OFFICER_NOTE" then
-            local on = m:getOfficerNote() or ""
-            matchFilter = (on == "")
+            if not isOfficer then
+                matchFilter = false
+            else
+                local on = m:getOfficerNote() or ""
+                matchFilter = (on == "")
+            end
         elseif filter == "NO_CUSTOM_NOTE" then
             local cn = m:getCustomNote() or ""
             matchFilter = (cn == "")
@@ -2233,7 +2287,7 @@ function AuditView:applyFilters()
             local rank = (m:getRankName() or ""):lower()
             local onlineStatus = m:isOnline() and "online" or (m:getLastOnline() or "offline"):lower()
             local pubNote = (m:getPublicNote() or ""):lower()
-            local offNote = (m:getOfficerNote() or ""):lower()
+            local offNote = isOfficer and (m:getOfficerNote() or ""):lower() or ""
             local custNote = (m:getCustomNote() or ""):lower()
             local rec = (m:getRecruiter() or ""):lower()
             local normRec = normalizeForSort(rec)
@@ -2286,6 +2340,7 @@ end
 --- Renderiza as linhas visíveis na tabela com suporte avançado a subnível, identação e células interativas.
 function AuditView:renderRows()
     local total = #self._filteredRows
+    local isOfficer = self:isPlayerOfficerOrLeader()
 
     if total == 0 then
         if self._emptyNotice then
@@ -2390,12 +2445,16 @@ function AuditView:renderRows()
                 row.publicNoteTxt:SetText("|cff555555-|r")
             end
 
-            -- Coluna 6: Nota de Oficial (Blizzard - Somente Leitura)
-            local oNote = m:getOfficerNote()
-            if oNote and oNote ~= "" then
-                row.officerNoteTxt:SetText("|cff80d0ff" .. oNote .. "|r")
+            -- Coluna 6: Nota de Oficial (Blizzard - Exclusiva para Oficiais e Líder)
+            if isOfficer then
+                local oNote = m:getOfficerNote()
+                if oNote and oNote ~= "" then
+                    row.officerNoteTxt:SetText("|cff80d0ff" .. oNote .. "|r")
+                else
+                    row.officerNoteTxt:SetText("|cff555555-|r")
+                end
             else
-                row.officerNoteTxt:SetText("|cff555555-|r")
+                row.officerNoteTxt:SetText("|cffff4444SOMENTE OFICIAIS|r")
             end
 
             -- Coluna 7: Data de Entrada (Editável ao clicar)
@@ -2465,6 +2524,7 @@ function AuditView:show()
     self:createUI()
     if self._frame then
         self:updateLocale()
+        self:updateFilterButtonsVisual()
         self._frame:Show()
     end
 end

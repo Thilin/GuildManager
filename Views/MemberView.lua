@@ -1093,8 +1093,21 @@ function MemberView:showMember(member, isLocked)
     local publicNote = member:getPublicNote()
     self._publicNoteVal:SetText(publicNote ~= "" and publicNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
 
-    local officerNote = member:getOfficerNote()
-    self._officerNoteVal:SetText(officerNote ~= "" and officerNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    if canOfficer then
+        local officerNote = member:getOfficerNote()
+        self._officerNoteVal:SetText(officerNote ~= "" and officerNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
+    else
+        self._officerNoteVal:SetText("|cffff4444SOMENTE OFICIAIS|r")
+    end
 
     self:updateAltsVisual()
     self:updateRecruiterButtonVisual()
@@ -1103,16 +1116,6 @@ function MemberView:showMember(member, isLocked)
     end
     if self._altManagerFrame and self._altManagerFrame:IsShown() then
         self:refreshAltManager()
-    end
-
-    -- Permissões de edição: Recrutador e Data de Entrada só para quem tem cargo de Oficial ou Líder da Guilda
-    local canOfficer = false
-    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-    elseif IsGuildLeader and IsGuildLeader() then
-        canOfficer = true
-    elseif CanEditOfficerNote and CanEditOfficerNote() then
-        canOfficer = true
     end
 
     if self._dateJoinEB then
