@@ -635,6 +635,93 @@ Locales.strings["enUS"] = {
     ["MY_PROF_RECIPES_KNOWN"] = "Known Recipes: %d",
     ["MY_PROF_NO_PROFS"] = "No primary crafting professions detected. Learn a profession or click Scan!",
     ["WHISPER_ORDER_TEMPLATE"] = "Hello! I would like to order %s. Are you available?",
+
+    -- No Guild Notice
+    ["NO_GUILD_TITLE"] = "|cffffd200GUILD MANAGER FOREVER|r",
+    ["NO_GUILD_HEADER"] = "NO GUILD DETECTED",
+    ["NO_GUILD_MSG1"] = "You are not currently in a guild.",
+    ["NO_GUILD_MSG2"] = "Guild Manager Forever is designed specifically for member management, activity tracking, guild roster auditing, and real-time guild sync.",
+    ["NO_GUILD_MSG3"] = "Join a guild to unlock all features. Once you join a guild, the addon will automatically activate and guide you through the initial setup!",
+    ["NO_GUILD_CLOSE"] = "Understood",
+
+    -- Intro / Tutorial
+    ["INTRO_TITLE"] = "|cffffd200GUILD MANAGER FOREVER|r",
+    ["INTRO_SUBTITLE"] = "|cffaaaaaaWelcome! Quick Introduction & Feature Tour|r",
+    ["INTRO_SKIP"] = "Skip Tutorial",
+    ["INTRO_PREV"] = "< Back",
+    ["INTRO_NEXT"] = "Next >",
+    ["INTRO_FINISH"] = "Finish Tutorial",
+    ["INTRO_STEP_COUNTER"] = "Step %d of %d",
+    ["INTRO_REOPEN_HINT"] = "You can revisit this tutorial anytime by typing |cffffff00/gmtutorial|r or in Addon Settings.",
+    ["INTRO_REOPEN_BUTTON"] = "Revisit Tutorial / Intro",
+
+    -- Step 1: Audit
+    ["INTRO_STEP1_TAB"] = "1. Audit",
+    ["INTRO_STEP1_TITLE"] = "Guild Audit & Member Management",
+    ["INTRO_STEP1_DESC1"] = "The Audit screen (/gmaudit) gives you an organized, paginated view (40 members per page) of every member currently in the guild, completely eliminating ex-members for maximum clarity.",
+    ["INTRO_STEP1_DESC2"] = "Track character levels, official ranks, class colors, linked alts, join dates, and public notes.",
+    ["INTRO_STEP1_DESC3"] = "Total Privacy: Officer Notes are strictly protected. Non-officer members only see [OFFICERS ONLY], guaranteeing confidentiality for guild management.",
+    ["INTRO_STEP1_OPEN_BTN"] = "Open Audit Screen (/gmaudit)",
+
+    -- Step 2: Activity Logs
+    ["INTRO_STEP2_TAB"] = "2. Logs",
+    ["INTRO_STEP2_TITLE"] = "Guild Activity Logs & History",
+    ["INTRO_STEP2_DESC1"] = "Activity Logs (/gmlogs) automatically record guild events: new recruitments, recruiter tracking, rejoined members, level-ups, promotions, demotions, leaves, and kicks.",
+    ["INTRO_STEP2_DESC2"] = "Maximum Performance: Browsing is paginated into 50 records per page, ensuring lightning-fast scrolling and zero FPS drops in massive guilds.",
+    ["INTRO_STEP2_DESC3"] = "Quick Filters: Filter by joins, level-ups, promotions, kicks, or search by player name with instant filtering.",
+    ["INTRO_STEP2_OPEN_BTN"] = "Open Activity Logs (/gmlogs)",
+
+    -- Step 3: Calendar & Agenda
+    ["INTRO_STEP3_TAB"] = "3. Calendar",
+    ["INTRO_STEP3_TITLE"] = "Guild Calendar & Agenda",
+    ["INTRO_STEP3_DESC1"] = "The Calendar (/gmagenda) lets you plan and organize all guild activities: Dungeons, Raids, PvP battles, Guild Meetings, and Member Birthdays.",
+    ["INTRO_STEP3_DESC2"] = "Monthly Overview: Visual badges and color tags display event dates, schedules, organizers, and member birthdays so you never miss an event.",
+    ["INTRO_STEP3_DESC3"] = "Easy Scheduling: Officers can schedule new events in seconds and broadcast them to the entire guild.",
+    ["INTRO_STEP3_OPEN_BTN"] = "Open Calendar (/gmagenda)",
+
+    -- Step 4: Group Management
+    ["INTRO_STEP4_TAB"] = "4. Groups",
+    ["INTRO_STEP4_TITLE"] = "Group Management & Raid Builder",
+    ["INTRO_STEP4_DESC1"] = "The Groups panel (/gmgrupos) streamlines team building for 5-player Dungeons, 10-to-40 player Raids, Battleground PvP, and leveling/farming squads.",
+    ["INTRO_STEP4_DESC2"] = "Role Balancing: Easily allocate Tanks, Healers, and Damage Dealers with clear composition visualization and class colors.",
+    ["INTRO_STEP4_DESC3"] = "Mass Invite: With one click on 'Invite Group', the addon automatically invites all assigned members into your party or raid group in-game!",
+    ["INTRO_STEP4_OPEN_BTN"] = "Open Group Management (/gmgrupos)",
+
+    -- Step 5: Crafting Orders & Professions
+    ["INTRO_STEP5_TAB"] = "5. Crafting",
+    ["INTRO_STEP5_TITLE"] = "Crafting Orders & Guild Crafters",
+    ["INTRO_STEP5_DESC1"] = "The Professions system (/gmcraft) connects guild crafters with members who need rare gear, consumables, enchantments, and potions.",
+    ["INTRO_STEP5_DESC2"] = "Guild Crafters Directory: Search recipes and instantly find who in the guild knows how to craft them.",
+    ["INTRO_STEP5_DESC3"] = "Work Orders: Any member can place a crafting order with specified tip, materials provided, and target crafter. Crafters accept orders directly in-game!",
+    ["INTRO_STEP5_OPEN_BTN"] = "Open Crafting Orders (/gmcraft)",
+
+    -- Step 6: Chat Mentions
+    ["INTRO_STEP6_TAB"] = "6. Mentions (@)",
+    ["INTRO_STEP6_TITLE"] = "Chat Mentions with @ & Sound Alert",
+    ["INTRO_STEP6_DESC1"] = "Tag fellow guild members in chat by typing @PlayerName in any channel (Guild, Party, Raid, Whisper). Mentions appear highlighted with the player's class color.",
+    ["INTRO_STEP6_DESC2"] = "Instant Audio Notification: Whenever someone mentions your name with @, the addon plays an audio ping so you never miss party invites, dungeon calls, or announcements!",
+    ["INTRO_STEP6_TEST_SOUND"] = "Play Alert Sound",
+    ["INTRO_STEP6_CHAT_PREVIEW"] = "[Guild] [Leader]: Hey @YourName, join our dungeon group now!",
+
+    -- Step 7: World Map & Regions
+    ["INTRO_STEP7_TAB"] = "7. Map",
+    ["INTRO_STEP7_TITLE"] = "World Map & Members by Region",
+    ["INTRO_STEP7_DESC1"] = "See where guild members are exploring throughout Azeroth in real time. On the World Map (M), click the Guild Manager button in the top-right to open the live member drawer.",
+    ["INTRO_STEP7_DESC2"] = "View player counts by continent and zone, plus real-time pins placed directly on the world map for coordinates and quick grouping.",
+    ["INTRO_STEP7_OPEN_MAP"] = "Open World Map (M)",
+
+    -- Step 8: Settings & Birthday
+    ["INTRO_STEP8_TAB"] = "8. Settings & Bday",
+    ["INTRO_STEP8_TITLE"] = "Addon Settings & Your Birthday",
+    ["INTRO_STEP8_DESC1"] = "Customize everything in /gmconfig: interface language (EN-US or PT-BR), sound alerts, login notifications, minimap icon, and P2P synchronization.",
+    ["INTRO_STEP8_BDAY_TITLE"] = "Celebrate Your Birthday with the Guild!",
+    ["INTRO_STEP8_BDAY_DESC"] = "Enter your birthday below so your guild can celebrate with you on the calendar and login alerts:",
+    ["INTRO_STEP8_BDAY_FORMAT_HINT"] = "Format: MM/dd (e.g. 07/15 or 12/25)",
+    ["INTRO_STEP8_BDAY_VALID"] = "|cff40ff40Valid date! Ready to save.|r",
+    ["INTRO_STEP8_BDAY_INVALID"] = "|cffff4040Invalid date. Please use MM/dd format (e.g. 07/15)|r",
+    ["INTRO_STEP8_BDAY_SAVED"] = "Birthday saved: %s",
+    ["INTRO_STEP8_BDAY_OPTIONAL"] = "(Optional - you can also set it later in Audit or Member profile)",
+    ["INTRO_STEP8_OPEN_CONFIG"] = "Open Settings (/gmconfig)",
 }
 
 -- =========================================================================
@@ -1187,4 +1274,91 @@ Locales.strings["ptBR"] = {
     ["MY_PROF_NO_PROFS"] = "Nenhuma profissão primária de fabricação detectada. Aprenda uma profissão ou clique em Escanear!",
     ["WHISPER_ORDER_TEMPLATE"] = "Olá! Gostaria de encomendar %s com você. Você pode fabricar?",
     ["SYNC_LOG_RETRANSMIT_NOTICE"] = "|cffaaaaaa(Retransmitindo pacotes em segundo plano até que todos confirmem o recebimento)|r",
+
+    -- Aviso de Sem Guilda
+    ["NO_GUILD_TITLE"] = "|cffffd200GUILD MANAGER FOREVER|r",
+    ["NO_GUILD_HEADER"] = "NENHUMA GUILDA DETECTADA",
+    ["NO_GUILD_MSG1"] = "Você atualmente não pertence a nenhuma guilda no World of Warcraft.",
+    ["NO_GUILD_MSG2"] = "O Guild Manager Forever é uma ferramenta avançada desenvolvida exclusivamente para auditoria de membros, histórico de atividades, notas de gestão e sincronização em tempo real entre colegas de guilda.",
+    ["NO_GUILD_MSG3"] = "Entre em uma guilda para desbloquear todas as funcionalidades. Assim que você entrar em uma guilda, o addon detectará automaticamente e iniciará a apresentação de boas-vindas!",
+    ["NO_GUILD_CLOSE"] = "Entendido",
+
+    -- Introdução / Tutorial
+    ["INTRO_TITLE"] = "|cffffd200GUILD MANAGER FOREVER|r",
+    ["INTRO_SUBTITLE"] = "|cffaaaaaaBem-vindo! Guia Rápido de Introdução & Recursos|r",
+    ["INTRO_SKIP"] = "Pular Tutorial",
+    ["INTRO_PREV"] = "< Anterior",
+    ["INTRO_NEXT"] = "Próximo >",
+    ["INTRO_FINISH"] = "Concluir Tutorial",
+    ["INTRO_STEP_COUNTER"] = "Passo %d de %d",
+    ["INTRO_REOPEN_HINT"] = "Você pode rever este tutorial a qualquer momento digitando |cffffff00/gmtutorial|r ou na tela de Configurações.",
+    ["INTRO_REOPEN_BUTTON"] = "Rever Tutorial / Introdução",
+
+    -- Passo 1: Auditoria
+    ["INTRO_STEP1_TAB"] = "1. Auditoria",
+    ["INTRO_STEP1_TITLE"] = "Auditoria da Guilda & Gestão de Membros",
+    ["INTRO_STEP1_DESC1"] = "A tela de Auditoria (/gmaudit) reúne todos os membros que estão na guilda em uma tabela moderna, paginada a cada 40 registros para máxima fluidez e sem pesar no jogo.",
+    ["INTRO_STEP1_DESC2"] = "Acompanhe níveis, cargos oficiais, cores de classe, alts vinculados, datas de entrada e notas. Membros que saíram da guilda são excluídos automaticamente, mantendo a lista 100% atualizada.",
+    ["INTRO_STEP1_DESC3"] = "Privacidade Total: As Notas de Oficiais são restritas a oficiais e líderes. Membros comuns visualizam apenas [SOMENTE OFICIAIS], garantindo total sigilo para a gestão.",
+    ["INTRO_STEP1_OPEN_BTN"] = "Abrir Tela de Auditoria (/gmaudit)",
+
+    -- Passo 2: Registro de Atividades
+    ["INTRO_STEP2_TAB"] = "2. Atividades",
+    ["INTRO_STEP2_TITLE"] = "Registro de Atividades da Guilda",
+    ["INTRO_STEP2_DESC1"] = "O Registro de Atividades (/gmlogs) grava automaticamente tudo o que acontece na sua guilda: novos recrutamentos, quem recrutou quem, retornos à guilda, subidas de nível, promoções, rebaixamentos, saídas e expulsões.",
+    ["INTRO_STEP2_DESC2"] = "Paginação Otimizada: Navegue pelos registros em blocos de 50 por página, garantindo carregamento instantâneo e zero perda de FPS mesmo em guildas gigantes com milhares de eventos.",
+    ["INTRO_STEP2_DESC3"] = "Filtros Rápidos: Localize eventos específicos instantaneamente usando a barra de busca e as abas de filtro por tipo de evento no topo.",
+    ["INTRO_STEP2_OPEN_BTN"] = "Abrir Registro de Atividades (/gmlogs)",
+
+    -- Passo 3: Agenda & Calendário
+    ["INTRO_STEP3_TAB"] = "3. Agenda",
+    ["INTRO_STEP3_TITLE"] = "Agenda & Calendário da Guilda",
+    ["INTRO_STEP3_DESC1"] = "A Agenda da Guilda (/gmagenda) permite organizar e acompanhar todos os compromissos da guilda: Masmorras, Raides, PvP, Reuniões oficiais e Aniversários dos membros.",
+    ["INTRO_STEP3_DESC2"] = "Visão Mensal Completa: Consulte datas, horários e organizadores através de badges coloridos e intuitivos para cada categoria de evento.",
+    ["INTRO_STEP3_DESC3"] = "Criação Simples: Oficiais podem agendar novos eventos em segundos com descrição, tipo e horário, mantendo toda a guilda sincronizada.",
+    ["INTRO_STEP3_OPEN_BTN"] = "Abrir Agenda da Guilda (/gmagenda)",
+
+    -- Passo 4: Gerenciamento de Grupos
+    ["INTRO_STEP4_TAB"] = "4. Grupos",
+    ["INTRO_STEP4_TITLE"] = "Gerenciamento de Grupos & Raides",
+    ["INTRO_STEP4_DESC1"] = "O painel de Grupos (/gmgrupos) facilita a montagem e organização de equipes para Masmorras (5 jogadores), Raides (10 a 40 jogadores), PvP e grupos diversos de missões ou farm.",
+    ["INTRO_STEP4_DESC2"] = "Equilíbrio de Funções: Aloque com facilidade Tanques, Curadores e DPS com visualização clara da composição e cores de classe.",
+    ["INTRO_STEP4_DESC3"] = "Convite em Massa: Com 1 único clique no botão 'Convidar Grupo', o addon dispara automaticamente convites de grupo no jogo para todos os membros escalados!",
+    ["INTRO_STEP4_OPEN_BTN"] = "Abrir Gerenciamento de Grupos (/gmgrupos)",
+
+    -- Passo 5: Pedidos de Profissão & Artesãos
+    ["INTRO_STEP5_TAB"] = "5. Profissões",
+    ["INTRO_STEP5_TITLE"] = "Pedidos de Profissão & Artesãos da Guilda",
+    ["INTRO_STEP5_DESC1"] = "O sistema de Profissões (/gmcraft) conecta artesãos experientes e membros que necessitam de equipamentos raros, consumíveis, encantamentos e poções de alto nível.",
+    ["INTRO_STEP5_DESC2"] = "Catálogo de Artesãos: Consulte quem na guilda conhece receitas raras e itens épicos com apenas 1 clique.",
+    ["INTRO_STEP5_DESC3"] = "Pedidos de Fabricação: Qualquer membro pode solicitar a fabricação de um item especificando comissão em ouro, materiais fornecidos e notas. O artesão aceita e fabrica diretamente no jogo!",
+    ["INTRO_STEP5_OPEN_BTN"] = "Abrir Pedidos de Profissão (/gmcraft)",
+
+    -- Passo 6: Menções no Chat com @
+    ["INTRO_STEP6_TAB"] = "6. Menções (@)",
+    ["INTRO_STEP6_TITLE"] = "Menções no Chat com @ e Alerta Sonoro",
+    ["INTRO_STEP6_DESC1"] = "Marque qualquer colega de guilda no chat digitando @NomeDoPersonagem em qualquer canal (Guilda, Grupo, Raide ou Sussurro). O nome aparece destacado com a cor oficial da classe dele.",
+    ["INTRO_STEP6_DESC2"] = "Alerta Sonoro Imediato: Sempre que alguém mencionar você com @ no chat, o addon tocará uma notificação sonora exclusiva para que você não perca convites de grupo, masmorras ou avisos importantes!",
+    ["INTRO_STEP6_TEST_SOUND"] = "Ouvir Som da Notificação",
+    ["INTRO_STEP6_CHAT_PREVIEW"] = "[Guilda] [Líder]: Olá @Você, venha para a masmorra agora!",
+
+    -- Passo 7: Mapa Mundial
+    ["INTRO_STEP7_TAB"] = "7. Mapa",
+    ["INTRO_STEP7_TITLE"] = "Mapa Mundial & Membros por Região",
+    ["INTRO_STEP7_DESC1"] = "Descubra onde seus colegas de guilda estão explorando pelo mundo em tempo real. Ao abrir o Mapa Mundial (M), clique no botão Guild Manager no canto superior direito para abrir o painel de membros.",
+    ["INTRO_STEP7_DESC2"] = "Veja quem está em cada continente, zona, masmorra ou cidade, além de marcadores (pins) posicionados diretamente no mapa com as coordenadas dos membros online para missões e masmorras.",
+    ["INTRO_STEP7_OPEN_MAP"] = "Abrir Mapa Mundial (M)",
+
+    -- Passo 8: Configurações & Aniversário
+    ["INTRO_STEP8_TAB"] = "8. Config & Aniv",
+    ["INTRO_STEP8_TITLE"] = "Configurações Gerais & Seu Aniversário",
+    ["INTRO_STEP8_DESC1"] = "Personalize o addon em /gmconfig: escolha o idioma (PT-BR ou EN-US), ajuste opções do minimapa, escolha o som das menções e configure a sincronização P2P.",
+    ["INTRO_STEP8_BDAY_TITLE"] = "Comemore seu Aniversário com a Guilda!",
+    ["INTRO_STEP8_BDAY_DESC"] = "Informe a data do seu aniversário abaixo para que a guilda possa comemorar com você na Agenda e nos alertas de login:",
+    ["INTRO_STEP8_BDAY_FORMAT_HINT"] = "Formato: dd/MM (Exemplo: 15/07 ou 25/12)",
+    ["INTRO_STEP8_BDAY_VALID"] = "|cff40ff40Data válida! Pronta para salvar.|r",
+    ["INTRO_STEP8_BDAY_INVALID"] = "|cffff4040Data inválida. Digite no formato dd/MM (ex: 15/07)|r",
+    ["INTRO_STEP8_BDAY_SAVED"] = "Aniversário configurado: %s",
+    ["INTRO_STEP8_BDAY_OPTIONAL"] = "(Opcional - você também pode preencher depois na Auditoria ou Perfil)",
+    ["INTRO_STEP8_OPEN_CONFIG"] = "Abrir Configurações (/gmconfig)",
 }

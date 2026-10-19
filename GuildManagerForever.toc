@@ -43,6 +43,7 @@ Views/ProfessionView.lua
 Views/MinimapButton.lua
 Views/WorldMapView.lua
 Views/ChatMentionView.lua
+Views/IntroView.lua
 
 Controllers/MemberController.lua
 Controllers/LogController.lua
@@ -53,5 +54,6 @@ Controllers/SettingsController.lua
 Controllers/WorldMapController.lua
 Controllers/ChatMentionController.lua
 Controllers/ProfessionController.lua
+Controllers/IntroController.lua
 
 Core.lua

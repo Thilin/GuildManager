@@ -1199,6 +1199,17 @@ function SettingsView:createSettingsColumns()
         end
     end)
     self._widgets.forceSyncBtn = forceSyncBtn
+
+    local tutorialBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
+    tutorialBtn:SetSize(350, 24)
+    tutorialBtn:SetPoint("TOPLEFT", resetAllBtn, "BOTTOMLEFT", 0, -8)
+    tutorialBtn:SetText(L["INTRO_REOPEN_BUTTON"] or "Rever Tutorial / Introdução")
+    tutorialBtn:SetScript("OnClick", function()
+        if _G.GM and _G.GM.introView then
+            _G.GM.introView:show()
+        end
+    end)
+    self._widgets.tutorialBtn = tutorialBtn
 end
 
 --- Cria o rodapé com ações de salvar e fechar.
@@ -1475,6 +1486,7 @@ function SettingsView:updateLocale()
     if self._widgets.forceScanBtn then self._widgets.forceScanBtn:SetText(curL["SETTINGS_FORCE_SCAN_BTN"]) end
     if self._widgets.resetAllBtn then self._widgets.resetAllBtn:SetText(curL["SETTINGS_RESET_DEFAULTS_BTN"]) end
     if self._widgets.forceSyncBtn then self._widgets.forceSyncBtn:SetText(curL["SETTINGS_FORCE_SYNC_BTN"]) end
+    if self._widgets.tutorialBtn then self._widgets.tutorialBtn:SetText(curL["INTRO_REOPEN_BUTTON"] or "Rever Tutorial / Introdução") end
 
     -- Rodapé
     if self._widgets.footerHint then self._widgets.footerHint:SetText("|cff666666" .. (curL["SETTINGS_FOOTER_HINT"] or "GuildManager") .. "|r") end

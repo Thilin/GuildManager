@@ -75,6 +75,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local professionView = ProfessionView:new()
         local professionController = ProfessionController:new(professionService, guildRosterService, memberService, professionView)
 
+        local introView = IntroView:new()
+        local introController = IntroController:new(introView, memberService, guildRosterService, settingsService, syncService)
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -110,6 +113,8 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.professionService = professionService
         GM.professionView = professionView
         GM.professionController = professionController
+        GM.introView = introView
+        GM.introController = introController
 
         locationService:initHooks()
         syncService:initHooks()
@@ -123,6 +128,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         chatMentionController:initHooks()
         professionService:initHooks()
         professionController:initHooks()
+        introController:initHooks()
 
         -- Sanitiza o banco de dados contra duplicatas espúrias geradas por loops de eventos da Blizzard
         if logService and logService.cleanDuplicateAndSpuriousLogs then
@@ -145,6 +151,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                 if worldMapView and worldMapView.updateLocale then worldMapView:updateLocale() end
                 if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
                 if professionView and professionView.updateLocale then professionView:updateLocale() end
+                if introView and introView.updateLocale then introView:updateLocale() end
             end)
         end
 
@@ -162,6 +169,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         if worldMapView and worldMapView.updateLocale then worldMapView:updateLocale() end
         if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
         if professionView and professionView.updateLocale then professionView:updateLocale() end
+        if introView and introView.updateLocale then introView:updateLocale() end
 
         SLASH_GUILDMANAGER_LOC1 = "/gmloc"
         SlashCmdList["GUILDMANAGER_LOC"] = function(msg)
