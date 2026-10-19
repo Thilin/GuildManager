@@ -505,9 +505,10 @@ end
 --- Adiciona um pacote à fila compassada de envio para evitar throttling do chat da Blizzard.
 --- Limita o tamanho máximo a MAX_QUEUE_SIZE para prevenir crescimento descontrolado de memória.
 ---@param payload string
----@param targetChannel string|nil @"GUILD", "CHANNEL", "RAID", "PARTY"
+---@param targetChannel string|nil @"GUILD", "CHANNEL", "RAID", "PARTY", "WHISPER"
 ---@param channelNumber number|nil
-function SyncService:enqueuePacket(payload, targetChannel, channelNumber)
+---@param targetPlayer string|nil
+function SyncService:enqueuePacket(payload, targetChannel, channelNumber, targetPlayer)
     if not payload or payload == "" then return end
 
     local currentSize = (self._queueTail or 0) - (self._queueHead or 1) + 1
@@ -524,6 +525,7 @@ function SyncService:enqueuePacket(payload, targetChannel, channelNumber)
         payload = payload,
         target = targetChannel or "GUILD",
         channelNumber = channelNumber,
+        targetPlayer = targetPlayer,
     }
 end
 
@@ -560,6 +562,8 @@ function SyncService:processSendQueue()
         if IsInGuild and IsInGuild() then
             pcall(Send, SYNC_PREFIX, item.payload, "GUILD")
         end
+    elseif item.target == "WHISPER" and item.targetPlayer and item.targetPlayer ~= "" then
+        pcall(Send, SYNC_PREFIX, item.payload, "WHISPER", item.targetPlayer)
     elseif item.target == "CHANNEL" and item.channelNumber and item.channelNumber > 0 then
         pcall(Send, SYNC_PREFIX, item.payload, "CHANNEL", item.channelNumber)
     elseif item.target == "RAID" and IsInRaid and IsInRaid() then
@@ -693,6 +697,49 @@ end
 function SyncService:sendUpdatePacket(updateData, immediate)
     if not updateData then return end
 
+    -- Suporte a retransmissão de atualizações de pedidos de fabricação
+    if updateData.type == "ORDER" then
+        local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+        local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
+        local payload = updateData.payload
+
+        if immediate and Send and payload then
+            if IsInGuild and IsInGuild() then
+                pcall(Send, SYNC_PREFIX, payload, "GUILD")
+            end
+            if updateData.requesterChar and updateData.requesterChar ~= "" and not self:isSelf(updateData.requesterChar) then
+                pcall(Send, SYNC_PREFIX, payload, "WHISPER", updateData.requesterChar)
+            end
+            if updateData.acceptedChar and updateData.acceptedChar ~= "" and not self:isSelf(updateData.acceptedChar) then
+                pcall(Send, SYNC_PREFIX, payload, "WHISPER", updateData.acceptedChar)
+            end
+            if IsInRaid and IsInRaid() then
+                pcall(Send, SYNC_PREFIX, payload, "RAID")
+            elseif IsInGroup and IsInGroup() then
+                pcall(Send, SYNC_PREFIX, payload, "PARTY")
+            end
+            if chNum and chNum > 0 then
+                pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+            end
+        end
+
+        if payload then
+            if IsInGuild and IsInGuild() then
+                self:enqueuePacket(payload, "GUILD")
+            end
+            if updateData.requesterChar and updateData.requesterChar ~= "" and not self:isSelf(updateData.requesterChar) then
+                self:enqueuePacket(payload, "WHISPER", nil, updateData.requesterChar)
+            end
+            if updateData.acceptedChar and updateData.acceptedChar ~= "" and not self:isSelf(updateData.acceptedChar) then
+                self:enqueuePacket(payload, "WHISPER", nil, updateData.acceptedChar)
+            end
+        end
+
+        updateData.sendCount = (updateData.sendCount or 0) + 1
+        updateData.lastSent = GetTime and GetTime() or 0
+        return
+    end
+
     -- Suporte a retransmissão de atualizações de profissões e receitas
     if updateData.type == "PROFESSION" then
         local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
@@ -807,6 +854,13 @@ end
 ---@return boolean
 function SyncService:isUpdateFullyAcknowledged(updateData, activePeers)
     if not updateData then return true end
+
+    -- Para atualizações de pedidos de fabricação, se confirmado ou atingiu 4 tentativas, encerra
+    if updateData.type == "ORDER" then
+        if updateData.confirmed then return true end
+        if (updateData.sendCount or 0) >= (updateData.maxAttempts or 4) then return true end
+        return false
+    end
 
     activePeers = activePeers or self:getActivePeers()
 
@@ -1232,6 +1286,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if not orderId or orderId == "" then return end
 
         local orderRepo = (_G.GM and _G.GM.craftOrderRepository)
+        local oldStatus = nil
         if orderRepo then
             if action == "DELETE" or action == "CANCEL" or status == "CANCELLED" then
                 orderRepo:delete(orderId)
@@ -1255,6 +1310,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
                         updatedAt = updatedAt,
                     })
                 else
+                    oldStatus = order:getStatus()
                     order:setCrafter(crafter)
                     order:setItemCount(itemCount)
                     order:setTipCopper(tipCopper)
@@ -1265,10 +1321,101 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             end
         end
 
+        -- Envia confirmação (ORDER_ACK) diretamente de volta para o remetente parar a retransmissão
+        local sChar = cleanName(senderClean):match("^(%S+)")
+        if sChar and sChar ~= "" and not self:isSelf(sChar) then
+            local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
+            local ackPayload = string.format("ORDER_ACK~%s~%s~%s", orderId, status, myName)
+            local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+            if Send then
+                pcall(Send, SYNC_PREFIX, ackPayload, "WHISPER", sChar)
+            end
+        end
+
+        -- Se a ordem foi concluída (COMPLETED) e o jogador local for o solicitante, notifica no chat e com som
+        if status == "COMPLETED" and oldStatus ~= "COMPLETED" then
+            local isMyOrder = false
+            if _G.GM and _G.GM.professionView and _G.GM.professionView.matchesPlayer then
+                isMyOrder = _G.GM.professionView:matchesPlayer(requester)
+            else
+                local myName = cleanName(self._myPlayerName or (UnitName and UnitName("player"))):lower()
+                isMyOrder = (cleanName(requester):lower() == myName or cleanName(requester):lower():find("^" .. myName))
+            end
+
+            if isMyOrder then
+                local crafterDisplay = acceptedBy ~= "" and acceptedBy or (crafter ~= "" and crafter or senderClean)
+                local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+                local fmt = L["ORDER_COMPLETED_NOTICE"] or "Seu pedido de %s foi concluído pelo artesão %s!"
+                local msg = string.format("|cff00ff00[GuildManager]|r " .. fmt, recipeName ~= "" and recipeName or "Item", crafterDisplay)
+                print(msg)
+                if PlaySound then
+                    pcall(PlaySound, SOUNDKIT.UI_GUILD_BANK_DEPOSIT_MONEY or 8959)
+                end
+                if RaidNotice_AddMessage and RaidWarningFrame then
+                    pcall(RaidNotice_AddMessage, RaidWarningFrame, msg, { r = 0.0, g = 1.0, b = 0.0 })
+                end
+            end
+        end
+
+        -- Notifica os listeners do serviço
         if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
             _G.GM.professionService:notifyChanged()
         end
+
+        -- Atualiza IMEDIATAMENTE a visualização da tela de pedidos se estiver aberta
+        if _G.GM and _G.GM.professionView and _G.GM.professionView.isShown and _G.GM.professionView:isShown() then
+            if _G.GM.professionView.refreshOrders then
+                _G.GM.professionView:refreshOrders()
+            end
+        end
+
         self:refreshActiveViews(requester)
+
+    -- =========================================================================
+    -- CONFIRMAÇÃO DE RECEBIMENTO DE PEDIDO (ORDER_ACK)
+    -- =========================================================================
+    elseif tag == "ORDER_ACK" then
+        local orderId = arg1
+        if orderId and orderId ~= "" then
+            for uId, uData in pairs(self._pendingOutbox) do
+                if uData.type == "ORDER" and uData.orderId == orderId then
+                    uData.confirmed = true
+                    self._pendingOutbox[uId] = nil
+                end
+            end
+        end
+
+    -- =========================================================================
+    -- SOLICITAÇÃO DE ESTADO DOS PEDIDOS (ORDER_REQ)
+    -- =========================================================================
+    elseif tag == "ORDER_REQ" then
+        if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
+            local orders = _G.GM.craftOrderRepository:findAll()
+            local sChar = cleanName(senderClean):match("^(%S+)")
+            for _, ord in ipairs(orders) do
+                if ord:getStatus() ~= "CANCELLED" then
+                    local payload = string.format("ORDER~UPDATE~%s~%s~%s~%s~%s~%s~%d~%d~%s~%s~%d",
+                        ord:getId(),
+                        cleanName(ord:getRequester()),
+                        cleanName(ord:getCrafter()),
+                        ord:getProfessionKey() or "ALCHEMY",
+                        tostring(ord:getRecipeId() or 0),
+                        ord:getRecipeName() or "",
+                        ord:getItemCount() or 1,
+                        ord:getTipCopper() or 0,
+                        ord:getStatus() or "PENDING",
+                        cleanName(ord:getAcceptedBy()),
+                        ord:getUpdatedAt() or 0
+                    )
+                    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+                    if Send and sChar and sChar ~= "" and not self:isSelf(sChar) then
+                        pcall(Send, SYNC_PREFIX, payload, "WHISPER", sChar)
+                    else
+                        self:enqueuePacket(payload, "GUILD")
+                    end
+                end
+            end
+        end
     end
 end
 
@@ -1473,27 +1620,98 @@ function SyncService:broadcastPlayerProfessions(member, specificProfKey, force)
     return self:broadcastMemberProfessions(member, specificProfKey, force)
 end
 
---- Transmite a criação ou alteração de um pedido de fabricação para a guilda.
+--- Transmite a criação ou alteração de um pedido de fabricação para a guilda e diretamente para os envolvidos.
 --- Formato: ORDER~action~id~requester~crafter~profKey~recipeId~recipeName~itemCount~tipCopper~status~acceptedBy~updatedAt
 ---@param order CraftOrder
 ---@param action string @"CREATE", "UPDATE", "DELETE"
 function SyncService:broadcastCraftOrder(order, action)
     if not order or not order.getId then return end
     action = action or "UPDATE"
+    local requester = order:getRequester() or ""
+    local crafter = order:getCrafter() or ""
+    local acceptedBy = order:getAcceptedBy() or ""
+
     local payload = string.format("ORDER~%s~%s~%s~%s~%s~%s~%s~%d~%d~%s~%s~%d",
         action,
         order:getId(),
-        cleanName(order:getRequester()),
-        cleanName(order:getCrafter()),
+        cleanName(requester),
+        cleanName(crafter),
         order:getProfessionKey() or "ALCHEMY",
         tostring(order:getRecipeId() or 0),
         order:getRecipeName() or "",
         order:getItemCount() or 1,
         order:getTipCopper() or 0,
         order:getStatus() or "PENDING",
-        cleanName(order:getAcceptedBy()),
+        cleanName(acceptedBy),
         order:getUpdatedAt() or 0
     )
+
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
+
+    -- Extrai o primeiro nome de rede para Whispers direcionados da Blizzard
+    local requesterChar = cleanName(requester):match("^(%S+)")
+    local acceptedChar = cleanName(acceptedBy):match("^(%S+)")
+    local crafterChar = cleanName(crafter):match("^(%S+)")
+
+    -- 1. Disparo IMEDIATO para entrega instantânea (sem delay de fila)
+    if Send then
+        if IsInGuild and IsInGuild() then
+            pcall(Send, SYNC_PREFIX, payload, "GUILD")
+        end
+        if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) then
+            pcall(Send, SYNC_PREFIX, payload, "WHISPER", requesterChar)
+        end
+        if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) then
+            pcall(Send, SYNC_PREFIX, payload, "WHISPER", acceptedChar)
+        elseif crafterChar and crafterChar ~= "" and crafterChar:upper() ~= "ANY" and not self:isSelf(crafterChar) then
+            pcall(Send, SYNC_PREFIX, payload, "WHISPER", crafterChar)
+        end
+        if IsInRaid and IsInRaid() then
+            pcall(Send, SYNC_PREFIX, payload, "RAID")
+        elseif IsInGroup and IsInGroup() then
+            pcall(Send, SYNC_PREFIX, payload, "PARTY")
+        end
+        if chNum and chNum > 0 then
+            pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+        end
+    end
+
+    -- 2. Enfileira na fila compassada para garantia contra oscilações de conexão
+    self:enqueuePacket(payload, "GUILD")
+    if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) then
+        self:enqueuePacket(payload, "WHISPER", nil, requesterChar)
+    end
+    if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) then
+        self:enqueuePacket(payload, "WHISPER", nil, acceptedChar)
+    end
+
+    -- 3. Adiciona à outbox de retransmissão para confirmação ACK (especialmente em UPDATE / COMPLETED / DELETE)
+    local updateId = string.format("ORDER_%s_%s", order:getId(), order:getStatus())
+    self._pendingOutbox[updateId] = {
+        type = "ORDER",
+        updateId = updateId,
+        orderId = order:getId(),
+        payload = payload,
+        target = "GUILD",
+        requesterChar = requesterChar,
+        acceptedChar = acceptedChar,
+        lastSent = GetTime and GetTime() or 0,
+        sendCount = 1,
+        maxAttempts = 4,
+        confirmed = false,
+        acknowledgedPeers = {},
+    }
+end
+
+--- Solicita à guilda o estado atual de todos os pedidos ativos e recentes
+function SyncService:requestOrdersSync()
+    local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
+    local payload = string.format("ORDER_REQ~%s", myName)
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    if Send and IsInGuild and IsInGuild() then
+        pcall(Send, SYNC_PREFIX, payload, "GUILD")
+    end
     self:enqueuePacket(payload, "GUILD")
 end
 

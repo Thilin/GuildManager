@@ -518,7 +518,14 @@ function ProfessionView:switchSubTab(subTabId)
         if subTabId == "BROWSER" then self._browserContainer:Show() else self._browserContainer:Hide() end
     end
     if self._ordersContainer then
-        if subTabId == "ORDERS" then self._ordersContainer:Show() else self._ordersContainer:Hide() end
+        if subTabId == "ORDERS" then
+            self._ordersContainer:Show()
+            if _G.GM and _G.GM.syncService and _G.GM.syncService.requestOrdersSync then
+                _G.GM.syncService:requestOrdersSync()
+            end
+        else
+            self._ordersContainer:Hide()
+        end
     end
     if self._myProfsContainer then
         if subTabId == "MY_PROFS" then self._myProfsContainer:Show() else self._myProfsContainer:Hide() end
@@ -2513,6 +2520,7 @@ function ProfessionView:renderOrderRows()
             local canAccept = false
             local isCompleteAction = false
             local isRefuseAction = false
+            local isDismissAction = false
 
             if status == CraftOrder.STATUS.PENDING then
                 -- Pode aceitar se o pedido for aberto para a guilda ou direcionado ao jogador
@@ -2538,6 +2546,13 @@ function ProfessionView:renderOrderRows()
                     canCancel = true
                     isRefuseAction = false
                 end
+            elseif status == CraftOrder.STATUS.COMPLETED then
+                -- Quando concluído, o solicitante pode dispensar/remover o pedido concluído do mural
+                if isRequester then
+                    canCancel = true
+                    isDismissAction = true
+                    isRefuseAction = false
+                end
             end
 
             -- Posicionamento dos botões (lado a lado se ambos existirem, ou centralizado na coluna Ações)
@@ -2555,7 +2570,15 @@ function ProfessionView:renderOrderRows()
 
             if canCancel then
                 row.cancelBtn.isRefuseAction = isRefuseAction
-                if row.cancelBtn.icon then
+                row.cancelBtn.isDismissAction = isDismissAction
+                if isDismissAction then
+                    if row.cancelBtn.icon then
+                        row.cancelBtn.icon:Show()
+                        row.cancelBtn.text:SetText("")
+                    else
+                        row.cancelBtn.text:SetText("|cff00ff00X|r")
+                    end
+                elseif row.cancelBtn.icon then
                     row.cancelBtn.icon:Show()
                     row.cancelBtn.text:SetText("")
                 else
@@ -2563,11 +2586,19 @@ function ProfessionView:renderOrderRows()
                 end
                 row.cancelBtn:SetScript("OnEnter", function(btn)
                     if btn.SetBackdropBorderColor then
-                        btn:SetBackdropBorderColor(1.0, 0.3, 0.3, 1.0)
+                        if btn.isDismissAction then
+                            btn:SetBackdropBorderColor(0.2, 1.0, 0.2, 1.0)
+                        else
+                            btn:SetBackdropBorderColor(1.0, 0.3, 0.3, 1.0)
+                        end
                     end
                     if GameTooltip then
                         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-                        if btn.isRefuseAction then
+                        if btn.isDismissAction then
+                            local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+                            GameTooltip:SetText("|cff00ff00" .. (L["ORDER_DISMISS_TOOLTIP_TITLE"] or "Dispensar Pedido Concluído") .. "|r")
+                            GameTooltip:AddLine(L["ORDER_DISMISS_TOOLTIP_DESC"] or "Clique para remover este pedido concluído do seu mural.", 1, 1, 1, true)
+                        elseif btn.isRefuseAction then
                             GameTooltip:SetText("|cffff4444Recusar Pedido|r")
                             GameTooltip:AddLine("Clique para recusar este pedido e liberá-lo para a guilda.", 1, 1, 1, true)
                         else
@@ -2586,7 +2617,9 @@ function ProfessionView:renderOrderRows()
                 row.cancelBtn:SetScript("OnClick", function(btn)
                     if GameTooltip then GameTooltip:Hide() end
                     if _G.GM and _G.GM.professionService then
-                        if btn.isRefuseAction and _G.GM.professionService.declineOrder then
+                        if btn.isDismissAction then
+                            _G.GM.professionService:cancelOrder(order:getId())
+                        elseif btn.isRefuseAction and _G.GM.professionService.declineOrder then
                             _G.GM.professionService:declineOrder(order:getId())
                         else
                             _G.GM.professionService:cancelOrder(order:getId())
