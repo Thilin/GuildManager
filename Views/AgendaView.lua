@@ -475,11 +475,15 @@ function AgendaView:updatePermissions()
     end
 
     if self._newEventOnDayBtn then
-        self._newEventOnDayBtn:EnableMouse(true)
+        if self._newEventOnDayBtn.SetMotionScriptsWhileDisabled then
+            self._newEventOnDayBtn:SetMotionScriptsWhileDisabled(true)
+        end
         if canOfficer then
+            self._newEventOnDayBtn:Enable()
             self._newEventOnDayBtn:SetAlpha(1.0)
         else
-            self._newEventOnDayBtn:SetAlpha(0.55)
+            self._newEventOnDayBtn:Disable()
+            self._newEventOnDayBtn:SetAlpha(0.50)
         end
     end
 end
@@ -1260,6 +1264,32 @@ function AgendaView:createLeftPanel()
     newEventOnDayBtn:SetSize(185, 22)
     newEventOnDayBtn:SetPoint("RIGHT", subHeader, "RIGHT", -4, 0)
     newEventOnDayBtn:SetText(L["AGENDA_NEW_EVENT_DAY_BTN"] or "+ Novo Evento nesta data")
+    if newEventOnDayBtn.SetMotionScriptsWhileDisabled then
+        newEventOnDayBtn:SetMotionScriptsWhileDisabled(true)
+    end
+    newEventOnDayBtn:SetScript("OnEnter", function(btn)
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine(curL["AGENDA_NEW_EVENT_DAY_BTN"] or "+ Novo Evento nesta data", 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine(curL["EVENT_ERR_OFFICER_ONLY"] or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.|r", 1, 0.3, 0.3, true)
+            end
+            GameTooltip:Show()
+        end
+    end)
+    newEventOnDayBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     newEventOnDayBtn:SetScript("OnClick", function()
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then

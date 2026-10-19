@@ -156,6 +156,16 @@ function GroupController:initHooks()
     SlashCmdList["GUILDMANAGERGROUPS"] = function()
         self:toggle()
     end
+
+    local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+    eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
+    eventFrame:SetScript("OnEvent", function()
+        if self._groupView and self._groupView:isShown() then
+            self:refreshGroups()
+        end
+    end)
+    self._eventFrame = eventFrame
 end
 
 --- Atualiza a lista de membros e grupos carregados na View.

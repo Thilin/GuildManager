@@ -405,6 +405,7 @@ function GroupView:createUI()
                 pcall(PlaySound, 839)
             end
         end
+        self:updateCreatePermissions()
         if self._onRefreshCallback then
             self._onRefreshCallback()
         end
@@ -484,6 +485,7 @@ function GroupView:createUI()
     self:createSideTabs()
     self:createThreeColumns()
     self:createModals()
+    self:updateCreatePermissions()
 end
 
 --- Cria as abas laterais (Auditoria, Logs, Grupos).
@@ -880,6 +882,9 @@ function GroupView:createThreeColumns()
         createBtn:SetSize(62, 22)
         createBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
         createBtn:SetText(L["GROUP_CREATE_BTN"])
+        if createBtn.SetMotionScriptsWhileDisabled then
+            createBtn:SetMotionScriptsWhileDisabled(true)
+        end
         createBtn:SetScript("OnEnter", function(btn)
             local canOfficer = false
             if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
@@ -1366,6 +1371,9 @@ function GroupView:createModals()
     delGroupBtn:SetSize(120, 24)
     delGroupBtn:SetPoint("LEFT", inviteAllBtn, "RIGHT", 10, 0)
     delGroupBtn:SetText(L["GROUP_DELETE_BTN"])
+    if delGroupBtn.SetMotionScriptsWhileDisabled then
+        delGroupBtn:SetMotionScriptsWhileDisabled(true)
+    end
     delGroupBtn:SetScript("OnEnter", function(btn)
         local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local canOfficer = false
@@ -2015,8 +2023,16 @@ function GroupView:openGroupDetailModal(group)
         canOfficer = true
     end
     if m.delGroupBtn then
-        m.delGroupBtn:EnableMouse(true)
-        m.delGroupBtn:SetAlpha(canOfficer and 1.0 or 0.55)
+        if m.delGroupBtn.SetMotionScriptsWhileDisabled then
+            m.delGroupBtn:SetMotionScriptsWhileDisabled(true)
+        end
+        if canOfficer then
+            m.delGroupBtn:Enable()
+            m.delGroupBtn:SetAlpha(1.0)
+        else
+            m.delGroupBtn:Disable()
+            m.delGroupBtn:SetAlpha(0.50)
+        end
     end
 
     m:Show()
@@ -2533,11 +2549,29 @@ function GroupView:updateCreatePermissions()
     end
 
     for _, btn in ipairs(self._createButtons or {}) do
-        btn:EnableMouse(true)
+        if btn.SetMotionScriptsWhileDisabled then
+            btn:SetMotionScriptsWhileDisabled(true)
+        end
         if canOfficer then
+            btn:Enable()
             btn:SetAlpha(1.0)
         else
-            btn:SetAlpha(0.55)
+            btn:Disable()
+            btn:SetAlpha(0.50)
+        end
+    end
+
+    if self._createModal and self._createModal.saveBtn then
+        local sBtn = self._createModal.saveBtn
+        if sBtn.SetMotionScriptsWhileDisabled then
+            sBtn:SetMotionScriptsWhileDisabled(true)
+        end
+        if canOfficer then
+            sBtn:Enable()
+            sBtn:SetAlpha(1.0)
+        else
+            sBtn:Disable()
+            sBtn:SetAlpha(0.50)
         end
     end
 end
