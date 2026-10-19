@@ -124,6 +124,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         professionService:initHooks()
         professionController:initHooks()
 
+        -- Sanitiza o banco de dados contra duplicatas espúrias geradas por loops de eventos da Blizzard
+        if logService and logService.cleanDuplicateAndSpuriousLogs then
+            logService:cleanDuplicateAndSpuriousLogs(memberService)
+        end
+
         if minimapButton and minimapButton.initLocationListener then
             minimapButton:initLocationListener(locationService)
         end

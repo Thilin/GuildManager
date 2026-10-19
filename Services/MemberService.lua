@@ -479,17 +479,24 @@ function MemberService:processRosterMember(rosterData)
 
         -- Se o membro retornou para a guilda, registra o log de REJOINED
         if isReturning and self._logService then
-            local recruiter = member:getRecruiter()
-            if recruiter == "" and pendingRecruiter and pendingRecruiter ~= "" then
-                recruiter = self:resolveRecruiterFullName(pendingRecruiter)
+            -- Verifica se já não foi registrado REJOINED para esta mesma saída anterior
+            local alreadyLoggedRejoin = false
+            if self._logService._repository and self._logService._repository.hasRejoinLogForExitDate then
+                alreadyLoggedRejoin = self._logService._repository:hasRejoinLogForExitDate(member:getName(), previousDateLeft)
             end
-            if previousDateLeft == "" and self._logService.getRecentLeaveOrKickDate then
-                previousDateLeft = self._logService:getRecentLeaveOrKickDate(member:getName())
+            if not alreadyLoggedRejoin then
+                local recruiter = member:getRecruiter()
+                if recruiter == "" and pendingRecruiter and pendingRecruiter ~= "" then
+                    recruiter = self:resolveRecruiterFullName(pendingRecruiter)
+                end
+                if previousDateLeft == "" and self._logService.getRecentLeaveOrKickDate then
+                    previousDateLeft = self._logService:getRecentLeaveOrKickDate(member:getName())
+                end
+                if previousLastRank == "" and self._logService.getRecentRankBeforeLeave then
+                    previousLastRank = self._logService:getRecentRankBeforeLeave(member:getName())
+                end
+                self._logService:logMemberRejoin(member:getName(), recruiter, previousDateLeft, previousLastRank, timesLeft, member:getGuid() or rosterData.guid)
             end
-            if previousLastRank == "" and self._logService.getRecentRankBeforeLeave then
-                previousLastRank = self._logService:getRecentRankBeforeLeave(member:getName())
-            end
-            self._logService:logMemberRejoin(member:getName(), recruiter, previousDateLeft, previousLastRank, timesLeft, member:getGuid() or rosterData.guid)
         end
     else
         -- Novo membro detectado: define data de entrada atual caso não definida
@@ -554,6 +561,10 @@ function MemberService:reconcileGuildMembers(activeRosterNames, activeRosterGuid
         end
         if not inRoster and guid ~= "" and activeRosterGuids then
             inRoster = activeRosterGuids[guid]
+        end
+        if not inRoster then
+            local firstName = memberName:match("^(%S+)") or memberName
+            inRoster = activeRosterNames[firstName] or activeRosterNames[firstName:lower()]
         end
 
         if inRoster then
@@ -899,11 +910,37 @@ function MemberService:findDemotionInGuildEventLog(memberName, targetRank)
     return nil
 end
 
---- Retorna um membro pelo nome.
+--- Retorna um membro pelo nome, resolvendo nome completo ou primeiro nome se necessário.
 ---@param name string
 ---@return Member|nil
 function MemberService:getMember(name)
-    return self._repository:findByName(name)
+    if not name or name == "" then return nil end
+    local member = self._repository:findByName(name)
+    if member then return member end
+
+    -- Tenta resolver pelo nome completo
+    local fullName = self:resolveFullName(name)
+    if fullName and fullName ~= "" and fullName ~= name then
+        member = self._repository:findByName(fullName)
+        if member then return member end
+    end
+
+    -- Tenta busca insensível a maiúsculas/minúsculas ou primeiro nome
+    local clean = (name:match("^[^-]+") or name):match("^%s*(.-)%s*$") or name
+    local cleanLower = clean:lower()
+    for _, m in ipairs(self._repository:findAll()) do
+        local mName = m:getName() or ""
+        local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+        if mClean:lower() == cleanLower then
+            return m
+        end
+        local first = (mClean:match("^(%S+)") or mClean):lower()
+        if first == cleanLower and not name:find("%s") then
+            return m
+        end
+    end
+
+    return nil
 end
 
 --- Retorna um membro pelo GUID do personagem.

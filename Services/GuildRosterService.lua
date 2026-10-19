@@ -113,6 +113,9 @@ function GuildRosterService:scanRoster()
                 if _G.GM.logService.cleanInvertedKickLogs then
                     _G.GM.logService:cleanInvertedKickLogs(self._memberService)
                 end
+                if _G.GM.logService.cleanDuplicateAndSpuriousLogs then
+                    _G.GM.logService:cleanDuplicateAndSpuriousLogs(self._memberService)
+                end
             end
         end
     end
@@ -317,6 +320,55 @@ function GuildRosterService:isPlayerOfficerOrLeader()
                         return true
                     end
                     break
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+--- Verifica se um membro está atualmente presente no roster ativo da guilda.
+--- Consulta o cache da última varredura e, se necessário, a API nativa da Blizzard.
+---@param name string
+---@param guid string|nil
+---@return boolean
+function GuildRosterService:isMemberInRoster(name, guid)
+    if not name or name == "" then return false end
+
+    -- 1. Verifica no cache ativo do roster
+    if self._activeRosterNames then
+        if self._activeRosterNames[name] or self._activeRosterNames[name:lower()] then
+            return true
+        end
+        local base = (name:match("^[^-]+") or name):match("^%s*(.-)%s*$") or name
+        if self._activeRosterNames[base] or self._activeRosterNames[base:lower()] then
+            return true
+        end
+        local first = name:match("^(%S+)") or name
+        if self._activeRosterNames[first] or self._activeRosterNames[first:lower()] then
+            return true
+        end
+    end
+    if guid and guid ~= "" and self._activeRosterGuids and self._activeRosterGuids[guid] then
+        return true
+    end
+
+    -- 2. Fallback: varre diretamente o GetGuildRosterInfo se a API estiver disponível
+    if GetNumGuildMembers and GetGuildRosterInfo then
+        local count = GetNumGuildMembers() or 0
+        local lowerName = name:lower()
+        local lowerFirst = (name:match("^(%S+)") or name):lower()
+        for i = 1, count do
+            local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, gGuid = GetGuildRosterInfo(i)
+            if gGuid and guid and guid ~= "" and gGuid == guid then
+                return true
+            end
+            if gName then
+                local gClean = (gName:match("^[^-]+") or gName):match("^%s*(.-)%s*$") or gName
+                local gLower = gClean:lower()
+                if gLower == lowerName or gLower == lowerFirst then
+                    return true
                 end
             end
         end

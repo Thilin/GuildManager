@@ -1637,11 +1637,28 @@ function MemberController:handleGuildLeave(memberName, eventTimestamp)
     end
 
     local member = self._memberService:getMember(cleanName)
+    if member and member:getName() and member:getName() ~= "" then
+        cleanName = member:getName()
+    end
 
-    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente)
-    -- e o membro já está fora da guilda, evita reprocessar eventos históricos
-    if eventTimestamp and eventTimestamp > 0 and member and not member:isInGuild() then
-        return
+    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente):
+    if eventTimestamp and eventTimestamp > 0 then
+        -- 1. Se o membro já está fora da guilda no banco, evita reprocessar eventos históricos
+        if member and not member:isInGuild() then
+            return
+        end
+        -- 2. Se o membro ESTÁ atualmente ativo na guilda ou no roster, um evento histórico
+        -- antigo de saída da Blizzard NUNCA pode marcá-lo como tendo saído!
+        if member and member:isInGuild() then
+            return
+        end
+        if self._guildRosterService and self._guildRosterService.isMemberInRoster and self._guildRosterService:isMemberInRoster(cleanName) then
+            return
+        end
+        -- 3. Se o membro não existe no banco, mas está ativo no roster do jogo, não cria como ausente
+        if not member and self._guildRosterService and self._guildRosterService.isMemberInRoster and self._guildRosterService:isMemberInRoster(cleanName) then
+            return
+        end
     end
 
     local today = (date and date("%Y-%m-%d %H:%M:%S")) or (os and os.date and os.date("%Y-%m-%d %H:%M:%S")) or ""
@@ -1755,11 +1772,28 @@ function MemberController:handleGuildKick(kickedName, kickerName, eventTimestamp
     end
 
     local member = self._memberService:getMember(cleanKicked)
+    if member and member:getName() and member:getName() ~= "" then
+        cleanKicked = member:getName()
+    end
 
-    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente)
-    -- e o membro já está fora da guilda, evita reprocessar eventos históricos
-    if eventTimestamp and eventTimestamp > 0 and member and not member:isInGuild() then
-        return
+    -- Se o evento veio da verificação do log da Blizzard (eventTimestamp presente):
+    if eventTimestamp and eventTimestamp > 0 then
+        -- 1. Se o membro já está fora da guilda no banco, evita reprocessar eventos históricos
+        if member and not member:isInGuild() then
+            return
+        end
+        -- 2. Se o membro ESTÁ atualmente ativo na guilda ou no roster, um kick histórico
+        -- antigo da Blizzard NUNCA pode desativar quem está ativo hoje!
+        if member and member:isInGuild() then
+            return
+        end
+        if self._guildRosterService and self._guildRosterService.isMemberInRoster and self._guildRosterService:isMemberInRoster(cleanKicked) then
+            return
+        end
+        -- 3. Se o membro não existe no banco, mas está ativo no roster do jogo, não cria como expulso
+        if not member and self._guildRosterService and self._guildRosterService.isMemberInRoster and self._guildRosterService:isMemberInRoster(cleanKicked) then
+            return
+        end
     end
     local today = (date and date("%Y-%m-%d %H:%M:%S")) or (os and os.date and os.date("%Y-%m-%d %H:%M:%S")) or ""
     local dateStr = today
@@ -2108,7 +2142,12 @@ end
 --- registrar expulsões (KICK) e registrar saídas voluntárias do passado (LEFT).
 function MemberController:checkGuildEventLog()
     self._guildEventLogLoaded = true
-    self._processedEventLogKeys = self._processedEventLogKeys or {}
+    if _G.GM_DB then
+        _G.GM_DB.processedGuildEvents = _G.GM_DB.processedGuildEvents or {}
+        self._processedEventLogKeys = _G.GM_DB.processedGuildEvents
+    else
+        self._processedEventLogKeys = self._processedEventLogKeys or {}
+    end
 
     if C_GuildInfo and C_GuildInfo.GetGuildEventLog then
         local success, logEntries = pcall(C_GuildInfo.GetGuildEventLog)
@@ -2116,10 +2155,10 @@ function MemberController:checkGuildEventLog()
             for _, entry in ipairs(logEntries) do
                 if entry then
                     local entryKey = string.format("%s:%s:%s:%s:%s",
-                        tostring(entry.type),
-                        tostring(entry.player1 or entry.sourceName or ""),
-                        tostring(entry.player2 or entry.name or ""),
-                        tostring(entry.rank or entry.rankName or ""),
+                        tostring(entry.type):lower(),
+                        tostring(entry.player1 or entry.sourceName or ""):lower(),
+                        tostring(entry.player2 or entry.name or ""):lower(),
+                        tostring(entry.rank or entry.rankName or ""):lower(),
                         tostring(entry.time or 0))
                     if not self._processedEventLogKeys[entryKey] then
                         self._processedEventLogKeys[entryKey] = true
@@ -2178,26 +2217,27 @@ function MemberController:checkGuildEventLog()
             for i = 1, limit do
                 local s, eventType, p1, p2, rank, years, months, days, hours = pcall(getInfo, i)
                 if s and eventType then
-                    local entryKey = string.format("%s:%s:%s:%s:%s:%s:%s:%s",
-                        tostring(eventType),
-                        tostring(p1 or ""),
-                        tostring(p2 or ""),
-                        tostring(rank or ""),
-                        tostring(years or 0),
-                        tostring(months or 0),
-                        tostring(days or 0),
-                        tostring(hours or 0))
+                    local eventTimestamp = nil
+                    local approxEventTime = 0
+                    if days or hours or months or years then
+                        local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
+                        local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
+                        approxEventTime = math.floor((now - secAgo) / 3600) * 3600
+                        if now > secAgo then
+                            eventTimestamp = now - secAgo
+                        end
+                    end
+
+                    local entryKey = string.format("%s:%s:%s:%s:%d",
+                        tostring(eventType):lower(),
+                        tostring(p1 or ""):lower(),
+                        tostring(p2 or ""):lower(),
+                        tostring(rank or ""):lower(),
+                        approxEventTime)
+
                     if not self._processedEventLogKeys[entryKey] then
                         self._processedEventLogKeys[entryKey] = true
                         local evtLower = tostring(eventType):lower()
-                        local eventTimestamp = nil
-                        if days or hours or months or years then
-                            local now = (GetServerTime and GetServerTime()) or (time and time()) or (os and os.time and os.time()) or 0
-                            local secAgo = ((years or 0) * 365 + (months or 0) * 30 + (days or 0)) * 86400 + (hours or 0) * 3600
-                            if now > secAgo then
-                                eventTimestamp = now - secAgo
-                            end
-                        end
 
                         if evtLower == "invite" or evtLower:find("invite") or evtLower:find("convida") then
                             -- Apenas convite enviado: NÃO é JOINED, apenas guarda recrutador pendente
@@ -2335,11 +2375,25 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
     end
 
     local member = self._memberService:getMember(cleanName)
+    if member and member:getName() and member:getName() ~= "" then
+        cleanName = member:getName()
+    end
 
     -- Se o membro não está na guilda (está marcado como fora / removido),
     -- ele NÃO está ingressando agora: esta entrada no log da Blizzard é histórica (anterior à saída)!
     if member and not member:isInGuild() then
         return
+    end
+
+    -- Se o membro JÁ está na guilda e o evento veio do histórico da Blizzard (eventTimestamp presente):
+    -- Se ele já possui qualquer log de JOINED ou REJOINED, NUNCA duplica!
+    if eventTimestamp and eventTimestamp > 0 and member and member:isInGuild() then
+        if self._logService and self._logService._repository then
+            local repo = self._logService._repository
+            if repo.hasAnyJoinOrRejoinLog and repo:hasAnyJoinOrRejoinLog(cleanName, member:getGuid()) then
+                return
+            end
+        end
     end
 
     -- Verifica se já possui log de JOINED para evitar duplicatas
@@ -2354,6 +2408,12 @@ function MemberController:handleOfflineGuildJoin(joinedName, eventTimestamp)
     -- Se já possui log de REJOINED recente para este evento, evita duplicatas
     if self._logService and self._logService.hasRejoinLog and self._logService:hasRejoinLog(cleanName, eventTimestamp) then
         return
+    end
+    if self._logService and self._logService._repository and self._logService._repository.hasRejoinLogForExitDate then
+        local pDateLeft = member and member:getDateLeft() or ""
+        if pDateLeft ~= "" and self._logService._repository:hasRejoinLogForExitDate(cleanName, pDateLeft) then
+            return
+        end
     end
 
     if self._memberService and self._memberService.recordRecentJoin then

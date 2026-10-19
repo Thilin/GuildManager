@@ -1133,6 +1133,23 @@ function LogService:cleanDuplicateKickAndLeaveLogs(memberService)
     return count
 end
 
+--- Remove do banco de dados registros duplicados e espúrios de REJOINED e LEFT repetidos em loop.
+--- Corrige também o contador timesLeft dos membros afetados pelas duplicatas.
+---@param memberService table|nil
+---@return number @Quantidade de registros removidos
+function LogService:cleanDuplicateAndSpuriousLogs(memberService)
+    local mService = memberService or self._memberService or (_G.GM and _G.GM.memberService)
+    if not self._repository or not self._repository.cleanDuplicateAndSpuriousLogs then
+        return 0
+    end
+
+    local count = self._repository:cleanDuplicateAndSpuriousLogs(mService)
+    if count > 0 then
+        print(string.format("|cff00ff00[GuildManager]|r %d log(s) duplicados/espúrios de retorno e saída foram removidos.", count))
+    end
+    return count
+end
+
 --- Formata a mensagem para o evento OFFICERNOTE.
 ---@param memberName string
 ---@param oldNote string|nil

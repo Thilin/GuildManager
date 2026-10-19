@@ -918,5 +918,171 @@ function LogRepository:purgeOlderThan(cutoffTimestamp)
     return purged
 end
 
+--- Verifica se o personagem já possui qualquer log de JOINED ou REJOINED no banco de dados.
+---@param name string
+---@param guid string|nil
+---@return boolean
+function LogRepository:hasAnyJoinOrRejoinLog(name, guid)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+    local lowerName = name:lower()
+    local firstName = (name:match("^(%S+)") or name):lower()
+    for idx = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[idx]
+        if rawData and (rawData.event == "JOINED" or rawData.event == "REJOINED" or (LogEvent and (rawData.event == LogEvent.JOINED or rawData.event == LogEvent.REJOINED))) then
+            local lName = (rawData.name or ""):lower()
+            if lName == lowerName or lName == firstName then
+                return true
+            end
+            if guid and guid ~= "" and rawData.guid and rawData.guid == guid then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--- Verifica se o personagem já possui algum log de REJOINED referenciando a mesma data de saída anterior.
+---@param name string
+---@param dateLeft string|nil
+---@return boolean
+function LogRepository:hasRejoinLogForExitDate(name, dateLeft)
+    if not name or name == "" or type(self._db.logs) ~= "table" then
+        return false
+    end
+    local lowerName = name:lower()
+    local firstName = (name:match("^(%S+)") or name):lower()
+    local targetExit = (dateLeft and dateLeft ~= "") and dateLeft or nil
+    for idx = #self._db.logs, 1, -1 do
+        local rawData = self._db.logs[idx]
+        if rawData and (rawData.event == "REJOINED" or rawData.event == (LogEvent and LogEvent.REJOINED)) then
+            local lName = (rawData.name or ""):lower()
+            if lName == lowerName or lName == firstName then
+                if targetExit then
+                    local logDateLeft = rawData.dateLeft
+                    if (not logDateLeft or logDateLeft == "") and rawData.message then
+                        logDateLeft = rawData.message:match("Saiu em:%s*|c%x+(.-)|r")
+                    end
+                    if logDateLeft and logDateLeft ~= "" and logDateLeft == targetExit then
+                        return true
+                    end
+                else
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+--- Remove registros duplicados espúrios de REJOINED e LEFT causados pelo loop de verificação do log da Blizzard.
+--- Corrige os contadores timesLeft inflacionados dos membros afetados.
+---@param memberService table|nil
+---@return number @Quantidade de registros removidos
+function LogRepository:cleanDuplicateAndSpuriousLogs(memberService)
+    if type(self._db.logs) ~= "table" or #self._db.logs <= 1 then
+        return 0
+    end
+
+    local logs = self._db.logs
+    local toRemove = {}
+    local affectedMembers = {}
+
+    -- 1. Deduplicação de REJOINED com a mesma data de saída anterior ou múltiplos retornos sem nova saída
+    local seenRejoinByExit = {}
+    for i = 1, #logs do
+        local l = logs[i]
+        if l and (l.event == "REJOINED" or l.event == (LogEvent and LogEvent.REJOINED)) then
+            local name = (l.name or ""):lower()
+            local dateLeft = l.dateLeft or ""
+            if dateLeft == "" and l.message then
+                dateLeft = l.message:match("Saiu em:%s*|c%x+(.-)|r") or ""
+            end
+            local key = name .. ":" .. dateLeft
+            if seenRejoinByExit[key] then
+                toRemove[i] = true
+                affectedMembers[name] = true
+            else
+                seenRejoinByExit[key] = i
+            end
+        end
+    end
+
+    -- 2. Limpeza de logs repetidos em loop para membros ativos conhecidos (ex: Chico, Jundira, Mega Lucarioex, Lorass, Lola, Draco)
+    local targetMembers = {
+        ["chico branco"] = true,
+        ["jundira botelho"] = true,
+        ["mega lucarioex"] = true,
+        ["lorass tyrell"] = true,
+        ["lola fentanyla"] = true,
+        ["draco featherlight"] = true,
+    }
+    local seenTargetEvents = {}
+    for i = 1, #logs do
+        local l = logs[i]
+        if l then
+            local name = (l.name or ""):lower()
+            local evt = l.event or ""
+            if targetMembers[name] and (evt == "LEFT" or evt == "LEAVED" or evt == "REJOINED") then
+                seenTargetEvents[name] = seenTargetEvents[name] or {}
+                seenTargetEvents[name][evt] = (seenTargetEvents[name][evt] or 0) + 1
+                if seenTargetEvents[name][evt] > 1 then
+                    toRemove[i] = true
+                    affectedMembers[name] = true
+                end
+            end
+        end
+    end
+
+    -- 3. Limpeza genérica: logs idênticos consecutivos (mesmo evento, nome, e mensagem)
+    local lastSeen = {}
+    for i = 1, #logs do
+        if not toRemove[i] then
+            local l = logs[i]
+            if l then
+                local k = string.format("%s:%s:%s", tostring(l.event), tostring(l.name):lower(), tostring(l.message))
+                if lastSeen[k] and (i - lastSeen[k]) <= 10 then
+                    toRemove[i] = true
+                else
+                    lastSeen[k] = i
+                end
+            end
+        end
+    end
+
+    -- Executa a remoção
+    local removedCount = 0
+    for i = #logs, 1, -1 do
+        if toRemove[i] then
+            table.remove(logs, i)
+            removedCount = removedCount + 1
+        end
+    end
+
+    -- Renumera IDs
+    if removedCount > 0 then
+        for idx, rawData in ipairs(logs) do
+            rawData.id = idx
+        end
+    end
+
+    -- Corrige o timesLeft dos membros afetados
+    if memberService then
+        for nameLower in pairs(affectedMembers) do
+            local m = memberService:getMember(nameLower)
+            if m then
+                local cur = m:getTimesLeft() or 0
+                if cur > 1 then
+                    m:setTimesLeft(1)
+                    memberService:saveMember(m)
+                end
+            end
+        end
+    end
+
+    return removedCount
+end
+
 
 
