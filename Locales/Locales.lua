@@ -742,6 +742,10 @@ Locales.strings["enUS"] = {
     ["SYNC_CONFLICT_CHAT_REPLACED"] = "[GuildManager] %s for %s was replaced in leader database.",
     ["SYNC_CONFLICT_CHAT_CONCAT"] = "[GuildManager] %s for %s was concatenated in leader database.",
     ["SYNC_CONFLICT_CHAT_KEPT"] = "[GuildManager] Kept current %s for %s in leader database.",
+
+    -- No Guild Map Screen
+    ["NO_GUILD_MAP_MSG"] = "YOU ARE NOT IN A GUILD",
+    ["NO_GUILD_MAP_SUB"] = "Join a guild to view members on the map.",
 }
 
 -- =========================================================================
@@ -1401,4 +1405,8 @@ Locales.strings["ptBR"] = {
     ["SYNC_CONFLICT_CHAT_REPLACED"] = "[GuildManager] %s de %s foi substituído no banco do líder.",
     ["SYNC_CONFLICT_CHAT_CONCAT"] = "[GuildManager] %s de %s foi concatenado no banco do líder.",
     ["SYNC_CONFLICT_CHAT_KEPT"] = "[GuildManager] %s de %s mantido inalterado no banco do líder.",
+
+    -- Tela de Mapa Sem Guilda
+    ["NO_GUILD_MAP_MSG"] = "VOCÊ NÃO ESTÁ EM UMA GUILDA",
+    ["NO_GUILD_MAP_SUB"] = "Entre em uma guilda para visualizar membros no mapa.",
 }

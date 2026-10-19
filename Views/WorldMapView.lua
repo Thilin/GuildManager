@@ -537,6 +537,12 @@ end
 function WorldMapView:reanchorHeaderButtons()
     if not WorldMapFrame then return end
 
+    if IsInGuild and not IsInGuild() then
+        if self._realtimeBadge then self._realtimeBadge:Hide() end
+        if self._mapButton then self._mapButton:Hide() end
+        return
+    end
+
     local maxMinBtn = (WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.MaximizeMinimizeFrame)
         or WorldMapFrame.MaximizeMinimizeFrame
         or WorldMapFrameSizeDownButton
@@ -705,7 +711,12 @@ end
 
 --- Garante e atualiza o badge de membros online no topo do WorldMapFrame oficial
 function WorldMapView:ensureRealtimeBadge()
-    if self._realtimeBadge or not WorldMapFrame then return end
+    if not WorldMapFrame then return end
+    if IsInGuild and not IsInGuild() then
+        if self._realtimeBadge then self._realtimeBadge:Hide() end
+        return
+    end
+    if self._realtimeBadge then return end
 
     local badgeBtn = CreateFrame("Button", "GM_WorldMapPeerBadge", WorldMapFrame, "UIPanelButtonTemplate")
     badgeBtn:SetSize(126, 21)
@@ -799,6 +810,11 @@ end
 
 --- Atualiza o texto do badge superior com a contagem ao vivo
 function WorldMapView:updateRealtimeBadge()
+    if IsInGuild and not IsInGuild() then
+        if self._realtimeBadge then self._realtimeBadge:Hide() end
+        return
+    end
+
     self:ensureRealtimeBadge()
     if not self._realtimeBadge then return end
 
@@ -816,6 +832,13 @@ end
 --- Atualiza a renderização contínua de todos os pinos de jogadores remotos no mapa oficial da Blizzard
 function WorldMapView:updateRealtimePins()
     if not WorldMapFrame or not WorldMapFrame:IsShown() then return end
+
+    if IsInGuild and not IsInGuild() then
+        self:clearPins()
+        if self._realtimeBadge then self._realtimeBadge:Hide() end
+        if self._mapButton then self._mapButton:Hide() end
+        return
+    end
 
     local locService = _G.GM and _G.GM.locationService
     if not locService then return end
@@ -1145,6 +1168,7 @@ function WorldMapView:initWorldMapUI()
     sep:SetPoint("TOPLEFT", countText, "BOTTOMLEFT", 0, -6)
     sep:SetPoint("RIGHT", panel, "RIGHT", -10, 0)
     sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
+    panel.sep = sep
 
     -- Botão de Escanear / Atualizar Região
     local scanBtn = CreateFrame("Button", nil, panel, template)
@@ -1174,6 +1198,7 @@ function WorldMapView:initWorldMapUI()
             self._onScanCallback()
         end
     end)
+    panel.scanBtn = scanBtn
 
     -- Container da Lista de Membros
     local listContainer = CreateFrame("Frame", nil, panel, template)
@@ -1220,6 +1245,39 @@ function WorldMapView:initWorldMapUI()
     emptyMsg:SetText(curL["MAP_EMPTY_MSG"] or "No guild members\nfound in this region.")
     emptyMsg:Hide()
     panel.emptyMsg = emptyMsg
+
+    -- Container e Mensagem Exclusiva caso o jogador NÃO esteja em guilda
+    local noGuildFrame = CreateFrame("Frame", nil, panel)
+    noGuildFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -40)
+    noGuildFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 20)
+    noGuildFrame:Hide()
+    panel.noGuildFrame = noGuildFrame
+
+    local noGuildIcon = noGuildFrame:CreateTexture(nil, "ARTWORK")
+    noGuildIcon:SetSize(48, 48)
+    noGuildIcon:SetPoint("CENTER", noGuildFrame, "CENTER", 0, 35)
+    noGuildIcon:SetTexture("Interface\\Icons\\INV_Misc_GroupNeedMore")
+    noGuildIcon:SetDesaturated(true)
+    noGuildFrame.icon = noGuildIcon
+
+    local noGuildText = noGuildFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    noGuildText:SetPoint("TOP", noGuildIcon, "BOTTOM", 0, -16)
+    noGuildText:SetPoint("LEFT", noGuildFrame, "LEFT", 10, 0)
+    noGuildText:SetPoint("RIGHT", noGuildFrame, "RIGHT", -10, 0)
+    noGuildText:SetJustifyH("CENTER")
+    noGuildText:SetTextColor(1.0, 0.2, 0.2, 1.0)
+    noGuildText:SetText(curL["NO_GUILD_MAP_MSG"] or "VOCÊ NÃO ESTÁ EM UMA GUILDA")
+    noGuildFrame.text = noGuildText
+
+    local noGuildSub = noGuildFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    noGuildSub:SetPoint("TOP", noGuildText, "BOTTOM", 0, -10)
+    noGuildSub:SetPoint("LEFT", noGuildFrame, "LEFT", 12, 0)
+    noGuildSub:SetPoint("RIGHT", noGuildFrame, "RIGHT", -12, 0)
+    noGuildSub:SetJustifyH("CENTER")
+    noGuildSub:SetSpacing(3)
+    noGuildSub:SetTextColor(0.8, 0.8, 0.8, 0.85)
+    noGuildSub:SetText(curL["NO_GUILD_MAP_SUB"] or "Entre em uma guilda para visualizar membros no mapa.")
+    noGuildFrame.sub = noGuildSub
 
     -- Rodapé explicativo
     local footer = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -1320,6 +1378,10 @@ function WorldMapView:initWorldMapUI()
         row:Hide()
         self._memberRows[i] = row
     end
+
+    if IsInGuild and not IsInGuild() then
+        self:renderNoGuild()
+    end
 end
 
 --- Atualiza o posicionamento do painel garantindo que fique dentro dos limites da tela.
@@ -1351,6 +1413,11 @@ end
 
 --- Atualiza o estado visual do botão inferior (ativo / inativo).
 function WorldMapView:updateButtonState()
+    if IsInGuild and not IsInGuild() then
+        if self._mapButton then self._mapButton:Hide() end
+        return
+    end
+
     if self._mapButton then
         if self._isPanelOpen then
             if self._mapButton.SetBackdropColor then
@@ -1382,6 +1449,11 @@ function WorldMapView:showPanel()
     self._isPanelOpen = true
     self:updateButtonState()
 
+    if IsInGuild and not IsInGuild() then
+        self:renderNoGuild()
+        return
+    end
+
     if self._onScanCallback then
         self._onScanCallback()
     else
@@ -1409,18 +1481,86 @@ end
 ---@param isContinent boolean|nil
 ---@param isWorld boolean|nil
 function WorldMapView:updateButton(count, isContinent, isWorld)
+    if IsInGuild and not IsInGuild() then
+        if self._mapButton then self._mapButton:Hide() end
+        return
+    end
+
     if not self._mapButton then
         self:initWorldMapUI()
     end
+    if not self._mapButton then return end
+
     local curL = (_G.GM and _G.GM.L) or _G.L or L
     local num = tonumber(count) or 0
     local color = num > 0 and "|cff00ff00" or "|cffaaaaaa"
     local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
-    if self._mapButton and self._mapButton.text then
+    if self._mapButton.text then
         self._mapButton.text:SetText(string.format(curL["MAP_BTN_IN_REGION"] or "|cffffd200Guild:|r %s%d %s|r", color, num, scopeText))
     end
     self:reanchorMapButton()
     self:updateButtonState()
+
+    local showBtn = true
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showWorldMapButton") == false then
+        showBtn = false
+    end
+    if showBtn then
+        self._mapButton:Show()
+    else
+        self._mapButton:Hide()
+    end
+end
+
+--- Renderiza o estado exclusivo de jogador sem guilda: oculta botões, pinos e membros,
+--- e exibe no painel exclusivamente a mensagem "VOCÊ NÃO ESTÁ EM UMA GUILDA".
+function WorldMapView:renderNoGuild()
+    if not self._panel then
+        self:initWorldMapUI()
+    end
+
+    -- 1. Oculta os botões superiores da guilda no mapa nativo
+    if self._mapButton then
+        self._mapButton:Hide()
+    end
+    if self._realtimeBadge then
+        self._realtimeBadge:Hide()
+    end
+
+    -- 2. Limpa e remove quaisquer pinos no mapa
+    self:clearPins()
+    self._membersData = {}
+
+    local panel = self._panel
+    if not panel then return end
+
+    -- 3. Oculta todos os componentes normais do painel da guilda
+    if panel.headerTitle then panel.headerTitle:Hide() end
+    if panel.zoneTitle then panel.zoneTitle:Hide() end
+    if panel.countText then panel.countText:Hide() end
+    if panel.sep then panel.sep:Hide() end
+    if panel.scanBtn then panel.scanBtn:Hide() end
+    if panel.listContainer then panel.listContainer:Hide() end
+    if panel.footer then panel.footer:Hide() end
+    if panel.emptyMsg then panel.emptyMsg:Hide() end
+    if self._scrollBar then self._scrollBar:Hide() end
+
+    for _, row in pairs(self._memberRows or {}) do
+        row:Hide()
+        row.memberData = nil
+    end
+
+    -- 4. Exibe o frame com a mensagem exclusiva centralizada
+    if panel.noGuildFrame then
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        if panel.noGuildFrame.text then
+            panel.noGuildFrame.text:SetText(curL["NO_GUILD_MAP_MSG"] or "VOCÊ NÃO ESTÁ EM UMA GUILDA")
+        end
+        if panel.noGuildFrame.sub then
+            panel.noGuildFrame.sub:SetText(curL["NO_GUILD_MAP_SUB"] or "Entre em uma guilda para visualizar membros no mapa.")
+        end
+        panel.noGuildFrame:Show()
+    end
 end
 
 --- Renderiza a lista de membros no painel lateral do mapa.
@@ -1429,6 +1569,11 @@ end
 ---@param isContinent boolean|nil @Indica se o mapa atual é um continente
 ---@param isWorld boolean|nil @Indica se o mapa atual é o mundo global
 function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
+    if IsInGuild and not IsInGuild() then
+        self:renderNoGuild()
+        return
+    end
+
     local curL = (_G.GM and _G.GM.L) or _G.L or L
     self._membersData = membersData or {}
     self._currentZoneName = zoneName or (curL["MAP_CURRENT_REGION"] or "Current Region")
@@ -1440,9 +1585,21 @@ function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
     end
 
     if self._panel then
-        self._panel.zoneTitle:SetText("|cff00e5ff" .. self._currentZoneName .. "|r")
+        if self._panel.headerTitle then self._panel.headerTitle:Show() end
+        if self._panel.zoneTitle then
+            self._panel.zoneTitle:SetText("|cff00e5ff" .. self._currentZoneName .. "|r")
+            self._panel.zoneTitle:Show()
+        end
         local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
-        self._panel.countText:SetText(string.format(curL["MAP_FOUND_COUNT_FORMAT"] or "|cffa8f0a8%d member(s) %s|r", #self._membersData, scopeText))
+        if self._panel.countText then
+            self._panel.countText:SetText(string.format(curL["MAP_FOUND_COUNT_FORMAT"] or "|cffa8f0a8%d member(s) %s|r", #self._membersData, scopeText))
+            self._panel.countText:Show()
+        end
+        if self._panel.sep then self._panel.sep:Show() end
+        if self._panel.scanBtn then self._panel.scanBtn:Show() end
+        if self._panel.listContainer then self._panel.listContainer:Show() end
+        if self._panel.footer then self._panel.footer:Show() end
+        if self._panel.noGuildFrame then self._panel.noGuildFrame:Hide() end
     end
 
     self:updateButton(#self._membersData, isContinent, isWorld)
@@ -1552,6 +1709,11 @@ end
 
 --- Atualiza dinamicamente todos os textos da interface do mapa de acordo com o idioma ativo
 function WorldMapView:updateLocale()
+    if IsInGuild and not IsInGuild() then
+        self:renderNoGuild()
+        return
+    end
+
     local curL = (_G.GM and _G.GM.L) or _G.L or L
 
     if self._panel then

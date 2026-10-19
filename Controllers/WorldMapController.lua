@@ -357,7 +357,11 @@ function WorldMapController:initHooks()
     if self._locationService and self._locationService.registerListener then
         self._locationService:registerListener(function()
             if WorldMapFrame and WorldMapFrame:IsShown() and self._worldMapView then
-                self._worldMapView:updateRealtimePins()
+                if IsInGuild and not IsInGuild() then
+                    self._worldMapView:clearPins()
+                else
+                    self._worldMapView:updateRealtimePins()
+                end
             end
         end)
     end
@@ -365,6 +369,23 @@ function WorldMapController:initHooks()
     -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel e varre os membros da região
     WorldMapFrame:HookScript("OnShow", function()
         self._worldMapView:initWorldMapUI()
+
+        if IsInGuild and not IsInGuild() then
+            self._worldMapView:renderNoGuild()
+            local showBtn = true
+            if _G.GM and _G.GM.settingsService then
+                if _G.GM.settingsService:get("showWorldMapButton") == false then
+                    showBtn = false
+                end
+            end
+            if showBtn then
+                self._worldMapView:showPanel()
+            else
+                self._worldMapView:hidePanel()
+            end
+            return
+        end
+
         self._worldMapView:updateRealtimePins()
 
         local showBtn = true
@@ -404,14 +425,22 @@ function WorldMapController:initHooks()
     -- Hook nas mudanças de mapa oficial para reposicionamento instantâneo
     if WorldMapFrame.OnMapChanged then
         pcall(hooksecurefunc, WorldMapFrame, "OnMapChanged", function()
-            if self._worldMapView then self._worldMapView:updateRealtimePins() end
-            self:scanCurrentZone()
+            if IsInGuild and not IsInGuild() then
+                if self._worldMapView then self._worldMapView:renderNoGuild() end
+            else
+                if self._worldMapView then self._worldMapView:updateRealtimePins() end
+                self:scanCurrentZone()
+            end
         end)
     end
     if WorldMapFrame.SetMapID then
         pcall(hooksecurefunc, WorldMapFrame, "SetMapID", function()
-            if self._worldMapView then self._worldMapView:updateRealtimePins() end
-            self:scanCurrentZone()
+            if IsInGuild and not IsInGuild() then
+                if self._worldMapView then self._worldMapView:renderNoGuild() end
+            else
+                if self._worldMapView then self._worldMapView:updateRealtimePins() end
+                self:scanCurrentZone()
+            end
         end)
     end
 
@@ -428,12 +457,17 @@ function WorldMapController:initHooks()
     eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+    eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
     pcall(function() eventFrame:RegisterEvent("WORLD_MAP_UPDATE") end)
 
     eventFrame:SetScript("OnEvent", function(_, event)
         if WorldMapFrame and WorldMapFrame:IsShown() then
-            self:scanCurrentZone()
-            self._worldMapView:updateRealtimePins()
+            if IsInGuild and not IsInGuild() then
+                self._worldMapView:renderNoGuild()
+            else
+                self:scanCurrentZone()
+                self._worldMapView:updateRealtimePins()
+            end
         end
     end)
 
@@ -443,8 +477,12 @@ function WorldMapController:initHooks()
     if WorldMapFrame:IsShown() then
         self._worldMapView:initWorldMapUI()
         self._worldMapView:showPanel()
-        self._worldMapView:updateRealtimePins()
-        self:scanCurrentZone()
+        if IsInGuild and not IsInGuild() then
+            self._worldMapView:renderNoGuild()
+        else
+            self._worldMapView:updateRealtimePins()
+            self:scanCurrentZone()
+        end
     end
 end
 
@@ -455,7 +493,11 @@ function WorldMapController:startPeriodicUpdate()
     if C_Timer and C_Timer.NewTicker then
         self._updateTicker = C_Timer.NewTicker(2.5, function()
             if WorldMapFrame and WorldMapFrame:IsShown() then
-                self:scanCurrentZone()
+                if IsInGuild and not IsInGuild() then
+                    self._worldMapView:renderNoGuild()
+                else
+                    self:scanCurrentZone()
+                end
             else
                 self:stopPeriodicUpdate()
             end
@@ -473,6 +515,13 @@ end
 
 --- Varre e filtra os membros da guilda presentes no mapa/região/continente atual.
 function WorldMapController:scanCurrentZone()
+    if IsInGuild and not IsInGuild() then
+        if self._worldMapView then
+            self._worldMapView:renderNoGuild()
+        end
+        return
+    end
+
     local currentMapID = self:getCurrentMapID()
     local currentMapName = self:getCurrentMapName(currentMapID)
     self._lastMapID = currentMapID
