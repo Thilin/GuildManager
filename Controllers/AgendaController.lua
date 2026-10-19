@@ -27,6 +27,10 @@ end
 function AgendaController:initHooks()
     if not self._agendaView then return end
 
+    if self._agendaView.setEventService then
+        self._agendaView:setEventService(self._eventService)
+    end
+
     -- Callback de atualização da View
     if self._agendaView.setOnRefreshCallback then
         self._agendaView:setOnRefreshCallback(function()
@@ -181,6 +185,38 @@ function AgendaController:initHooks()
         end)
     end
 
+    -- Callback de promover membro a partir da lista de promoções
+    if self._agendaView.setOnPromoteMemberCallback then
+        self._agendaView:setOnPromoteMemberCallback(function(memberName, targetRank)
+            local canOfficer = false
+            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
+                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
+            elseif IsGuildLeader and IsGuildLeader() then
+                canOfficer = true
+            elseif CanPromote and CanPromote() then
+                canOfficer = true
+            end
+
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Você não tem permissão para promover membros na guilda.")
+                return false
+            end
+
+            local cleanName = memberName and memberName:match("^[^-]+") or memberName
+            if cleanName and GuildPromote then
+                GuildPromote(cleanName)
+                print(string.format("|cff00ff00[GuildManager]|r Comando de promoção enviado para |cffffd200%s|r (%s).", cleanName, targetRank or ""))
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(1.5, function()
+                        self:refreshAgenda()
+                    end)
+                end
+                return true
+            end
+            return false
+        end)
+    end
+
     -- Monitora entrada no mundo para notificar sobre aniversários e eventos do dia
     local loginFrame = CreateFrame("Frame")
     loginFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -219,7 +255,7 @@ function AgendaController:checkLoginNotifications()
             end
         end
         if #todayList > 0 then
-            print(string.format("|cff00ff00[GuildManager]|r 🎂 |cffffd200Aniversário Hoje:|r %s está fazendo aniversário! Dê os parabéns!", table.concat(todayList, ", ")))
+            print(string.format("|cff00ff00[GuildManager]|r |cffffd200Aniversário Hoje:|r %s está fazendo aniversário! Dê os parabéns!", table.concat(todayList, ", ")))
         end
     end
 
@@ -261,9 +297,18 @@ function AgendaController:refreshAgenda()
     -- 2. Carrega lista de próximos aniversariantes ordenada
     local birthdays = {}
     if self._eventService and self._eventService.getUpcomingBirthdays then
-        birthdays = self._eventService:getUpcomingBirthdays() or {}
+        birthdays = self._eventService:getUpcomingBirthdays(30) or {}
     end
     self._agendaView:setUpcomingBirthdays(birthdays)
+
+    -- 2b. Carrega promoções elegíveis / futuras com base na data de entrada
+    local promotions = {}
+    if self._eventService and self._eventService.getUpcomingPromotions then
+        promotions = self._eventService:getUpcomingPromotions(30) or {}
+    end
+    if self._agendaView.setUpcomingPromotions then
+        self._agendaView:setUpcomingPromotions(promotions)
+    end
 
     -- 3. Carrega lista de membros ativos da guilda para buscas e convites
     local guildMembers = {}

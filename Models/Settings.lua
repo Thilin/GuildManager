@@ -32,6 +32,8 @@ local DEFAULTS = {
     confirmEventDelete = true,        -- Solicitar confirmação ao excluir eventos da agenda
     birthdayLookaheadDays = 30,       -- Dias de antecedência para listar próximos aniversariantes (7, 14, 30, 60)
     defaultEventTime = "20:00",       -- Horário padrão sugerido ao criar eventos
+    enableJoinDatePromotions = false, -- Flag para promoção por Data de Entrada na guilda
+    rankPromotionDays = {},           -- Tabela com dias necessários por cargo { [rankName] = dias }
 
     -- Mapa Mundial & Rastreamento
     showWorldMapButton = true,        -- Exibir botão do GuildManager no Mapa Mundial
@@ -98,6 +100,8 @@ function GMSettings:isNotifyUpcomingEvents() return self._notifyUpcomingEvents ~
 function GMSettings:isConfirmEventDelete() return self._confirmEventDelete ~= false end
 function GMSettings:getBirthdayLookaheadDays() return tonumber(self._birthdayLookaheadDays) or 30 end
 function GMSettings:getDefaultEventTime() return self._defaultEventTime or "20:00" end
+function GMSettings:isJoinDatePromotionsEnabled() return self._enableJoinDatePromotions == true end
+function GMSettings:getRankPromotionDays() return self._rankPromotionDays or {} end
 
 function GMSettings:isShowMinimapPins() return self._showMinimapPins ~= false end
 function GMSettings:isClampMinimapPins() return self._clampMinimapPins ~= false end
@@ -146,6 +150,14 @@ function GMSettings:setNotifyUpcomingEvents(val) self._notifyUpcomingEvents = (v
 function GMSettings:setConfirmEventDelete(val) self._confirmEventDelete = (val == true) end
 function GMSettings:setBirthdayLookaheadDays(val) self._birthdayLookaheadDays = tonumber(val) or 30 end
 function GMSettings:setDefaultEventTime(val) self._defaultEventTime = tostring(val or "20:00") end
+function GMSettings:setJoinDatePromotionsEnabled(val) self._enableJoinDatePromotions = (val == true) end
+function GMSettings:setRankPromotionDays(val)
+    if type(val) == "table" then
+        self._rankPromotionDays = val
+    else
+        self._rankPromotionDays = {}
+    end
+end
 
 function GMSettings:setShowWorldMapButton(val) self._showWorldMapButton = (val == true) end
 function GMSettings:setAutoScanWorldMap(val) self._autoScanWorldMap = (val == true) end

@@ -426,7 +426,7 @@ function EventService:getUpcomingBirthdays(maxDays)
 
                     local daysText = ""
                     if daysUntil == 0 then
-                        daysText = "|cff00ff00Hoje! 🎂🎉|r"
+                        daysText = "|cff00ff00Hoje!|r"
                     elseif daysUntil == 1 then
                         daysText = "|cffffff00Amanhã!|r"
                     elseif daysUntil <= 7 then
@@ -495,7 +495,7 @@ function EventService:createBirthdayEventForMember(member)
         return nil, "Formato de aniversário inválido no cadastro do membro."
     end
 
-    local title = string.format("Aniversário de %s 🎂", cleanName)
+    local title = string.format("Aniversário de %s", cleanName)
     local desc = string.format("Festa de comemoração do aniversário de %s! Venha celebrar com a guilda.", cleanName)
 
     local event, err = self:createEvent(title, EventType.ANIVERSARIO, formattedDate, "20:00", desc)
@@ -525,6 +525,517 @@ function EventService:createBirthdayEventForMember(member)
     end
 
     return event, nil
+end
+
+--- Obtém a lista de cargos da guilda ordenada hierarquicamente (0 = Líder, 1 = Oficial, ...).
+---@return table[] @Lista de tabelas { index = number, name = string, rankOrder = number }
+function EventService:getGuildRanks()
+    local ranks = {}
+    local numRanks = (GuildControlGetNumRanks and GuildControlGetNumRanks()) or 0
+    if numRanks > 0 then
+        for i = 1, numRanks do
+            local rName = (GuildControlGetRankName and GuildControlGetRankName(i)) or ("Rank " .. i)
+            table.insert(ranks, {
+                index = i - 1,
+                name = rName,
+                rankOrder = i,
+            })
+        end
+    end
+
+    if #ranks == 0 and self._memberService and self._memberService.getAllMembers then
+        local seen = {}
+        for _, m in ipairs(self._memberService:getAllMembers()) do
+            local idx = m:getRankIndex()
+            local name = m:getRankName()
+            if idx and not seen[idx] then
+                seen[idx] = true
+                table.insert(ranks, {
+                    index = idx,
+                    name = name or ("Rank " .. (idx + 1)),
+                    rankOrder = idx + 1,
+                })
+            end
+        end
+        table.sort(ranks, function(a, b) return (a.index or 0) < (b.index or 0) end)
+    end
+
+    return ranks
+end
+
+--- Retorna a lista de eventos da guilda agendados para hoje ou datas futuras.
+---@param lookaheadDays number|nil
+---@return table[]
+function EventService:getUpcomingEvents(lookaheadDays)
+    local all = self:getAllEvents() or {}
+    local results = {}
+
+    local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+    local curYear = curDate.year or 2026
+    local curMonth = curDate.month or 10
+    local curDay = curDate.day or 19
+    local todayMidnight = 0
+    if time then
+        todayMidnight = time({ year = curYear, month = curMonth, day = curDay, hour = 0, min = 0, sec = 0 })
+    end
+
+    local lookahead = lookaheadDays
+    if not lookahead and _G.GM and _G.GM.settingsService then
+        lookahead = _G.GM.settingsService:get("birthdayLookaheadDays") or 30
+    end
+
+    for _, ev in ipairs(all) do
+        local dStr = ev:getDate()
+        local formattedDate, m, d, y = self:parseEventDate(dStr)
+        if formattedDate and m and d and y then
+            local daysUntil = 0
+            if time and todayMidnight > 0 then
+                local evMidnight = time({ year = y, month = m, day = d, hour = 0, min = 0, sec = 0 })
+                daysUntil = math.floor((evMidnight - todayMidnight) / 86400)
+            else
+                if y == curYear then
+                    daysUntil = (m - curMonth) * 30 + (d - curDay)
+                else
+                    daysUntil = (y - curYear) * 365 + (m - curMonth) * 30 + (d - curDay)
+                end
+            end
+
+            if daysUntil >= 0 then
+                if not lookahead or lookahead <= 0 or daysUntil <= lookahead then
+                    local daysText = ""
+                    if daysUntil == 0 then
+                        daysText = "|cff00ff00Hoje!|r"
+                    elseif daysUntil == 1 then
+                        daysText = "|cffffff00Amanhã!|r"
+                    elseif daysUntil <= 7 then
+                        daysText = string.format("|cffffff00Em %d dias|r", daysUntil)
+                    else
+                        daysText = string.format("|cffaaaaaaEm %d dias|r", daysUntil)
+                    end
+
+                    table.insert(results, {
+                        itemType = "EVENT",
+                        event = ev,
+                        id = ev:getId(),
+                        title = ev:getTitle(),
+                        type = ev:getType(),
+                        date = ev:getDate(),
+                        time = ev:getTime(),
+                        creator = ev:getCreator(),
+                        inviteeCount = ev:getInviteeCount(),
+                        daysUntil = daysUntil,
+                        daysText = daysText,
+                    })
+                end
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        if a.daysUntil == b.daysUntil then
+            return (a.time or "") < (b.time or "")
+        end
+        return a.daysUntil < b.daysUntil
+    end)
+
+    return results
+end
+
+--- Retorna a lista de promoções elegíveis ou futuras com base no tempo de entrada na guilda (join date).
+---@param lookaheadDays number|nil
+---@return table[]
+function EventService:getUpcomingPromotions(lookaheadDays)
+    local results = {}
+    if not self._memberService or not self._memberService.getAllMembers then
+        return results
+    end
+
+    local settingsService = _G.GM and _G.GM.settingsService
+    if not settingsService then
+        return results
+    end
+
+    if settingsService:get("enableJoinDatePromotions") ~= true then
+        return results
+    end
+
+    local rankDays = settingsService:get("rankPromotionDays") or {}
+    if type(rankDays) ~= "table" then
+        return results
+    end
+
+    local lookahead = lookaheadDays
+    if not lookahead then
+        lookahead = settingsService:get("birthdayLookaheadDays") or 30
+    end
+
+    local ranks = self:getGuildRanks()
+    if #ranks == 0 then
+        return results
+    end
+
+    local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+    local curYear = curDate.year or 2026
+    local curMonth = curDate.month or 10
+    local curDay = curDate.day or 19
+    local todayMidnight = 0
+    if time then
+        todayMidnight = time({ year = curYear, month = curMonth, day = curDay, hour = 0, min = 0, sec = 0 })
+    end
+
+    local members = self._memberService:getAllMembers() or {}
+    for _, m in ipairs(members) do
+        local inGuild = true
+        if type(m.isInGuild) == "function" then
+            inGuild = m:isInGuild()
+        end
+
+        local joinDateStr = (m.getDateJoin and m:getDateJoin()) or ""
+        if inGuild and joinDateStr and joinDateStr ~= "" then
+            local jy, jm, jd = joinDateStr:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+            if not (jy and jm and jd) then
+                jd, jm, jy = joinDateStr:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+            end
+
+            if jy and jm and jd then
+                local daysInGuild = 0
+                if time and todayMidnight > 0 then
+                    local joinMidnight = time({ year = tonumber(jy), month = tonumber(jm), day = tonumber(jd), hour = 0, min = 0, sec = 0 })
+                    daysInGuild = math.floor((todayMidnight - joinMidnight) / 86400)
+                    if daysInGuild < 0 then daysInGuild = 0 end
+                else
+                    daysInGuild = (curYear - tonumber(jy)) * 365 + (curMonth - tonumber(jm)) * 30 + (curDay - tonumber(jd))
+                    if daysInGuild < 0 then daysInGuild = 0 end
+                end
+
+                local curRankIdx = m:getRankIndex() or 99
+                local curRankName = m:getRankName() or ""
+
+                -- Promoção significa avançar para um rankIndex menor que o atual (exceto 0 = Guild Master)
+                local eligiblePromotion = nil
+                local nextUpcomingPromotion = nil
+                local minUpcomingDays = 999999
+
+                for _, rDef in ipairs(ranks) do
+                    if rDef.index > 0 and rDef.index < curRankIdx then
+                        local reqDays = tonumber(rankDays[rDef.name]) or tonumber(rankDays[tostring(rDef.index)]) or tonumber(rankDays[rDef.index])
+                        if reqDays and reqDays > 0 then
+                            if daysInGuild >= reqDays then
+                                if not eligiblePromotion or rDef.index < eligiblePromotion.targetRankIndex then
+                                    eligiblePromotion = {
+                                        targetRankName = rDef.name,
+                                        targetRankIndex = rDef.index,
+                                        requiredDays = reqDays,
+                                    }
+                                end
+                            else
+                                local daysUntil = reqDays - daysInGuild
+                                if daysUntil < minUpcomingDays then
+                                    minUpcomingDays = daysUntil
+                                    nextUpcomingPromotion = {
+                                        targetRankName = rDef.name,
+                                        targetRankIndex = rDef.index,
+                                        requiredDays = reqDays,
+                                        daysUntil = daysUntil,
+                                    }
+                                end
+                            end
+                        end
+                    end
+                end
+
+                local promoItem = nil
+                local rawName = m:getName() or "Membro"
+                local cleanName = rawName:match("^[^-]+") or rawName
+
+                if eligiblePromotion then
+                    promoItem = {
+                        itemType = "PROMOTION",
+                        member = m,
+                        name = rawName,
+                        cleanName = cleanName,
+                        class = m:getClass() or "",
+                        level = m:getLevel() or 1,
+                        currentRank = curRankName,
+                        currentRankIndex = curRankIdx,
+                        targetRank = eligiblePromotion.targetRankName,
+                        targetRankIndex = eligiblePromotion.targetRankIndex,
+                        daysInGuild = daysInGuild,
+                        requiredDays = eligiblePromotion.requiredDays,
+                        daysUntil = 0,
+                        isEligibleNow = true,
+                        daysText = "|cff00ff00Elegível Hoje!|r",
+                    }
+                elseif nextUpcomingPromotion and (not lookahead or lookahead <= 0 or nextUpcomingPromotion.daysUntil <= lookahead) then
+                    local dText = ""
+                    if nextUpcomingPromotion.daysUntil == 1 then
+                        dText = "|cffffff00Amanhã!|r"
+                    elseif nextUpcomingPromotion.daysUntil <= 7 then
+                        dText = string.format("|cffffff00Em %d dias|r", nextUpcomingPromotion.daysUntil)
+                    else
+                        dText = string.format("|cffaaaaaaEm %d dias|r", nextUpcomingPromotion.daysUntil)
+                    end
+
+                    promoItem = {
+                        itemType = "PROMOTION",
+                        member = m,
+                        name = rawName,
+                        cleanName = cleanName,
+                        class = m:getClass() or "",
+                        level = m:getLevel() or 1,
+                        currentRank = curRankName,
+                        currentRankIndex = curRankIdx,
+                        targetRank = nextUpcomingPromotion.targetRankName,
+                        targetRankIndex = nextUpcomingPromotion.targetRankIndex,
+                        daysInGuild = daysInGuild,
+                        requiredDays = nextUpcomingPromotion.requiredDays,
+                        daysUntil = nextUpcomingPromotion.daysUntil,
+                        isEligibleNow = false,
+                        daysText = dText,
+                    }
+                end
+
+                if promoItem then
+                    table.insert(results, promoItem)
+                end
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        if a.daysUntil == b.daysUntil then
+            return (a.cleanName or "") < (b.cleanName or "")
+        end
+        return a.daysUntil < b.daysUntil
+    end)
+
+    return results
+end
+
+--- Retorna a lista de aniversariantes que fazem aniversário no mês e ano especificados.
+---@param year number
+---@param month number
+---@return table[]
+function EventService:getBirthdaysForMonth(year, month)
+    local results = {}
+    if not self._memberService or not self._memberService.getAllMembers then
+        return results
+    end
+
+    local allMembers = self._memberService:getAllMembers() or {}
+    for _, m in ipairs(allMembers) do
+        local inGuild = true
+        if type(m.isInGuild) == "function" then
+            inGuild = m:isInGuild()
+        end
+
+        if inGuild then
+            local bdayStr = m:getBirthday()
+            if bdayStr and bdayStr ~= "" then
+                local cleanStr = bdayStr:match("^%s*(.-)%s*$")
+                local pMonth, pDay = nil, nil
+
+                local y, mo, d = cleanStr:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+                if mo and d then
+                    pMonth, pDay = mo, d
+                else
+                    d, mo, y = cleanStr:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+                    if mo and d then
+                        pMonth, pDay = mo, d
+                    else
+                        pMonth, pDay = cleanStr:match("^(%d%d?)[/%-%.](%d%d?)$")
+                    end
+                end
+
+                if pMonth and pDay then
+                    local bm = tonumber(pMonth)
+                    local bd = tonumber(pDay)
+                    if bm and bd then
+                        if bm > 12 and bd <= 12 then
+                            bm, bd = bd, bm
+                        end
+
+                        if bm == month and bd >= 1 and bd <= 31 then
+                            local rawName = m:getName() or "Membro"
+                            local cleanName = rawName:match("^[^-]+") or rawName
+                            table.insert(results, {
+                                member = m,
+                                name = rawName,
+                                cleanName = cleanName,
+                                class = m:getClass() or "",
+                                level = m:getLevel() or 1,
+                                rank = m:getRankName() or "",
+                                day = bd,
+                                month = bm,
+                                year = year,
+                                birthday = string.format("%02d/%02d", bm, bd),
+                                dateStr = string.format("%02d/%02d/%04d", bd, bm, year),
+                                dateKey = string.format("%04d-%02d-%02d", year, bm, bd),
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        if a.day == b.day then
+            return (a.cleanName or "") < (b.cleanName or "")
+        end
+        return a.day < b.day
+    end)
+
+    return results
+end
+
+--- Retorna a lista de datas de promoções da guilda para o mês e ano especificados.
+---@param year number
+---@param month number
+---@return table[]
+function EventService:getPromotionsForMonth(year, month)
+    local results = {}
+    if not self._memberService or not self._memberService.getAllMembers then
+        return results
+    end
+
+    local settingsService = _G.GM and _G.GM.settingsService
+    if not settingsService or settingsService:get("enableJoinDatePromotions") ~= true then
+        return results
+    end
+
+    local rankDays = settingsService:get("rankPromotionDays") or {}
+    local ranks = self:getGuildRanks()
+    if #ranks == 0 then return results end
+
+    local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+    local curYear = curDate.year or 2026
+    local curMonth = curDate.month or 10
+    local curDay = curDate.day or 19
+    local todayMidnight = 0
+    if time then
+        todayMidnight = time({ year = curYear, month = curMonth, day = curDay, hour = 0, min = 0, sec = 0 })
+    end
+
+    local allMembers = self._memberService:getAllMembers() or {}
+    for _, m in ipairs(allMembers) do
+        local inGuild = true
+        if type(m.isInGuild) == "function" then
+            inGuild = m:isInGuild()
+        end
+
+        if inGuild then
+            local dateJoin = m:getDateJoin()
+            if dateJoin and dateJoin ~= "" then
+                local jy, jm, jd = dateJoin:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+                if not jy then
+                    jd, jm, jy = dateJoin:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+                end
+
+                if jy and jm and jd then
+                    local joinMidnight = 0
+                    if time then
+                        joinMidnight = time({ year = tonumber(jy), month = tonumber(jm), day = tonumber(jd), hour = 0, min = 0, sec = 0 })
+                    end
+
+                    local daysInGuild = 0
+                    if time and todayMidnight > 0 and joinMidnight > 0 then
+                        daysInGuild = math.floor((todayMidnight - joinMidnight) / 86400)
+                        if daysInGuild < 0 then daysInGuild = 0 end
+                    else
+                        daysInGuild = (curYear - tonumber(jy)) * 365 + (curMonth - tonumber(jm)) * 30 + (curDay - tonumber(jd))
+                        if daysInGuild < 0 then daysInGuild = 0 end
+                    end
+
+                    local curRankIdx = m:getRankIndex() or 99
+                    local curRankName = m:getRankName() or ""
+
+                    local rawName = m:getName() or "Membro"
+                    local cleanName = rawName:match("^[^-]+") or rawName
+
+                    for _, rDef in ipairs(ranks) do
+                        if rDef.index > 0 and rDef.index < curRankIdx then
+                            local reqDays = tonumber(rankDays[rDef.name]) or tonumber(rankDays[tostring(rDef.index)]) or tonumber(rankDays[rDef.index])
+                            if reqDays and reqDays > 0 then
+                                local pDay, pMonth, pYear = nil, nil, nil
+                                local promoTimestamp = 0
+                                if time and joinMidnight > 0 then
+                                    promoTimestamp = joinMidnight + reqDays * 86400
+                                    local pD = (date and date("*t", promoTimestamp)) or (os and os.date and os.date("*t", promoTimestamp))
+                                    if pD then
+                                        pYear, pMonth, pDay = pD.year, pD.month, pD.day
+                                    end
+                                end
+
+                                if pYear == year and pMonth == month and pDay then
+                                    local isEligibleNow = (daysInGuild >= reqDays)
+                                    table.insert(results, {
+                                        member = m,
+                                        name = rawName,
+                                        cleanName = cleanName,
+                                        class = m:getClass() or "",
+                                        level = m:getLevel() or 1,
+                                        currentRank = curRankName,
+                                        currentRankIndex = curRankIdx,
+                                        targetRank = rDef.name,
+                                        targetRankIndex = rDef.index,
+                                        daysInGuild = daysInGuild,
+                                        requiredDays = reqDays,
+                                        day = pDay,
+                                        month = pMonth,
+                                        year = pYear,
+                                        dateStr = string.format("%02d/%02d/%04d", pDay, pMonth, pYear),
+                                        dateKey = string.format("%04d-%02d-%02d", pYear, pMonth, pDay),
+                                        isEligibleNow = isEligibleNow,
+                                    })
+                                elseif year == curYear and month == curMonth and daysInGuild >= reqDays then
+                                    -- Membro já elegível (pendente de promoção) no mês atual
+                                    local alreadyAdded = false
+                                    for _, existing in ipairs(results) do
+                                        if existing.member == m and existing.targetRankIndex == rDef.index and existing.day == curDay then
+                                            alreadyAdded = true
+                                            break
+                                        end
+                                    end
+                                    if not alreadyAdded then
+                                        table.insert(results, {
+                                            member = m,
+                                            name = rawName,
+                                            cleanName = cleanName,
+                                            class = m:getClass() or "",
+                                            level = m:getLevel() or 1,
+                                            currentRank = curRankName,
+                                            currentRankIndex = curRankIdx,
+                                            targetRank = rDef.name,
+                                            targetRankIndex = rDef.index,
+                                            daysInGuild = daysInGuild,
+                                            requiredDays = reqDays,
+                                            day = curDay,
+                                            month = curMonth,
+                                            year = curYear,
+                                            dateStr = string.format("%02d/%02d/%04d", curDay, curMonth, curYear),
+                                            dateKey = string.format("%04d-%02d-%02d", curYear, curMonth, curDay),
+                                            isEligibleNow = true,
+                                            isPendingOverdue = true,
+                                        })
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        if a.day == b.day then
+            return (a.cleanName or "") < (b.cleanName or "")
+        end
+        return a.day < b.day
+    end)
+
+    return results
 end
 
 _G.EventService = EventService

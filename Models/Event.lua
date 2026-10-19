@@ -31,7 +31,7 @@ EVENT_TYPE_LABELS = {
     DUNGEON = "|cff3399ff[Masmorra]|r",
     PVP = "|cffff9900[JxJ / PvP]|r",
     REUNIAO = "|cff00ff88[Reunião]|r",
-    ANIVERSARIO = "|cffffd200[Aniversário 🎂]|r",
+    ANIVERSARIO = "|cffffd200[Aniversário]|r",
     OUTRO = "|cffa0a0a0[Outro]|r",
 }
 

@@ -890,7 +890,7 @@ function SettingsView:createSettingsColumns()
 
     local rChild = CreateFrame("Frame", nil, rScroll)
     rChild:SetWidth(colWidth - 30)
-    rChild:SetHeight(760)
+    rChild:SetHeight(1050)
     rScroll:SetScrollChild(rChild)
 
     -- --- SEÇÃO 5: AGENDA & EVENTOS DA GUILDA ---
@@ -953,9 +953,36 @@ function SettingsView:createSettingsColumns()
     styleBox(defTimeEB)
     self._widgets.defaultEventTime = defTimeEB
 
+    -- Flag Promoção por Data de Entrada
+    local cbJoinDatePromo = createCheckbox(rChild, L["SETTINGS_JOIN_DATE_PROMOTIONS"], L["SETTINGS_JOIN_DATE_PROMOTIONS_TIP_TITLE"], L["SETTINGS_JOIN_DATE_PROMOTIONS_TIP_DESC"])
+    cbJoinDatePromo:SetPoint("TOPLEFT", defTimeLabel, "BOTTOMLEFT", 0, -8)
+    self._widgets.enableJoinDatePromotions = cbJoinDatePromo
+
+    -- Título e descrição da tabela de cargos
+    local rankPromoHeader = rChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    rankPromoHeader:SetPoint("TOPLEFT", cbJoinDatePromo, "BOTTOMLEFT", 4, -8)
+    rankPromoHeader:SetText(L["SETTINGS_RANK_PROMOTIONS_HEADER"])
+    self._widgets.rankPromoHeader = rankPromoHeader
+
+    local rankPromoDesc = rChild:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    rankPromoDesc:SetPoint("TOPLEFT", rankPromoHeader, "BOTTOMLEFT", 0, -3)
+    rankPromoDesc:SetWidth(colWidth - 40)
+    rankPromoDesc:SetJustifyH("LEFT")
+    rankPromoDesc:SetText(L["SETTINGS_RANK_DAYS_DESC"])
+    self._widgets.rankPromoDesc = rankPromoDesc
+
+    -- Container dinâmico das linhas de cargos
+    local rankPromoContainer = CreateFrame("Frame", nil, rChild)
+    rankPromoContainer:SetPoint("TOPLEFT", rankPromoDesc, "BOTTOMLEFT", 0, -6)
+    rankPromoContainer:SetPoint("RIGHT", rChild, "RIGHT", -10, 0)
+    rankPromoContainer:SetHeight(10)
+    self._widgets.rankPromoContainer = rankPromoContainer
+    self._widgets.rankRows = {}
+    self._widgets.rankEditBoxes = {}
+
     -- --- SEÇÃO 6: GERENCIAMENTO DE GRUPOS ---
     local s6Header = rChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s6Header:SetPoint("TOPLEFT", defTimeLabel, "BOTTOMLEFT", 0, -14)
+    s6Header:SetPoint("TOPLEFT", rankPromoContainer, "BOTTOMLEFT", -4, -14)
     s6Header:SetText(L["SETTINGS_S6_HEADER"])
     self._widgets.s6Header = s6Header
 
@@ -1378,6 +1405,15 @@ function SettingsView:updateLocale()
         end
     end
     if self._widgets.defTimeLabel then self._widgets.defTimeLabel:SetText(curL["SETTINGS_DEFAULT_EVENT_TIME"]) end
+    if self._widgets.enableJoinDatePromotions then
+        self._widgets.enableJoinDatePromotions:updateTexts(curL["SETTINGS_JOIN_DATE_PROMOTIONS"], curL["SETTINGS_JOIN_DATE_PROMOTIONS_TIP_TITLE"], curL["SETTINGS_JOIN_DATE_PROMOTIONS_TIP_DESC"])
+    end
+    if self._widgets.rankPromoHeader then
+        self._widgets.rankPromoHeader:SetText(curL["SETTINGS_RANK_PROMOTIONS_HEADER"])
+    end
+    if self._widgets.rankPromoDesc then
+        self._widgets.rankPromoDesc:SetText(curL["SETTINGS_RANK_DAYS_DESC"])
+    end
 
     -- Seção 6
     if self._widgets.s6Header then self._widgets.s6Header:SetText(curL["SETTINGS_S6_HEADER"]) end
@@ -1521,6 +1557,10 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.selectedBirthdayLookaheadDays = settings:getBirthdayLookaheadDays()
     self:updateLookaheadButtons(self._widgets.lookaheadButtons, self._widgets.selectedBirthdayLookaheadDays)
     self._widgets.defaultEventTime:SetText(settings:getDefaultEventTime() or "20:00")
+    if self._widgets.enableJoinDatePromotions then
+        self._widgets.enableJoinDatePromotions:SetChecked(settings:isJoinDatePromotionsEnabled())
+    end
+    self:renderRankPromotionRows(settings)
 
     -- Grupos
     self._widgets.confirmGroupDelete:SetChecked(settings:isConfirmGroupDelete())
@@ -1545,6 +1585,129 @@ function SettingsView:renderSettings(settings, stats)
     end
 
     self._widgets.statusMsg:SetText("")
+end
+
+--- Renderiza dinamicamente as linhas de configuração de dias para promoção de cada cargo da guilda.
+---@param settings GMSettings
+function SettingsView:renderRankPromotionRows(settings)
+    local container = self._widgets.rankPromoContainer
+    if not container then return end
+
+    -- Oculta linhas anteriores
+    for _, row in ipairs(self._widgets.rankRows or {}) do
+        row:Hide()
+    end
+    self._widgets.rankEditBoxes = {}
+
+    local ranks = {}
+    if _G.GM and _G.GM.eventService and _G.GM.eventService.getGuildRanks then
+        ranks = _G.GM.eventService:getGuildRanks()
+    elseif EventService and EventService.getGuildRanks then
+        ranks = EventService:getGuildRanks()
+    end
+
+    if #ranks == 0 then
+        local num = (GuildControlGetNumRanks and GuildControlGetNumRanks()) or 0
+        if num > 0 then
+            for i = 1, num do
+                table.insert(ranks, { index = i - 1, name = GuildControlGetRankName(i) or ("Rank " .. i), rankOrder = i })
+            end
+        end
+    end
+
+    local rankDays = (settings and settings.getRankPromotionDays and settings:getRankPromotionDays()) or {}
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    local eligibleRanks = {}
+    for _, r in ipairs(ranks) do
+        -- Não inclui Guild Master (index 0) para promoção
+        if r.index and r.index > 0 then
+            table.insert(eligibleRanks, r)
+        end
+    end
+
+    if #eligibleRanks == 0 then
+        container:SetHeight(20)
+        return
+    end
+
+    local rowHeight = 24
+    local yOffset = 0
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+
+    for idx, rDef in ipairs(eligibleRanks) do
+        local row = self._widgets.rankRows[idx]
+        if not row then
+            row = CreateFrame("Frame", nil, container, template)
+            row:SetSize(360, rowHeight)
+
+            local bullet = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            bullet:SetPoint("LEFT", row, "LEFT", 4, 0)
+            bullet:SetText("|cffffd200▪|r")
+            row.bullet = bullet
+
+            local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            label:SetPoint("LEFT", bullet, "RIGHT", 6, 0)
+            label:SetWidth(160)
+            label:SetJustifyH("LEFT")
+            row.label = label
+
+            local eb = CreateFrame("EditBox", nil, row)
+            eb:SetSize(50, 20)
+            eb:SetPoint("LEFT", label, "RIGHT", 6, 0)
+            eb:SetNumeric(true)
+            eb:SetMaxLetters(4)
+            styleBox(eb)
+            row.eb = eb
+
+            local suffix = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            suffix:SetPoint("LEFT", eb, "RIGHT", 6, 0)
+            suffix:SetText(L["SETTINGS_RANK_DAYS_SUFFIX"] or "dias")
+            row.suffix = suffix
+
+            self._widgets.rankRows[idx] = row
+        end
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -yOffset)
+        row:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+
+        row.label:SetText(string.format(L["SETTINGS_RANK_DAYS_LABEL"] or "Promover para |cffffff00%s|r após:", rDef.name))
+        row.suffix:SetText(L["SETTINGS_RANK_DAYS_SUFFIX"] or "dias")
+
+        local savedVal = rankDays[rDef.name] or rankDays[tostring(rDef.index)] or rankDays[rDef.index]
+        if savedVal and tonumber(savedVal) and tonumber(savedVal) > 0 then
+            row.eb:SetText(tostring(savedVal))
+        else
+            row.eb:SetText("")
+        end
+
+        row.eb.rankName = rDef.name
+        row.eb.rankIndex = rDef.index
+        self._widgets.rankEditBoxes[rDef.name] = row.eb
+        self._widgets.rankEditBoxes[tostring(rDef.index)] = row.eb
+
+        row:Show()
+        yOffset = yOffset + rowHeight
+    end
+
+    container:SetHeight(math.max(yOffset + 4, 20))
+end
+
+--- Coleta os dias configurados para promoção por cargo.
+---@return table
+function SettingsView:gatherRankPromotionDays()
+    local res = {}
+    for _, row in ipairs(self._widgets.rankRows or {}) do
+        if row:IsShown() and row.eb and row.eb.rankName then
+            local val = tonumber(row.eb:GetText()) or 0
+            res[row.eb.rankName] = val
+            if row.eb.rankIndex ~= nil then
+                res[tostring(row.eb.rankIndex)] = val
+            end
+        end
+    end
+    return res
 end
 
 --- Coleta os valores dos controles da tela em uma tabela.
@@ -1573,6 +1736,8 @@ function SettingsView:gatherFormData()
         confirmEventDelete = w.confirmEventDelete:GetChecked() == true,
         birthdayLookaheadDays = tonumber(w.selectedBirthdayLookaheadDays) or 30,
         defaultEventTime = (w.defaultEventTime:GetText() and w.defaultEventTime:GetText() ~= "") and w.defaultEventTime:GetText() or "20:00",
+        enableJoinDatePromotions = w.enableJoinDatePromotions and (w.enableJoinDatePromotions:GetChecked() == true) or false,
+        rankPromotionDays = self:gatherRankPromotionDays(),
         confirmGroupDelete = w.confirmGroupDelete:GetChecked() == true,
         autoAssignGroupRole = w.autoAssignGroupRole:GetChecked() == true,
         autoScanRoster = w.autoScanRoster:GetChecked() == true,

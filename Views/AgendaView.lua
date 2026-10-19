@@ -116,14 +116,119 @@ local CLASS_ICON_COORDS = {
     DEATHKNIGHT = { 0.25, 0.49609375, 0.5, 0.75 },
 }
 
-local TYPE_BADGES = {
-    RAID        = { label = "[Raide]",        color = "|cffff4444" },
-    DUNGEON     = { label = "[Masmorra]",     color = "|cff3399ff" },
-    PVP         = { label = "[JxJ / PvP]",    color = "|cffff9900" },
-    REUNIAO     = { label = "[Reunião]",      color = "|cff00ff88" },
-    ANIVERSARIO = { label = "[Aniversário 🎂]", color = "|cffffd200" },
-    OUTRO       = { label = "[Outro]",        color = "|cffa0a0a0" },
+local TYPE_THEMES = {
+    RAID = {
+        label     = "[Raide]",
+        shortTag  = "Raide",
+        colorCode = "|cffff4040",
+        border    = { 0.85, 0.22, 0.22, 0.95 },
+        bg        = { 0.16, 0.03, 0.03, 0.88 },
+    },
+    DUNGEON = {
+        label     = "[Masmorra]",
+        shortTag  = "Masm",
+        colorCode = "|cff38a8ff",
+        border    = { 0.20, 0.60, 0.95, 0.95 },
+        bg        = { 0.02, 0.08, 0.16, 0.88 },
+    },
+    PVP = {
+        label     = "[JxJ / PvP]",
+        shortTag  = "PvP",
+        colorCode = "|cffff8800",
+        border    = { 0.95, 0.52, 0.10, 0.95 },
+        bg        = { 0.16, 0.07, 0.02, 0.88 },
+    },
+    REUNIAO = {
+        label     = "[Reunião]",
+        shortTag  = "Reunião",
+        colorCode = "|cff00e872",
+        border    = { 0.15, 0.82, 0.45, 0.95 },
+        bg        = { 0.02, 0.14, 0.06, 0.88 },
+    },
+    ANIVERSARIO = {
+        label     = "[Aniversário]",
+        shortTag  = "Aniv",
+        colorCode = "|cffffd200",
+        border    = { 0.95, 0.80, 0.15, 0.95 },
+        bg        = { 0.16, 0.12, 0.02, 0.88 },
+    },
+    PROMO = {
+        label     = "[Promoção]",
+        shortTag  = "Promo",
+        colorCode = "|cff00e5ff",
+        border    = { 0.15, 0.78, 0.92, 0.95 },
+        bg        = { 0.02, 0.11, 0.16, 0.88 },
+    },
+    OUTRO = {
+        label     = "[Outro]",
+        shortTag  = "Outro",
+        colorCode = "|cffa888db",
+        border    = { 0.65, 0.50, 0.85, 0.90 },
+        bg        = { 0.08, 0.05, 0.12, 0.88 },
+    },
 }
+
+-- Compatibilidade retroativa com TYPE_BADGES
+local TYPE_BADGES = setmetatable({}, {
+    __index = function(_, k)
+        local t = TYPE_THEMES[k] or TYPE_THEMES.OUTRO
+        return { label = t.label, color = t.colorCode }
+    end
+})
+
+local MONTH_NAMES_PT = {
+    "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
+    "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
+}
+local MONTH_NAMES_EN = {
+    "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+    "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
+}
+local WEEKDAYS_PT = { "DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB" }
+local WEEKDAYS_EN = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" }
+
+local function getDaysInMonth(year, month)
+    local daysPerMonth = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+    if month == 2 then
+        if (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0) then
+            return 29
+        else
+            return 28
+        end
+    end
+    return daysPerMonth[month] or 30
+end
+
+local function getFirstWeekdayOfMonth(year, month)
+    if time and date then
+        local t = time({ year = year, month = month, day = 1, hour = 12, min = 0, sec = 0 })
+        local d = date("*t", t)
+        return (d and d.wday) or 1
+    end
+    local t = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 }
+    local y = year
+    if month < 3 then y = y - 1 end
+    local w = (y + math.floor(y/4) - math.floor(y/100) + math.floor(y/400) + t[month] + 1) % 7
+    return w + 1
+end
+
+local function normalizeDate(dateStr)
+    if not dateStr or type(dateStr) ~= "string" then return nil end
+    local clean = dateStr:match("^%s*(.-)%s*$")
+    if clean == "" then return nil end
+
+    local y, m, d = clean:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+    if y and m and d then
+        return string.format("%04d-%02d-%02d", tonumber(y), tonumber(m), tonumber(d)), tonumber(m), tonumber(d), tonumber(y)
+    end
+
+    d, m, y = clean:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+    if d and m and y then
+        return string.format("%04d-%02d-%02d", tonumber(y), tonumber(m), tonumber(d)), tonumber(m), tonumber(d), tonumber(y)
+    end
+
+    return nil
+end
 
 --- Helper para obter o nome colorido pela classe
 local function getColoredName(name, classToken)
@@ -184,10 +289,26 @@ function AgendaView:new()
     instance._frame = nil
     instance._events = {}
     instance._upcomingBirthdays = {}
+    instance._upcomingPromotions = {}
     instance._currentFilterType = "TODOS"
     instance._currentSearchText = ""
     instance._activeEventCardPool = {}
     instance._activeBirthdayCardPool = {}
+    instance._selectedDayCardPool = {}
+    instance._selectedDayBirthdayPool = {}
+    instance._selectedDayPromoPool = {}
+    instance._upcomingFeedCardPool = {}
+    instance._eventService = nil
+
+    local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+    instance._calendarYear = curDate.year or 2026
+    instance._calendarMonth = curDate.month or 10
+    instance._selectedDate = {
+        year = curDate.year or 2026,
+        month = curDate.month or 10,
+        day = curDate.day or 19,
+    }
+    instance._calendarDayCells = {}
 
     -- Callbacks
     instance._onRefreshCallback = nil
@@ -199,6 +320,7 @@ function AgendaView:new()
     instance._onInviteMemberInGameCallback = nil
     instance._onInviteAllOnlineCallback = nil
     instance._onCreateBirthdayEventCallback = nil
+    instance._onPromoteMemberCallback = nil
 
     -- Modais
     instance._eventModal = nil
@@ -210,6 +332,10 @@ function AgendaView:new()
     return instance
 end
 
+function AgendaView:setEventService(service)
+    self._eventService = service
+end
+
 function AgendaView:setOnRefreshCallback(cb) self._onRefreshCallback = cb end
 function AgendaView:setOnCreateEventCallback(cb) self._onCreateEventCallback = cb end
 function AgendaView:setOnUpdateEventCallback(cb) self._onUpdateEventCallback = cb end
@@ -219,6 +345,12 @@ function AgendaView:setOnRemoveInviteeCallback(cb) self._onRemoveInviteeCallback
 function AgendaView:setOnInviteMemberInGameCallback(cb) self._onInviteMemberInGameCallback = cb end
 function AgendaView:setOnInviteAllOnlineCallback(cb) self._onInviteAllOnlineCallback = cb end
 function AgendaView:setOnCreateBirthdayEventCallback(cb) self._onCreateBirthdayEventCallback = cb end
+function AgendaView:setOnPromoteMemberCallback(cb) self._onPromoteMemberCallback = cb end
+
+function AgendaView:setUpcomingPromotions(promotions)
+    self._upcomingPromotions = promotions or {}
+    self:renderEvents()
+end
 
 function AgendaView:setGuildMembers(members)
     self._guildMembers = members or {}
@@ -259,12 +391,11 @@ function AgendaView:updateLocale()
 
     if self._titleText then self._titleText:SetText(L["AGENDA_TITLE"]) end
     if self._subtitleText then self._subtitleText:SetText(L["AGENDA_SUBTITLE"]) end
-    if self._eventsHeaderTitle then self._eventsHeaderTitle:SetText(L["AGENDA_EVENTS_HEADER"]) end
-    if self._newEventBtn then self._newEventBtn:SetText(L["AGENDA_NEW_EVENT_BTN"]) end
-    if self._emptyEventsText then self._emptyEventsText:SetText(L["AGENDA_EMPTY_EVENTS"]) end
-    if self._birthdaysHeaderTitle then self._birthdaysHeaderTitle:SetText(L["AGENDA_BIRTHDAYS_HEADER"]) end
-    if self._birthdaysHeaderSub then self._birthdaysHeaderSub:SetText("|cffaaaaaa" .. L["AGENDA_BIRTHDAYS_SUB"] .. "|r") end
-    if self._emptyBirthdaysText then self._emptyBirthdaysText:SetText(L["AGENDA_EMPTY_BIRTHDAYS"]) end
+    if self._eventsHeaderTitle then self._eventsHeaderTitle:SetText(L["AGENDA_CALENDAR_HEADER"] or L["AGENDA_EVENTS_HEADER"]) end
+    if self._birthdaysHeaderTitle then self._birthdaysHeaderTitle:SetText(L["AGENDA_UPCOMING_HEADER"] or L["AGENDA_BIRTHDAYS_HEADER"]) end
+    if self._emptyBirthdaysText then self._emptyBirthdaysText:SetText(L["AGENDA_NO_UPCOMING"] or L["AGENDA_EMPTY_BIRTHDAYS"]) end
+    if self._todayBtn then self._todayBtn:SetText(L["AGENDA_TODAY_BTN"] or "Hoje") end
+    if self._newEventOnDayBtn then self._newEventOnDayBtn:SetText(L["AGENDA_NEW_EVENT_DAY_BTN"] or "+ Novo Evento nesta data") end
 
     self:updateEventModalLocale()
     self:updateInviteeModalLocale()
@@ -343,12 +474,12 @@ function AgendaView:updatePermissions()
         canOfficer = true
     end
 
-    if self._newEventBtn then
-        self._newEventBtn:EnableMouse(true)
+    if self._newEventOnDayBtn then
+        self._newEventOnDayBtn:EnableMouse(true)
         if canOfficer then
-            self._newEventBtn:SetAlpha(1.0)
+            self._newEventOnDayBtn:SetAlpha(1.0)
         else
-            self._newEventBtn:SetAlpha(0.55)
+            self._newEventOnDayBtn:SetAlpha(0.55)
         end
     end
 end
@@ -823,51 +954,7 @@ function AgendaView:createLeftPanel()
     hCount:SetText("|cffaaaaaa(0 eventos)|r")
     self._eventsCountText = hCount
 
-    local newEventBtn = CreateFrame("Button", nil, headerBar, "UIPanelButtonTemplate")
-    newEventBtn:SetSize(126, 22)
-    newEventBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
-    newEventBtn:SetText(L["AGENDA_NEW_EVENT_BTN"])
-    newEventBtn:SetScript("OnEnter", function(btn)
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
-
-        if GameTooltip then
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Novo Evento da Guilda|r", 1, 1, 1)
-            if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem criar eventos.|r", 1, 0.3, 0.3, true)
-            else
-                GameTooltip:AddLine("|cff00ff00Clique para criar um novo evento na agenda.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
-            end
-            GameTooltip:Show()
-        end
-    end)
-    newEventBtn:SetScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    newEventBtn:SetScript("OnClick", function()
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
-
-        if not canOfficer then
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
-            return
-        end
-        self:openEventModal(nil)
-    end)
-    self._newEventBtn = newEventBtn
+    self._newEventBtn = nil
 
     -- Barra de ferramentas com Filtros por tipo e Caixa de Busca
     local toolbar = CreateFrame("Frame", nil, leftPanel, template)
@@ -878,20 +965,22 @@ function AgendaView:createLeftPanel()
     -- Botões de filtro rápido
     local filterButtons = {}
     local filterDefs = {
-        { id = "TODOS",       label = "Todos" },
-        { id = "RAID",        label = "Raides" },
-        { id = "DUNGEON",     label = "Masmorras" },
-        { id = "PVP",         label = "PvP" },
-        { id = "REUNIAO",     label = "Reunião" },
-        { id = "ANIVERSARIO", label = "Aniv. 🎂" },
+        { id = "TODOS",       label = "Todos",     width = 48 },
+        { id = "RAID",        label = "Raides",    width = 52 },
+        { id = "DUNGEON",     label = "Masmorras", width = 64 },
+        { id = "PVP",         label = "PvP",       width = 40 },
+        { id = "REUNIAO",     label = "Reunião",   width = 54 },
+        { id = "ANIVERSARIO", label = "Aniv.",      width = 48 },
+        { id = "PROMO",       label = "Promo",     width = 50 },
     }
 
     local startX = 4
     for _, fDef in ipairs(filterDefs) do
         local btn = CreateFrame("Button", nil, toolbar, template)
-        btn:SetSize(fDef.id == "ANIVERSARIO" and 64 or 56, 22)
+        local btnWidth = fDef.width or 56
+        btn:SetSize(btnWidth, 22)
         btn:SetPoint("LEFT", toolbar, "LEFT", startX, 0)
-        startX = startX + (fDef.id == "ANIVERSARIO" and 68 or 60)
+        startX = startX + btnWidth + 4
 
         if btn.SetBackdrop then
             btn:SetBackdrop(SUB_CONTAINER_BACKDROP)
@@ -940,25 +1029,277 @@ function AgendaView:createLeftPanel()
         box:ClearFocus()
     end)
 
-    -- ScrollFrame dos Eventos
-    local scrollFrame = CreateFrame("ScrollFrame", "GM_AgendaEventsScroll", leftPanel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 2, -4)
-    scrollFrame:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -24, 6)
+    -- =========================================================================
+    -- CARD DO CALENDÁRIO MENSAL
+    -- =========================================================================
+    local calendarCard = CreateFrame("Frame", "GM_AgendaCalendarCard", leftPanel, template)
+    calendarCard:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 2, -4)
+    calendarCard:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -2, -4)
+    calendarCard:SetHeight(246)
+    if calendarCard.SetBackdrop then
+        calendarCard:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        calendarCard:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.85)
+        calendarCard:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+    end
+    self._calendarCard = calendarCard
+
+    -- Barra de Navegação do Mês ( < Mês Ano > [Hoje] )
+    local navBar = CreateFrame("Frame", nil, calendarCard, template)
+    navBar:SetPoint("TOPLEFT", calendarCard, "TOPLEFT", 4, -4)
+    navBar:SetPoint("TOPRIGHT", calendarCard, "TOPRIGHT", -4, -4)
+    navBar:SetHeight(26)
+
+    local prevMonthBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
+    prevMonthBtn:SetSize(28, 22)
+    prevMonthBtn:SetPoint("LEFT", navBar, "LEFT", 4, 0)
+    prevMonthBtn:SetText("<")
+    prevMonthBtn:SetScript("OnClick", function()
+        self:changeMonth(-1)
+    end)
+    self._prevMonthBtn = prevMonthBtn
+
+    local nextMonthBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
+    nextMonthBtn:SetSize(28, 22)
+    nextMonthBtn:SetPoint("LEFT", prevMonthBtn, "RIGHT", 4, 0)
+    nextMonthBtn:SetText(">")
+    nextMonthBtn:SetScript("OnClick", function()
+        self:changeMonth(1)
+    end)
+    self._nextMonthBtn = nextMonthBtn
+
+    local todayBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
+    todayBtn:SetSize(62, 22)
+    todayBtn:SetPoint("RIGHT", navBar, "RIGHT", -4, 0)
+    todayBtn:SetText(L["AGENDA_TODAY_BTN"] or "Hoje")
+    todayBtn:SetScript("OnClick", function()
+        local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+        self._calendarYear = curDate.year or 2026
+        self._calendarMonth = curDate.month or 10
+        self._selectedDate = {
+            year = curDate.year or 2026,
+            month = curDate.month or 10,
+            day = curDate.day or 19,
+        }
+        self:renderCalendar()
+        self:renderSelectedDayEvents()
+    end)
+    self._todayBtn = todayBtn
+
+    local monthTitle = navBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    monthTitle:SetPoint("CENTER", navBar, "CENTER", 0, 0)
+    monthTitle:SetText("OUTUBRO 2026")
+    self._calendarMonthTitle = monthTitle
+
+    -- Cabeçalhos dos Dias da Semana (DOM - SÁB)
+    local weekdayBar = CreateFrame("Frame", nil, calendarCard)
+    weekdayBar:SetPoint("TOPLEFT", navBar, "BOTTOMLEFT", 4, -2)
+    weekdayBar:SetPoint("TOPRIGHT", navBar, "BOTTOMRIGHT", -4, -2)
+    weekdayBar:SetHeight(18)
+
+    local colWidth = 84
+    local colGap = 2
+    local weekdayLabels = {}
+    local isPT = true
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("language") == "enUS" then
+        isPT = false
+    end
+    local wNames = isPT and WEEKDAYS_PT or WEEKDAYS_EN
+
+    for col = 1, 7 do
+        local wLabel = weekdayBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        wLabel:SetSize(colWidth, 18)
+        wLabel:SetPoint("TOPLEFT", weekdayBar, "TOPLEFT", (col - 1) * (colWidth + colGap), 0)
+        wLabel:SetJustifyH("CENTER")
+        wLabel:SetText(wNames[col] or "")
+        weekdayLabels[col] = wLabel
+    end
+    self._weekdayLabels = weekdayLabels
+
+    -- Grid 6x7 = 42 células de dias
+    local dayCells = {}
+    local gridTopOffset = 48
+    local rowHeight = 30
+    local rowGap = 2
+
+    for i = 1, 42 do
+        local row = math.floor((i - 1) / 7)
+        local col = (i - 1) % 7
+        local cell = CreateFrame("Button", "GM_AgendaDayCell_" .. i, calendarCard, template)
+        cell:SetSize(colWidth, rowHeight)
+        cell:SetPoint("TOPLEFT", calendarCard, "TOPLEFT", 8 + col * (colWidth + colGap), -(gridTopOffset + row * (rowHeight + rowGap)))
+
+        if cell.SetBackdrop then
+            cell:SetBackdrop(SIDE_TAB_BACKDROP)
+            cell:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.70)
+            cell:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.60)
+        end
+
+        local dayNum = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        dayNum:SetPoint("TOPLEFT", cell, "TOPLEFT", 4, -3)
+        cell.dayNum = dayNum
+
+        local badge = cell:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        badge:SetPoint("BOTTOMRIGHT", cell, "BOTTOMRIGHT", -4, 3)
+        badge:SetJustifyH("RIGHT")
+        cell.badge = badge
+
+        cell:SetScript("OnClick", function(btn)
+            if btn.cellYear and btn.cellMonth and btn.cellDay then
+                self:selectDate(btn.cellYear, btn.cellMonth, btn.cellDay)
+            end
+        end)
+
+        cell:SetScript("OnDoubleClick", function(btn)
+            if btn.cellYear and btn.cellMonth and btn.cellDay then
+                self:selectDate(btn.cellYear, btn.cellMonth, btn.cellDay)
+                local canOfficer = false
+                if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+                    canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+                elseif IsGuildLeader and IsGuildLeader() then
+                    canOfficer = true
+                elseif CanEditOfficerNote and CanEditOfficerNote() then
+                    canOfficer = true
+                end
+                if canOfficer then
+                    local targetDate = string.format("%02d/%02d/%04d", btn.cellDay, btn.cellMonth, btn.cellYear)
+                    self:openEventModal(nil, { date = targetDate })
+                end
+            end
+        end)
+
+        cell:SetScript("OnEnter", function(btn)
+            local numEvents = (btn.cellEvents and #btn.cellEvents) or 0
+            local numBdays = (btn.cellBirthdays and #btn.cellBirthdays) or 0
+            local numPromos = (btn.cellPromotions and #btn.cellPromotions) or 0
+            local total = numEvents + numBdays + numPromos
+
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+            local dtFmt = string.format("%02d/%02d/%04d", btn.cellDay or 1, btn.cellMonth or 1, btn.cellYear or 2026)
+
+            if total == 0 then
+                if btn.cellDay then
+                    GameTooltip:AddLine("|cffffd200Data: " .. dtFmt .. "|r", 1, 1, 1)
+                    GameTooltip:AddLine("|cff888888Clique para selecionar esta data.\nDuplo-clique para criar evento.|r", 0.7, 0.7, 0.7)
+                    GameTooltip:Show()
+                end
+                return
+            end
+
+            GameTooltip:AddLine(string.format("|cffffd200Data: %s (%d itens)|r", dtFmt, total), 1, 1, 1)
+
+            if numEvents > 0 then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("|cffffd200• Eventos da Guilda:|r", 1, 0.85, 0.0)
+                for _, ev in ipairs(btn.cellEvents) do
+                    local tDef = TYPE_THEMES[ev:getType()] or TYPE_THEMES.OUTRO
+                    GameTooltip:AddLine(string.format("  %s %s |cffaaaaaa(às %s)|r", tDef.colorCode .. tDef.label .. "|r", ev:getTitle() or "", ev:getTime() or "20:00"), 1, 1, 1)
+                end
+            end
+
+            if numBdays > 0 then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine(TYPE_THEMES.ANIVERSARIO.colorCode .. "• Aniversários:|r", 1, 0.85, 0.0)
+                for _, b in ipairs(btn.cellBirthdays) do
+                    local rk = b.rank and b.rank ~= "" and (" • " .. b.rank) or ""
+                    GameTooltip:AddLine(string.format("  %s %s |cff888888(Nv %d%s)|r", TYPE_THEMES.ANIVERSARIO.colorCode .. "•|r", getColoredName(b.cleanName or b.name, b.class), b.level or 1, rk), 1, 1, 1)
+                end
+            end
+
+            if numPromos > 0 then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine(TYPE_THEMES.PROMO.colorCode .. "• Promoções de Cargo:|r", 1, 0.85, 0.0)
+                for _, p in ipairs(btn.cellPromotions) do
+                    local st = p.isEligibleNow and "|cff00ff00[Elegível]|r" or string.format("|cffffff00[Meta: %d dias]|r", p.requiredDays or 0)
+                    GameTooltip:AddLine(string.format("  %s %s ➔ |cffffd200%s|r %s", TYPE_THEMES.PROMO.colorCode .. "•|r", getColoredName(p.cleanName or p.name, p.class), p.targetRank or "", st), 1, 1, 1)
+                end
+            end
+
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("|cff00ff00Clique para ver detalhes nesta data.\nDuplo-clique para criar novo evento.|r", 0.2, 1.0, 0.2)
+            GameTooltip:Show()
+        end)
+        cell:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+
+        dayCells[i] = cell
+    end
+    self._calendarDayCells = dayCells
+
+    -- =========================================================================
+    -- SEÇÃO INFERIOR: EVENTOS DO DIA SELECIONADO
+    -- =========================================================================
+    local selectedSection = CreateFrame("Frame", "GM_AgendaSelectedDaySection", leftPanel, template)
+    selectedSection:SetPoint("TOPLEFT", calendarCard, "BOTTOMLEFT", 0, -6)
+    selectedSection:SetPoint("BOTTOMRIGHT", leftPanel, "BOTTOMRIGHT", -2, 6)
+    if selectedSection.SetBackdrop then
+        selectedSection:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        selectedSection:SetBackdropColor(0.04, 0.025, 0.012, 0.85)
+        selectedSection:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+    end
+    self._selectedSection = selectedSection
+
+    -- Subheader do Dia Selecionado
+    local subHeader = CreateFrame("Frame", nil, selectedSection, template)
+    subHeader:SetPoint("TOPLEFT", selectedSection, "TOPLEFT", 4, -4)
+    subHeader:SetPoint("TOPRIGHT", selectedSection, "TOPRIGHT", -4, -4)
+    subHeader:SetHeight(28)
+    if subHeader.SetBackdrop then
+        subHeader:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        subHeader:SetBackdropColor(0.10, 0.07, 0.03, 0.95)
+        subHeader:SetBackdropBorderColor(0.55, 0.38, 0.14, 0.90)
+    end
+
+    local selTitle = subHeader:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    selTitle:SetPoint("LEFT", subHeader, "LEFT", 8, 0)
+    selTitle:SetText("Eventos em 19/10/2026")
+    self._selectedDayTitleText = selTitle
+
+    local newEventOnDayBtn = CreateFrame("Button", nil, subHeader, "UIPanelButtonTemplate")
+    newEventOnDayBtn:SetSize(185, 22)
+    newEventOnDayBtn:SetPoint("RIGHT", subHeader, "RIGHT", -4, 0)
+    newEventOnDayBtn:SetText(L["AGENDA_NEW_EVENT_DAY_BTN"] or "+ Novo Evento nesta data")
+    newEventOnDayBtn:SetScript("OnClick", function()
+        local canOfficer = false
+        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+        elseif IsGuildLeader and IsGuildLeader() then
+            canOfficer = true
+        elseif CanEditOfficerNote and CanEditOfficerNote() then
+            canOfficer = true
+        end
+
+        if not canOfficer then
+            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
+            return
+        end
+
+        local sel = self._selectedDate or { year = self._calendarYear or 2026, month = self._calendarMonth or 10, day = 1 }
+        local targetDate = string.format("%02d/%02d/%04d", sel.day, sel.month, sel.year)
+        self:openEventModal(nil, { date = targetDate })
+    end)
+    self._newEventOnDayBtn = newEventOnDayBtn
+
+    -- ScrollFrame dos Eventos do Dia Selecionado
+    local scrollFrame = CreateFrame("ScrollFrame", "GM_AgendaSelectedEventsScroll", selectedSection, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", subHeader, "BOTTOMLEFT", 2, -4)
+    scrollFrame:SetPoint("BOTTOMRIGHT", selectedSection, "BOTTOMRIGHT", -22, 4)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetWidth(580)
+    scrollChild:SetWidth(572)
     scrollChild:SetHeight(1)
     scrollFrame:SetScrollChild(scrollChild)
     self._eventsScrollChild = scrollChild
 
-    leftPanel:EnableMouseWheel(true)
-    leftPanel:SetScript("OnMouseWheel", function(_, delta)
+    selectedSection:EnableMouseWheel(true)
+    selectedSection:SetScript("OnMouseWheel", function(_, delta)
         local cur = scrollFrame:GetVerticalScroll()
         scrollFrame:SetVerticalScroll(math.max(0, cur - (delta * 30)))
     end)
 
-    local emptyEventsText = leftPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    emptyEventsText:SetPoint("CENTER", leftPanel, "CENTER", 0, -20)
+    local emptyEventsText = selectedSection:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    emptyEventsText:SetPoint("CENTER", selectedSection, "CENTER", 0, -10)
     emptyEventsText:SetWidth(460)
     emptyEventsText:SetJustifyH("CENTER")
     emptyEventsText:SetText(L["AGENDA_EMPTY_EVENTS"])
@@ -970,11 +1311,16 @@ end
 function AgendaView:updateFilterButtonsUI(buttons)
     for id, btn in pairs(buttons or {}) do
         local isActive = (self._currentFilterType == id)
+        local theme = TYPE_THEMES[id] or {
+            border = PALETTE.ACTIVE_TAB_BORDER,
+            bg = PALETTE.ACTIVE_TAB_BG,
+            colorCode = "|cffffd200",
+        }
         if btn.SetBackdrop then
             if isActive then
-                btn:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
-                btn:SetBackdropBorderColor(PALETTE.ACTIVE_TAB_BORDER[1], PALETTE.ACTIVE_TAB_BORDER[2], PALETTE.ACTIVE_TAB_BORDER[3], 1.0)
-                if btn.bText then btn.bText:SetTextColor(1.0, 0.85, 0.0) end
+                btn:SetBackdropColor(theme.bg[1], theme.bg[2], theme.bg[3], 0.95)
+                btn:SetBackdropBorderColor(theme.border[1], theme.border[2], theme.border[3], 1.0)
+                if btn.bText then btn.bText:SetTextColor(theme.border[1], theme.border[2], theme.border[3]) end
             else
                 btn:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.80)
                 btn:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.80)
@@ -984,11 +1330,12 @@ function AgendaView:updateFilterButtonsUI(buttons)
     end
 end
 
---- Cria o painel direito dedicado aos próximos aniversariantes da guilda.
+--- Cria o painel direito dedicado aos próximos eventos da guilda (Eventos, Aniversários e Promoções).
 function AgendaView:createRightPanel()
     local frame = self._frame
     if not frame then return end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
     local rightPanel = CreateFrame("Frame", "GM_AgendaRightPanel", frame, template)
     rightPanel:SetSize(294, 530)
@@ -1000,7 +1347,7 @@ function AgendaView:createRightPanel()
     end
     self._rightPanel = rightPanel
 
-    -- Header do painel de aniversários
+    -- Header do painel de Próximos Eventos
     local headerBar = CreateFrame("Frame", nil, rightPanel, template)
     headerBar:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", 3, -3)
     headerBar:SetPoint("TOPRIGHT", rightPanel, "TOPRIGHT", -3, -3)
@@ -1014,20 +1361,21 @@ function AgendaView:createRightPanel()
     local hIcon = headerBar:CreateTexture(nil, "ARTWORK")
     hIcon:SetSize(22, 22)
     hIcon:SetPoint("LEFT", headerBar, "LEFT", 8, 0)
-    hIcon:SetTexture("Interface\\Icons\\INV_Holiday_Tow_SpicedCider")
-    hIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    local okH = hIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
+    if okH ~= false and hIcon:GetTexture() then
+        hIcon:SetTexCoord(0.0078, 0.375, 0.0156, 0.75)
+    else
+        hIcon:SetTexture("Interface\\Icons\\INV_Misc_PocketWatch_01")
+        hIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    end
 
     local hTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    hTitle:SetPoint("TOPLEFT", hIcon, "TOPRIGHT", 6, 0)
-    hTitle:SetText(L["AGENDA_BIRTHDAYS_HEADER"])
+    hTitle:SetPoint("LEFT", hIcon, "RIGHT", 8, 0)
+    hTitle:SetText(L["AGENDA_UPCOMING_HEADER"] or "PRÓXIMOS EVENTOS")
     self._birthdaysHeaderTitle = hTitle
+    self._birthdaysHeaderSub = nil
 
-    local hSub = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hSub:SetPoint("BOTTOMLEFT", hIcon, "BOTTOMRIGHT", 6, 0)
-    hSub:SetText("|cffaaaaaa" .. L["AGENDA_BIRTHDAYS_SUB"] .. "|r")
-    self._birthdaysHeaderSub = hSub
-
-    -- ScrollFrame dos Aniversários
+    -- ScrollFrame do feed unificado de Próximos Eventos
     local scrollFrame = CreateFrame("ScrollFrame", "GM_AgendaBirthdaysScroll", rightPanel, "UIPanelScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 2, -4)
     scrollFrame:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -24, 6)
@@ -1048,7 +1396,7 @@ function AgendaView:createRightPanel()
     emptyBirthdaysText:SetPoint("CENTER", rightPanel, "CENTER", 0, -20)
     emptyBirthdaysText:SetWidth(250)
     emptyBirthdaysText:SetJustifyH("CENTER")
-    emptyBirthdaysText:SetText(L["AGENDA_EMPTY_BIRTHDAYS"])
+    emptyBirthdaysText:SetText(L["AGENDA_NO_UPCOMING"] or "Nenhum evento, aniversário ou promoção próxima.")
     emptyBirthdaysText:Hide()
     self._emptyBirthdaysText = emptyBirthdaysText
 end
@@ -1075,154 +1423,575 @@ function AgendaView:setUpcomingBirthdays(birthdays)
         end
     end
     self._upcomingBirthdays = filtered
-    self:renderBirthdays()
+    self:renderUpcomingFeed()
 end
 
---- Renderiza a lista de cards de eventos no painel esquerdo.
-function AgendaView:renderEvents()
-    if not self._eventsScrollChild then return end
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-
-    -- Oculta cards antigos no pool
-    for _, card in ipairs(self._activeEventCardPool) do
-        card:Hide()
+--- Alterna o mês exibido no calendário.
+---@param delta number
+function AgendaView:changeMonth(delta)
+    local m = self._calendarMonth + delta
+    local y = self._calendarYear
+    if m < 1 then
+        m = 12
+        y = y - 1
+    elseif m > 12 then
+        m = 1
+        y = y + 1
     end
+    self._calendarMonth = m
+    self._calendarYear = y
+    self:renderCalendar()
+    self:renderSelectedDayEvents()
+end
 
-    local filterLower = self._currentFilterType ~= "TODOS" and self._currentFilterType or nil
-    local searchLower = self._currentSearchText and self._currentSearchText:match("^%s*(.-)%s*$"):lower() or ""
+--- Seleciona uma data no calendário.
+---@param year number
+---@param month number
+---@param day number
+function AgendaView:selectDate(year, month, day)
+    self._selectedDate = { year = year, month = month, day = day }
+    self:renderCalendar()
+    self:renderSelectedDayEvents()
+end
 
-    local visibleEvents = {}
-    for _, ev in ipairs(self._events or {}) do
-        local matchType = true
-        if filterLower then
-            matchType = (ev:getType() == filterLower)
-        end
-
-        local matchSearch = true
-        if searchLower ~= "" then
-            local t = (ev:getTitle() or ""):lower()
-            local d = (ev:getDescription() or ""):lower()
-            local c = (ev:getCreator() or ""):lower()
-            if not t:find(searchLower, 1, true) and not d:find(searchLower, 1, true) and not c:find(searchLower, 1, true) then
-                matchSearch = false
+--- Obtém aniversariantes para o mês e ano fornecidos.
+function AgendaView:getMonthBirthdays(year, month)
+    if self._eventService and self._eventService.getBirthdaysForMonth then
+        return self._eventService:getBirthdaysForMonth(year, month) or {}
+    end
+    local results = {}
+    local members = self:getGuildMembers()
+    for _, m in ipairs(members or {}) do
+        local bdayStr = m:getBirthday()
+        if bdayStr and bdayStr ~= "" then
+            local cleanStr = bdayStr:match("^%s*(.-)%s*$")
+            local pMonth, pDay = nil, nil
+            local y, mo, d = cleanStr:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+            if mo and d then pMonth, pDay = mo, d else
+                d, mo, y = cleanStr:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+                if mo and d then pMonth, pDay = mo, d else
+                    pMonth, pDay = cleanStr:match("^(%d%d?)[/%-%.](%d%d?)$")
+                end
+            end
+            if pMonth and pDay then
+                local bm, bd = tonumber(pMonth), tonumber(pDay)
+                if bm and bd then
+                    if bm > 12 and bd <= 12 then bm, bd = bd, bm end
+                    if bm == month and bd >= 1 and bd <= 31 then
+                        local rawName = m:getName() or "Membro"
+                        local cleanName = rawName:match("^[^-]+") or rawName
+                        table.insert(results, {
+                            member = m,
+                            name = rawName,
+                            cleanName = cleanName,
+                            class = m:getClass() or "",
+                            level = m:getLevel() or 1,
+                            rank = m:getRankName() or "",
+                            day = bd,
+                            month = bm,
+                            year = year,
+                            birthday = string.format("%02d/%02d", bm, bd),
+                            dateStr = string.format("%02d/%02d/%04d", bd, bm, year),
+                            dateKey = string.format("%04d-%02d-%02d", year, bm, bd),
+                        })
+                    end
+                end
             end
         end
+    end
+    return results
+end
 
-        if matchType and matchSearch then
-            table.insert(visibleEvents, ev)
+--- Obtém promoções para o mês e ano fornecidos.
+function AgendaView:getMonthPromotions(year, month)
+    if self._eventService and self._eventService.getPromotionsForMonth then
+        return self._eventService:getPromotionsForMonth(year, month) or {}
+    end
+    return {}
+end
+
+--- Renderiza o grid de 42 células do calendário mensal.
+function AgendaView:renderCalendar()
+    if not self._calendarDayCells or #self._calendarDayCells == 0 then return end
+
+    local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+    local year = self._calendarYear or curDate.year or 2026
+    local month = self._calendarMonth or curDate.month or 10
+
+    local isPT = true
+    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("language") == "enUS" then
+        isPT = false
+    end
+
+    local mNames = isPT and MONTH_NAMES_PT or MONTH_NAMES_EN
+    local mName = mNames[month] or ("MÊS " .. month)
+    if self._calendarMonthTitle then
+        self._calendarMonthTitle:SetText(string.format("%s %d", mName, year))
+    end
+
+    local wNames = isPT and WEEKDAYS_PT or WEEKDAYS_EN
+    if self._weekdayLabels then
+        for col = 1, 7 do
+            if self._weekdayLabels[col] then
+                self._weekdayLabels[col]:SetText(wNames[col] or "")
+            end
         end
     end
 
-    if self._eventsCountText then
-        self._eventsCountText:SetText(string.format("|cffaaaaaa(%d eventos)|r", #visibleEvents))
+    local filterLower = self._currentFilterType or "TODOS"
+    local searchLower = self._currentSearchText and self._currentSearchText:match("^%s*(.-)%s*$"):lower() or ""
+
+    -- 1. Indexa eventos
+    local eventsByDate = {}
+    local totalMatchingEvents = 0
+    if filterLower ~= "ANIVERSARIO" and filterLower ~= "PROMO" then
+        for _, ev in ipairs(self._events or {}) do
+            local matchType = (filterLower == "TODOS" or ev:getType() == filterLower)
+            local matchSearch = true
+            if searchLower ~= "" then
+                local t = (ev:getTitle() or ""):lower()
+                local d = (ev:getDescription() or ""):lower()
+                local c = (ev:getCreator() or ""):lower()
+                if not t:find(searchLower, 1, true) and not d:find(searchLower, 1, true) and not c:find(searchLower, 1, true) then
+                    matchSearch = false
+                end
+            end
+            if matchType and matchSearch then
+                totalMatchingEvents = totalMatchingEvents + 1
+                local norm = normalizeDate(ev:getDate())
+                if norm then
+                    eventsByDate[norm] = eventsByDate[norm] or {}
+                    table.insert(eventsByDate[norm], ev)
+                end
+            end
+        end
     end
 
-    if #visibleEvents == 0 then
-        if self._emptyEventsText then self._emptyEventsText:Show() end
+    -- 2. Indexa aniversários do mês
+    local birthdaysByDate = {}
+    local totalMatchingBdays = 0
+    if filterLower == "TODOS" or filterLower == "ANIVERSARIO" then
+        local bdays = self:getMonthBirthdays(year, month)
+        for _, b in ipairs(bdays) do
+            local matchSearch = true
+            if searchLower ~= "" then
+                local n = (b.name or ""):lower()
+                local cn = (b.cleanName or ""):lower()
+                if not n:find(searchLower, 1, true) and not cn:find(searchLower, 1, true) then
+                    matchSearch = false
+                end
+            end
+            if matchSearch then
+                totalMatchingBdays = totalMatchingBdays + 1
+                birthdaysByDate[b.dateKey] = birthdaysByDate[b.dateKey] or {}
+                table.insert(birthdaysByDate[b.dateKey], b)
+            end
+        end
+    end
+
+    -- 3. Indexa promoções do mês
+    local promotionsByDate = {}
+    local totalMatchingPromos = 0
+    if filterLower == "TODOS" or filterLower == "PROMO" then
+        local promos = self:getMonthPromotions(year, month)
+        for _, p in ipairs(promos) do
+            local matchSearch = true
+            if searchLower ~= "" then
+                local n = (p.name or ""):lower()
+                local cn = (p.cleanName or ""):lower()
+                local tr = (p.targetRank or ""):lower()
+                if not n:find(searchLower, 1, true) and not cn:find(searchLower, 1, true) and not tr:find(searchLower, 1, true) then
+                    matchSearch = false
+                end
+            end
+            if matchSearch then
+                totalMatchingPromos = totalMatchingPromos + 1
+                promotionsByDate[p.dateKey] = promotionsByDate[p.dateKey] or {}
+                table.insert(promotionsByDate[p.dateKey], p)
+            end
+        end
+    end
+
+    local totalMatching = totalMatchingEvents + totalMatchingBdays + totalMatchingPromos
+    if self._eventsCountText then
+        self._eventsCountText:SetText(string.format("|cffaaaaaa(%d itens)|r", totalMatching))
+    end
+
+    local firstWday = getFirstWeekdayOfMonth(year, month)
+    local daysInCurMonth = getDaysInMonth(year, month)
+    local prevM = (month == 1) and 12 or (month - 1)
+    local prevY = (month == 1) and (year - 1) or year
+    local daysInPrevMonth = getDaysInMonth(prevY, prevM)
+    local nextM = (month == 12) and 1 or (month + 1)
+    local nextY = (month == 12) and (year + 1) or year
+
+    for i = 1, 42 do
+        local cell = self._calendarDayCells[i]
+        if cell then
+            local cDay, cMonth, cYear, isCurrentMonth
+            if i < firstWday then
+                cDay = daysInPrevMonth - (firstWday - 1 - i)
+                cMonth = prevM
+                cYear = prevY
+                isCurrentMonth = false
+            elseif i < firstWday + daysInCurMonth then
+                cDay = i - firstWday + 1
+                cMonth = month
+                cYear = year
+                isCurrentMonth = true
+            else
+                cDay = i - (firstWday + daysInCurMonth) + 1
+                cMonth = nextM
+                cYear = nextY
+                isCurrentMonth = false
+            end
+
+            cell.cellYear = cYear
+            cell.cellMonth = cMonth
+            cell.cellDay = cDay
+            cell.isCurrentMonth = isCurrentMonth
+
+            local dateKey = string.format("%04d-%02d-%02d", cYear, cMonth, cDay)
+            local dayEvents = eventsByDate[dateKey] or {}
+            local dayBdays = birthdaysByDate[dateKey] or {}
+            local dayPromos = promotionsByDate[dateKey] or {}
+
+            cell.cellEvents = dayEvents
+            cell.cellBirthdays = dayBdays
+            cell.cellPromotions = dayPromos
+
+            cell.dayNum:SetText(tostring(cDay))
+
+            local isToday = (cYear == (curDate.year or 2026) and cMonth == (curDate.month or 10) and cDay == (curDate.day or 19))
+            local isSelected = (self._selectedDate and cYear == self._selectedDate.year and cMonth == self._selectedDate.month and cDay == self._selectedDate.day)
+
+            if not isCurrentMonth then
+                cell.dayNum:SetTextColor(0.40, 0.35, 0.28)
+            elseif isToday then
+                cell.dayNum:SetTextColor(1.0, 0.85, 0.1)
+            else
+                cell.dayNum:SetTextColor(0.95, 0.95, 0.95)
+            end
+
+            local totalCellItems = #dayEvents + #dayBdays + #dayPromos
+
+            if cell.SetBackdropColor and cell.SetBackdropBorderColor then
+                if isSelected then
+                    cell:SetBackdropColor(0.28, 0.18, 0.06, 0.95)
+                    cell:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                elseif isToday then
+                    cell:SetBackdropColor(0.18, 0.12, 0.05, 0.85)
+                    cell:SetBackdropBorderColor(0.95, 0.65, 0.15, 0.90)
+                elseif not isCurrentMonth then
+                    cell:SetBackdropColor(0.02, 0.015, 0.008, 0.40)
+                    cell:SetBackdropBorderColor(0.28, 0.18, 0.06, 0.35)
+                elseif totalCellItems > 0 then
+                    -- Cor sutil baseada no item principal do dia
+                    local primaryTheme = nil
+                    if #dayEvents > 0 then
+                        primaryTheme = TYPE_THEMES[dayEvents[1]:getType()] or TYPE_THEMES.OUTRO
+                    elseif #dayBdays > 0 then
+                        primaryTheme = TYPE_THEMES.ANIVERSARIO
+                    elseif #dayPromos > 0 then
+                        primaryTheme = TYPE_THEMES.PROMO
+                    end
+                    if primaryTheme then
+                        cell:SetBackdropColor(primaryTheme.bg[1], primaryTheme.bg[2], primaryTheme.bg[3], 0.70)
+                        cell:SetBackdropBorderColor(primaryTheme.border[1], primaryTheme.border[2], primaryTheme.border[3], 0.75)
+                    else
+                        cell:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.70)
+                        cell:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.60)
+                    end
+                else
+                    cell:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.70)
+                    cell:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.60)
+                end
+            end
+
+            if totalCellItems > 0 then
+                if #dayEvents > 0 and #dayBdays == 0 and #dayPromos == 0 then
+                    if #dayEvents == 1 then
+                        local ev = dayEvents[1]
+                        local tDef = TYPE_THEMES[ev:getType()] or TYPE_THEMES.OUTRO
+                        cell.badge:SetText(tDef.colorCode .. "• " .. (ev:getTime() or "20:00") .. "|r")
+                    else
+                        local firstType = dayEvents[1]:getType()
+                        local same = true
+                        for _, ev in ipairs(dayEvents) do
+                            if ev:getType() ~= firstType then same = false; break end
+                        end
+                        if same then
+                            local tDef = TYPE_THEMES[firstType] or TYPE_THEMES.OUTRO
+                            cell.badge:SetText(string.format("%s• %d %s|r", tDef.colorCode, #dayEvents, tDef.shortTag))
+                        else
+                            local countsByType = {}
+                            local order = {}
+                            for _, ev in ipairs(dayEvents) do
+                                local t = ev:getType() or "OUTRO"
+                                if not countsByType[t] then
+                                    countsByType[t] = 0
+                                    table.insert(order, t)
+                                end
+                                countsByType[t] = countsByType[t] + 1
+                            end
+                            local evParts = {}
+                            for _, t in ipairs(order) do
+                                local tDef = TYPE_THEMES[t] or TYPE_THEMES.OUTRO
+                                table.insert(evParts, string.format("%s•%d|r", tDef.colorCode, countsByType[t]))
+                            end
+                            cell.badge:SetText(table.concat(evParts, " "))
+                        end
+                    end
+                elseif #dayBdays > 0 and #dayEvents == 0 and #dayPromos == 0 then
+                    local bTheme = TYPE_THEMES.ANIVERSARIO
+                    if #dayBdays == 1 then
+                        local b = dayBdays[1]
+                        local sName = b.cleanName:sub(1, 6)
+                        cell.badge:SetText(string.format("%s• %s|r", bTheme.colorCode, sName))
+                    else
+                        cell.badge:SetText(string.format("%s• %d aniv|r", bTheme.colorCode, #dayBdays))
+                    end
+                elseif #dayPromos > 0 and #dayEvents == 0 and #dayBdays == 0 then
+                    local pTheme = TYPE_THEMES.PROMO
+                    if #dayPromos == 1 then
+                        local p = dayPromos[1]
+                        local sName = p.cleanName:sub(1, 6)
+                        cell.badge:SetText(string.format("%s• %s|r", pTheme.colorCode, sName))
+                    else
+                        cell.badge:SetText(string.format("%s• %d promo|r", pTheme.colorCode, #dayPromos))
+                    end
+                else
+                    local parts = {}
+                    if #dayEvents > 0 then
+                        local countsByType = {}
+                        local order = {}
+                        for _, ev in ipairs(dayEvents) do
+                            local t = ev:getType() or "OUTRO"
+                            if not countsByType[t] then
+                                countsByType[t] = 0
+                                table.insert(order, t)
+                            end
+                            countsByType[t] = countsByType[t] + 1
+                        end
+                        for _, t in ipairs(order) do
+                            local tDef = TYPE_THEMES[t] or TYPE_THEMES.OUTRO
+                            table.insert(parts, string.format("%s•%d|r", tDef.colorCode, countsByType[t]))
+                        end
+                    end
+                    if #dayBdays > 0 then
+                        table.insert(parts, string.format("%s•%d|r", TYPE_THEMES.ANIVERSARIO.colorCode, #dayBdays))
+                    end
+                    if #dayPromos > 0 then
+                        table.insert(parts, string.format("%s•%d|r", TYPE_THEMES.PROMO.colorCode, #dayPromos))
+                    end
+                    cell.badge:SetText(table.concat(parts, " "))
+                end
+                cell.badge:Show()
+            else
+                cell.badge:Hide()
+            end
+        end
+    end
+end
+
+--- Renderiza a lista de cards de eventos para a data selecionada no calendário.
+function AgendaView:renderSelectedDayEvents()
+    if not self._eventsScrollChild then return end
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    for _, card in ipairs(self._selectedDayCardPool) do card:Hide() end
+    for _, card in ipairs(self._selectedDayBirthdayPool) do card:Hide() end
+    for _, card in ipairs(self._selectedDayPromoPool) do card:Hide() end
+
+    local sel = self._selectedDate or { year = self._calendarYear or 2026, month = self._calendarMonth or 10, day = 1 }
+    local selDateStr = string.format("%02d/%02d/%04d", sel.day, sel.month, sel.year)
+    local selKey = string.format("%04d-%02d-%02d", sel.year, sel.month, sel.day)
+
+    local filterLower = self._currentFilterType or "TODOS"
+    local searchLower = self._currentSearchText and self._currentSearchText:match("^%s*(.-)%s*$"):lower() or ""
+
+    -- 1. Eventos do dia
+    local dayEvents = {}
+    if filterLower ~= "ANIVERSARIO" and filterLower ~= "PROMO" then
+        for _, ev in ipairs(self._events or {}) do
+            local norm = normalizeDate(ev:getDate())
+            if norm == selKey then
+                local matchType = (filterLower == "TODOS" or ev:getType() == filterLower)
+                local matchSearch = true
+                if searchLower ~= "" then
+                    local t = (ev:getTitle() or ""):lower()
+                    local d = (ev:getDescription() or ""):lower()
+                    local c = (ev:getCreator() or ""):lower()
+                    if not t:find(searchLower, 1, true) and not d:find(searchLower, 1, true) and not c:find(searchLower, 1, true) then
+                        matchSearch = false
+                    end
+                end
+                if matchType and matchSearch then
+                    table.insert(dayEvents, ev)
+                end
+            end
+        end
+        table.sort(dayEvents, function(a, b) return (a:getTime() or "") < (b:getTime() or "") end)
+    end
+
+    -- 2. Aniversários do dia
+    local dayBirthdays = {}
+    if filterLower == "TODOS" or filterLower == "ANIVERSARIO" then
+        local bdays = self:getMonthBirthdays(sel.year, sel.month)
+        for _, b in ipairs(bdays) do
+            if b.day == sel.day then
+                local matchSearch = true
+                if searchLower ~= "" then
+                    local n = (b.name or ""):lower()
+                    local cn = (b.cleanName or ""):lower()
+                    if not n:find(searchLower, 1, true) and not cn:find(searchLower, 1, true) then
+                        matchSearch = false
+                    end
+                end
+                if matchSearch then
+                    table.insert(dayBirthdays, b)
+                end
+            end
+        end
+    end
+
+    -- 3. Promoções do dia
+    local dayPromotions = {}
+    if filterLower == "TODOS" or filterLower == "PROMO" then
+        local promos = self:getMonthPromotions(sel.year, sel.month)
+        for _, p in ipairs(promos) do
+            if p.day == sel.day then
+                local matchSearch = true
+                if searchLower ~= "" then
+                    local n = (p.name or ""):lower()
+                    local cn = (p.cleanName or ""):lower()
+                    local tr = (p.targetRank or ""):lower()
+                    if not n:find(searchLower, 1, true) and not cn:find(searchLower, 1, true) and not tr:find(searchLower, 1, true) then
+                        matchSearch = false
+                    end
+                end
+                if matchSearch then
+                    table.insert(dayPromotions, p)
+                end
+            end
+        end
+    end
+
+    local totalItems = #dayEvents + #dayBirthdays + #dayPromotions
+
+    if self._selectedDayTitleText then
+        local baseTitle = string.format(L["AGENDA_SELECTED_DAY_HEADER"] or "Eventos em %s", selDateStr)
+        local countStr = string.format("(%d atividade(s))", totalItems)
+        self._selectedDayTitleText:SetText(string.format("%s |cffaaaaaa%s|r", baseTitle, countStr))
+    end
+
+    if totalItems == 0 then
+        if self._emptyEventsText then
+            self._emptyEventsText:SetText(L["AGENDA_NO_EVENTS_DAY"] or "Nenhum evento agendado para este dia.\nClique em + Novo Evento nesta data para criar.")
+            self._emptyEventsText:Show()
+        end
         self._eventsScrollChild:SetHeight(1)
         return
     end
 
     if self._emptyEventsText then self._emptyEventsText:Hide() end
 
-    local cardHeight = 98
-    local gap = 6
-    local totalY = 4
+    local gap = 4
+    local totalY = 2
 
-    for idx, ev in ipairs(visibleEvents) do
-        local card = self._activeEventCardPool[idx]
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    -- 1. Cards de Eventos
+    local eventCardHeight = 76
+    for idx, ev in ipairs(dayEvents) do
+        local card = self._selectedDayCardPool[idx]
         if not card then
             card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
-            card:SetSize(576, cardHeight)
+            card:SetSize(566, eventCardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.85)
                 card:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
             end
 
-            -- Badge do Tipo
             local typeBadge = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            typeBadge:SetPoint("TOPLEFT", card, "TOPLEFT", 10, -8)
+            typeBadge:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -6)
             card.typeBadge = typeBadge
 
-            -- Título do Evento
             local titleText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium")
             titleText:SetPoint("LEFT", typeBadge, "RIGHT", 6, 0)
-            titleText:SetPoint("RIGHT", card, "RIGHT", -10, 0)
+            titleText:SetPoint("RIGHT", card, "RIGHT", -190, 0)
             titleText:SetJustifyH("LEFT")
             card.titleText = titleText
 
-            -- Data e Horário
             local dateTimeText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            dateTimeText:SetPoint("TOPLEFT", typeBadge, "BOTTOMLEFT", 0, -5)
+            dateTimeText:SetPoint("TOPLEFT", typeBadge, "BOTTOMLEFT", 0, -4)
             card.dateTimeText = dateTimeText
 
-            -- Criador e Convidados
             local infoText = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            infoText:SetPoint("LEFT", dateTimeText, "RIGHT", 12, 0)
+            infoText:SetPoint("LEFT", dateTimeText, "RIGHT", 10, 0)
             card.infoText = infoText
 
-            -- Descrição
             local descText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            descText:SetPoint("TOPLEFT", dateTimeText, "BOTTOMLEFT", 0, -4)
-            descText:SetPoint("RIGHT", card, "RIGHT", -210, 0)
+            descText:SetPoint("TOPLEFT", dateTimeText, "BOTTOMLEFT", 0, -3)
+            descText:SetPoint("RIGHT", card, "RIGHT", -180, 0)
             descText:SetJustifyH("LEFT")
             card.descText = descText
 
-            -- Botões de Ação no Card
             local inviteBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
-            inviteBtn:SetSize(90, 22)
-            inviteBtn:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -140, 8)
+            inviteBtn:SetSize(80, 20)
+            inviteBtn:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -116, 6)
             inviteBtn:SetText("Convidados")
             card.inviteBtn = inviteBtn
 
             local editBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
-            editBtn:SetSize(60, 22)
-            editBtn:SetPoint("LEFT", inviteBtn, "RIGHT", 6, 0)
+            editBtn:SetSize(52, 20)
+            editBtn:SetPoint("LEFT", inviteBtn, "RIGHT", 4, 0)
             editBtn:SetText("Editar")
             card.editBtn = editBtn
 
             local deleteBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
-            deleteBtn:SetSize(60, 22)
-            deleteBtn:SetPoint("LEFT", editBtn, "RIGHT", 6, 0)
+            deleteBtn:SetSize(52, 20)
+            deleteBtn:SetPoint("LEFT", editBtn, "RIGHT", 4, 0)
             deleteBtn:SetText("Excluir")
             card.deleteBtn = deleteBtn
 
-            self._activeEventCardPool[idx] = card
+            self._selectedDayCardPool[idx] = card
         end
 
         card:ClearAllPoints()
         card:SetPoint("TOPLEFT", self._eventsScrollChild, "TOPLEFT", 2, -totalY)
 
-        local tDef = TYPE_BADGES[ev:getType()] or TYPE_BADGES.OUTRO
-        card.typeBadge:SetText(tDef.color .. tDef.label .. "|r")
+        local evTheme = TYPE_THEMES[ev:getType()] or TYPE_THEMES.OUTRO
+        if card.SetBackdropColor and card.SetBackdropBorderColor then
+            card:SetBackdropColor(evTheme.bg[1], evTheme.bg[2], evTheme.bg[3], evTheme.bg[4])
+            card:SetBackdropBorderColor(evTheme.border[1], evTheme.border[2], evTheme.border[3], evTheme.border[4])
+        end
+
+        card.typeBadge:SetText(evTheme.colorCode .. evTheme.label .. "|r")
         card.titleText:SetText("|cffffffff" .. (ev:getTitle() or "Sem título") .. "|r")
 
-        local dtStr = string.format("|cffffd200📅 %s|r  |cffffffffàs %s|r", ev:getDate() or "-", ev:getTime() or "20:00")
+        local dtStr = string.format("|cffffd200Data: %s|r  |cffffffffàs %s|r", ev:getDate() or "-", ev:getTime() or "20:00")
         card.dateTimeText:SetText(dtStr)
 
         local creatorName = ev:getCreator()
         if creatorName == "" then creatorName = "Guilda" end
         local invCount = ev:getInviteeCount()
-        card.infoText:SetText(string.format("|cff888888• Criado por: |cffffff00%s|r  |cff888888• 👥 |cff00ff88%d convidado(s)|r", creatorName, invCount))
+        card.infoText:SetText(string.format("|cff888888• Criado por: |cffffff00%s|r  • |cff00ff88%d convidado(s)|r", creatorName, invCount))
 
         local desc = ev:getDescription() or ""
         if desc == "" then desc = "|cff666666(Sem descrição adicional)|r" end
         card.descText:SetText(desc)
 
         local currentEventId = ev:getId()
-
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
-
-        card.editBtn:EnableMouse(true)
-        card.deleteBtn:EnableMouse(true)
         if canOfficer then
             card.editBtn:SetAlpha(1.0)
             card.deleteBtn:SetAlpha(1.0)
@@ -1230,32 +1999,6 @@ function AgendaView:renderEvents()
             card.editBtn:SetAlpha(0.55)
             card.deleteBtn:SetAlpha(0.55)
         end
-
-        card.editBtn:SetScript("OnEnter", function(btn)
-            if not GameTooltip then return end
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Editar Evento|r", 1, 1, 1)
-            if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar eventos.|r", 1, 0.3, 0.3, true)
-            else
-                GameTooltip:AddLine("|cff00ff00Clique para editar este evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
-            end
-            GameTooltip:Show()
-        end)
-        card.editBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-
-        card.deleteBtn:SetScript("OnEnter", function(btn)
-            if not GameTooltip then return end
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Excluir Evento|r", 1, 1, 1)
-            if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem excluir eventos.|r", 1, 0.3, 0.3, true)
-            else
-                GameTooltip:AddLine("|cff00ff00Clique para excluir este evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
-            end
-            GameTooltip:Show()
-        end)
-        card.deleteBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
         card.inviteBtn:SetScript("OnClick", function()
             self:openInviteeModal(ev)
@@ -1302,23 +2045,306 @@ function AgendaView:renderEvents()
         end)
 
         card:Show()
-        totalY = totalY + cardHeight + gap
+        totalY = totalY + eventCardHeight + gap
+    end
+
+    -- 2. Cards de Aniversários
+    local bdayCardHeight = 62
+    for bIdx, b in ipairs(dayBirthdays) do
+        local card = self._selectedDayBirthdayPool[bIdx]
+        if not card then
+            card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
+            card:SetSize(566, bdayCardHeight)
+            if card.SetBackdrop then
+                card:SetBackdrop(SUB_CONTAINER_BACKDROP)
+                card:SetBackdropColor(0.12, 0.08, 0.02, 0.90)
+                card:SetBackdropBorderColor(0.85, 0.65, 0.15, 0.90)
+            end
+
+            local cIcon = card:CreateTexture(nil, "ARTWORK")
+            cIcon:SetSize(22, 22)
+            cIcon:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -8)
+            card.cIcon = cIcon
+
+            local titleText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium")
+            titleText:SetPoint("LEFT", cIcon, "RIGHT", 6, 0)
+            titleText:SetPoint("RIGHT", card, "RIGHT", -120, 0)
+            titleText:SetJustifyH("LEFT")
+            card.titleText = titleText
+
+            local detailText = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            detailText:SetPoint("TOPLEFT", cIcon, "BOTTOMLEFT", 0, -4)
+            detailText:SetPoint("RIGHT", card, "RIGHT", -120, 0)
+            detailText:SetJustifyH("LEFT")
+            card.detailText = detailText
+
+            local scheduleBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
+            scheduleBtn:SetSize(90, 22)
+            scheduleBtn:SetPoint("RIGHT", card, "RIGHT", -8, 0)
+            scheduleBtn:SetText("+ Agendar")
+            card.scheduleBtn = scheduleBtn
+
+            self._selectedDayBirthdayPool[bIdx] = card
+        end
+
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT", self._eventsScrollChild, "TOPLEFT", 2, -totalY)
+
+        local bTheme = TYPE_THEMES.ANIVERSARIO
+        if card.SetBackdropColor and card.SetBackdropBorderColor then
+            card:SetBackdropColor(bTheme.bg[1], bTheme.bg[2], bTheme.bg[3], bTheme.bg[4])
+            card:SetBackdropBorderColor(bTheme.border[1], bTheme.border[2], bTheme.border[3], bTheme.border[4])
+        end
+
+        local tok = b.class and (CLASS_NAME_TO_TOKEN[b.class:upper()] or b.class:upper()) or ""
+        local coords = tok ~= "" and CLASS_ICON_COORDS[tok]
+        card.cIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+        if coords then
+            card.cIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+            card.cIcon:Show()
+            card.titleText:SetPoint("LEFT", card.cIcon, "RIGHT", 6, 0)
+        else
+            card.cIcon:Hide()
+            card.titleText:SetPoint("LEFT", card, "TOPLEFT", 8, -8)
+        end
+
+        local rk = b.rank and b.rank ~= "" and (" • " .. b.rank) or ""
+        card.titleText:SetText(bTheme.colorCode .. "[Aniversário]|r " .. getColoredName(b.cleanName or b.name, b.class) .. " |cff888888(Nv " .. (b.level or 1) .. rk .. ")|r")
+        card.detailText:SetText(string.format("|cffffd200Data:|r %s • Comemoração de Aniversário na guilda", b.birthday or "--/--"))
+
+        card.scheduleBtn:EnableMouse(true)
+        if canOfficer then
+            card.scheduleBtn:SetAlpha(1.0)
+        else
+            card.scheduleBtn:SetAlpha(0.55)
+        end
+
+        card.scheduleBtn:SetScript("OnClick", function()
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem agendar eventos.")
+                return
+            end
+            if self._onCreateBirthdayEventCallback and b.member then
+                self._onCreateBirthdayEventCallback(b.member)
+            else
+                self:openEventModal(nil, {
+                    title = "Aniversário de " .. (b.cleanName or b.name),
+                    type = "ANIVERSARIO",
+                    date = selDateStr,
+                    time = "20:00",
+                    description = "Comemoração de aniversário de " .. (b.cleanName or b.name) .. "!",
+                })
+            end
+        end)
+
+        card:Show()
+        totalY = totalY + bdayCardHeight + gap
+    end
+
+    -- 3. Cards de Promoções
+    local promoCardHeight = 62
+    for pIdx, p in ipairs(dayPromotions) do
+        local card = self._selectedDayPromoPool[pIdx]
+        if not card then
+            card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
+            card:SetSize(566, promoCardHeight)
+            if card.SetBackdrop then
+                card:SetBackdrop(SUB_CONTAINER_BACKDROP)
+                card:SetBackdropColor(0.03, 0.08, 0.12, 0.90)
+                card:SetBackdropBorderColor(0.20, 0.70, 0.90, 0.90)
+            end
+
+            local cIcon = card:CreateTexture(nil, "ARTWORK")
+            cIcon:SetSize(22, 22)
+            cIcon:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -8)
+            cIcon:SetTexture("Interface\\Icons\\INV_Shield_06")
+            cIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            card.cIcon = cIcon
+
+            local titleText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightMedium")
+            titleText:SetPoint("LEFT", cIcon, "RIGHT", 6, 0)
+            titleText:SetPoint("RIGHT", card, "RIGHT", -120, 0)
+            titleText:SetJustifyH("LEFT")
+            card.titleText = titleText
+
+            local detailText = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            detailText:SetPoint("TOPLEFT", cIcon, "BOTTOMLEFT", 0, -4)
+            detailText:SetPoint("RIGHT", card, "RIGHT", -120, 0)
+            detailText:SetJustifyH("LEFT")
+            card.detailText = detailText
+
+            local promoteBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
+            promoteBtn:SetSize(90, 22)
+            promoteBtn:SetPoint("RIGHT", card, "RIGHT", -8, 0)
+            promoteBtn:SetText(L["AGENDA_PROMOTE_BTN"] or "Promover")
+            card.promoteBtn = promoteBtn
+
+            self._selectedDayPromoPool[pIdx] = card
+        end
+
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT", self._eventsScrollChild, "TOPLEFT", 2, -totalY)
+
+        local pTheme = TYPE_THEMES.PROMO
+        if card.SetBackdropColor and card.SetBackdropBorderColor then
+            card:SetBackdropColor(pTheme.bg[1], pTheme.bg[2], pTheme.bg[3], pTheme.bg[4])
+            card:SetBackdropBorderColor(pTheme.border[1], pTheme.border[2], pTheme.border[3], pTheme.border[4])
+        end
+
+        card.titleText:SetText(pTheme.colorCode .. "[Promoção]|r " .. getColoredName(p.cleanName or p.name, p.class) .. " |cff888888(Nv " .. (p.level or 1) .. ")|r")
+
+        local statusStr = p.isEligibleNow and "|cff00ff00[Elegível Hoje]|r" or string.format("|cffffff00[Meta: %d dias]|r", p.requiredDays or 0)
+        card.detailText:SetText(string.format("Promover para: " .. pTheme.colorCode .. "%s|r • Tempo na guilda: %d dias %s", p.targetRank or "", p.daysInGuild or 0, statusStr))
+
+        card.promoteBtn:EnableMouse(true)
+        if canOfficer and p.isEligibleNow then
+            card.promoteBtn:SetAlpha(1.0)
+        else
+            card.promoteBtn:SetAlpha(0.50)
+        end
+
+        card.promoteBtn:SetScript("OnEnter", function(btn)
+            if not GameTooltip then return end
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine(string.format("|cffffd200Promoção para %s|r", p.targetRank or ""), 1, 1, 1)
+            if not canOfficer then
+                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem promover membros.|r", 1, 0.3, 0.3, true)
+            elseif p.isEligibleNow then
+                GameTooltip:AddLine("|cff00ff00Clique para promover este membro agora!|r", 0.2, 1.0, 0.2)
+            else
+                GameTooltip:AddLine(string.format("|cffaaaaaaMembro atinge os %d dias requeridos nesta data.|r", p.requiredDays or 0), 0.7, 0.7, 0.7)
+            end
+            GameTooltip:Show()
+        end)
+        card.promoteBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        card.promoteBtn:SetScript("OnClick", function()
+            if not canOfficer then
+                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem promover membros.")
+                return
+            end
+            if not p.isEligibleNow then
+                print(string.format("|cffffaa00[GuildManager]|r %s atinge a meta no dia previsto (%d dias na guilda).", p.cleanName or p.name, p.requiredDays or 0))
+                return
+            end
+            if self._onPromoteMemberCallback then
+                self._onPromoteMemberCallback(p.name or p.cleanName, p.targetRank)
+            end
+        end)
+
+        card:Show()
+        totalY = totalY + promoCardHeight + gap
     end
 
     self._eventsScrollChild:SetHeight(math.max(totalY, 1))
 end
 
---- Renderiza a lista de aniversariantes no painel direito.
-function AgendaView:renderBirthdays()
+--- Renderiza o feed unificado de Próximos Eventos (Eventos, Aniversários e Promoções) no painel direito.
+function AgendaView:renderUpcomingFeed()
     if not self._birthdaysScrollChild then return end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
-    for _, card in ipairs(self._activeBirthdayCardPool) do
+    for _, card in ipairs(self._upcomingFeedCardPool) do
         card:Hide()
     end
 
-    local list = self._upcomingBirthdays or {}
-    if #list == 0 then
+    local combined = {}
+
+    -- 1. Próximos eventos da guilda
+    local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 19 }
+    local todayMidnight = 0
+    if time then
+        todayMidnight = time({ year = curDate.year or 2026, month = curDate.month or 10, day = curDate.day or 19, hour = 0, min = 0, sec = 0 })
+    end
+
+    for _, ev in ipairs(self._events or {}) do
+        local norm, m, d, y = normalizeDate(ev:getDate())
+        if norm and y and m and d then
+            local daysUntil = 9999
+            if time and todayMidnight > 0 then
+                local evMidnight = time({ year = y, month = m, day = d, hour = 0, min = 0, sec = 0 })
+                daysUntil = math.floor((evMidnight - todayMidnight) / 86400)
+            else
+                daysUntil = (y - (curDate.year or 2026)) * 365 + (m - (curDate.month or 10)) * 30 + (d - (curDate.day or 19))
+            end
+
+            if daysUntil >= 0 and daysUntil <= 60 then
+                local dText = ""
+                if daysUntil == 0 then
+                    dText = "|cff00ff00Hoje!|r"
+                elseif daysUntil == 1 then
+                    dText = "|cffffff00Amanhã!|r"
+                elseif daysUntil <= 7 then
+                    dText = string.format("|cffffff00Em %d dias|r", daysUntil)
+                else
+                    dText = string.format("|cffaaaaaaEm %d dias|r", daysUntil)
+                end
+
+                table.insert(combined, {
+                    itemType = "EVENT",
+                    event = ev,
+                    title = ev:getTitle() or "Evento",
+                    type = ev:getType() or "OUTRO",
+                    date = ev:getDate() or "",
+                    time = ev:getTime() or "20:00",
+                    year = y,
+                    month = m,
+                    day = d,
+                    daysUntil = daysUntil,
+                    daysText = dText,
+                })
+            end
+        end
+    end
+
+    -- 2. Próximos aniversários
+    for _, b in ipairs(self._upcomingBirthdays or {}) do
+        table.insert(combined, {
+            itemType = "BIRTHDAY",
+            member = b.member,
+            name = b.name or (b.member and b.member:getName()) or "",
+            cleanName = b.cleanName or (b.name and b.name:match("^[^-]+")) or "Membro",
+            class = b.class or (b.member and b.member:getClass()) or "",
+            level = b.level or (b.member and b.member:getLevel()) or 1,
+            birthday = b.birthday or "--/--",
+            rank = b.rank or "",
+            targetYear = b.targetYear,
+            daysUntil = b.daysUntil or 999,
+            daysText = b.daysText or "",
+        })
+    end
+
+    -- 3. Próximas promoções
+    for _, p in ipairs(self._upcomingPromotions or {}) do
+        table.insert(combined, {
+            itemType = "PROMOTION",
+            member = p.member,
+            name = p.name or (p.member and p.member:getName()) or "",
+            cleanName = p.cleanName or (p.name and p.name:match("^[^-]+")) or "Membro",
+            class = p.class or (p.member and p.member:getClass()) or "",
+            level = p.level or (p.member and p.member:getLevel()) or 1,
+            currentRank = p.currentRank or "",
+            targetRank = p.targetRank or "",
+            daysInGuild = p.daysInGuild or 0,
+            requiredDays = p.requiredDays or 0,
+            daysUntil = p.daysUntil or 0,
+            isEligibleNow = p.isEligibleNow == true,
+            daysText = p.daysText or "",
+        })
+    end
+
+    table.sort(combined, function(a, b)
+        if a.daysUntil == b.daysUntil then
+            if a.itemType ~= b.itemType then
+                local pMap = { PROMOTION = 1, EVENT = 2, BIRTHDAY = 3 }
+                return (pMap[a.itemType] or 9) < (pMap[b.itemType] or 9)
+            end
+            return (a.title or a.cleanName or "") < (b.title or b.cleanName or "")
+        end
+        return a.daysUntil < b.daysUntil
+    end)
+
+    if #combined == 0 then
         if self._emptyBirthdaysText then self._emptyBirthdaysText:Show() end
         self._birthdaysScrollChild:SetHeight(1)
         return
@@ -1326,12 +2352,21 @@ function AgendaView:renderBirthdays()
 
     if self._emptyBirthdaysText then self._emptyBirthdaysText:Hide() end
 
-    local cardHeight = 64
+    local cardHeight = 66
     local gap = 4
-    local totalY = 4
+    local totalY = 2
 
-    for idx, item in ipairs(list) do
-        local card = self._activeBirthdayCardPool[idx]
+    local canOfficer = false
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
+    elseif IsGuildLeader and IsGuildLeader() then
+        canOfficer = true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        canOfficer = true
+    end
+
+    for idx, item in ipairs(combined) do
+        local card = self._upcomingFeedCardPool[idx]
         if not card then
             card = CreateFrame("Frame", nil, self._birthdaysScrollChild, template)
             card:SetSize(258, cardHeight)
@@ -1341,119 +2376,211 @@ function AgendaView:renderBirthdays()
                 card:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
             end
 
-            -- Ícone da Classe
             local cIcon = card:CreateTexture(nil, "ARTWORK")
             cIcon:SetSize(20, 20)
             cIcon:SetPoint("TOPLEFT", card, "TOPLEFT", 6, -6)
-            cIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
             card.cIcon = cIcon
 
-            -- Nome e Nível
             local nameText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             nameText:SetPoint("LEFT", cIcon, "RIGHT", 5, 0)
             nameText:SetPoint("RIGHT", card, "RIGHT", -6, 0)
             nameText:SetJustifyH("LEFT")
             card.nameText = nameText
 
-            -- Linha 2: Data + Cargo
             local detailText = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             detailText:SetPoint("TOPLEFT", cIcon, "BOTTOMLEFT", 0, -4)
             detailText:SetPoint("RIGHT", card, "RIGHT", -78, 0)
             detailText:SetJustifyH("LEFT")
             card.detailText = detailText
 
-            -- Linha 3: Contagem regressiva (Hoje!, Amanhã, Em X dias)
             local countdownText = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             countdownText:SetPoint("TOPLEFT", detailText, "BOTTOMLEFT", 0, -2)
             card.countdownText = countdownText
 
-            -- Botão rápido: "+ Agendar"
-            local scheduleBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
-            scheduleBtn:SetSize(72, 20)
-            scheduleBtn:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -6, 6)
-            scheduleBtn:SetText("+ Agendar")
-            card.scheduleBtn = scheduleBtn
+            local actionBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
+            actionBtn:SetSize(72, 20)
+            actionBtn:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -6, 6)
+            card.actionBtn = actionBtn
 
-            self._activeBirthdayCardPool[idx] = card
+            self._upcomingFeedCardPool[idx] = card
         end
 
         card:ClearAllPoints()
         card:SetPoint("TOPLEFT", self._birthdaysScrollChild, "TOPLEFT", 2, -totalY)
 
-        local tok = item.class and (CLASS_NAME_TO_TOKEN[item.class:upper()] or item.class:upper()) or ""
-        local coords = tok ~= "" and CLASS_ICON_COORDS[tok]
-        if coords then
-            card.cIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        local itemTheme = TYPE_THEMES.OUTRO
+        if item.itemType == "EVENT" then
+            itemTheme = TYPE_THEMES[item.type] or TYPE_THEMES.OUTRO
+        elseif item.itemType == "BIRTHDAY" then
+            itemTheme = TYPE_THEMES.ANIVERSARIO
+        elseif item.itemType == "PROMOTION" then
+            itemTheme = TYPE_THEMES.PROMO
+        end
+
+        if card.SetBackdropColor and card.SetBackdropBorderColor then
+            card:SetBackdropColor(itemTheme.bg[1], itemTheme.bg[2], itemTheme.bg[3], itemTheme.bg[4])
+            card:SetBackdropBorderColor(itemTheme.border[1], itemTheme.border[2], itemTheme.border[3], itemTheme.border[4])
+        end
+
+        card.actionBtn:EnableMouse(true)
+
+        if item.itemType == "EVENT" then
+            local okIcon = card.cIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
+            if okIcon ~= false and card.cIcon:GetTexture() then
+                card.cIcon:SetTexCoord(0.0078, 0.375, 0.0156, 0.75)
+            else
+                card.cIcon:SetTexture("Interface\\Icons\\INV_Misc_PocketWatch_01")
+                card.cIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            end
             card.cIcon:Show()
             card.nameText:SetPoint("LEFT", card.cIcon, "RIGHT", 5, 0)
-        else
-            card.cIcon:Hide()
-            card.nameText:SetPoint("LEFT", card, "TOPLEFT", 8, -14)
-        end
 
-        card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(Nv " .. (item.level or 1) .. ")|r")
+            card.nameText:SetText(itemTheme.colorCode .. itemTheme.label .. "|r |cffffffff" .. (item.title or "") .. "|r")
+            card.detailText:SetText(string.format("|cffffd200Data: %s|r às %s", item.date or "--/--", item.time or "20:00"))
+            card.countdownText:SetText(item.daysText or "")
 
-        local rk = item.rank or ""
-        if rk ~= "" then rk = " • " .. rk end
-        card.detailText:SetText(string.format("|cffffd200Data: %s|r%s", item.birthday or "--/--", rk))
-        card.countdownText:SetText(item.daysText or "")
+            card.actionBtn:SetText(L["AGENDA_VIEW_BTN"] or "Ver")
+            card.actionBtn:SetWidth(56)
+            card.actionBtn:SetAlpha(1.0)
+            card.actionBtn:SetScript("OnEnter", function(btn)
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+                GameTooltip:AddLine("|cffffd200Ver no Calendário|r", 1, 1, 1)
+                GameTooltip:AddLine("|cff00ff00Clique para selecionar esta data no calendário e ver os detalhes.|r", 0.2, 1.0, 0.2)
+                GameTooltip:Show()
+            end)
+            card.actionBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+            card.actionBtn:SetScript("OnClick", function()
+                self._calendarYear = item.year
+                self._calendarMonth = item.month
+                self._selectedDate = { year = item.year, month = item.month, day = item.day }
+                self:renderCalendar()
+                self:renderSelectedDayEvents()
+            end)
 
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
-
-        card.scheduleBtn:EnableMouse(true)
-        if canOfficer then
-            card.scheduleBtn:SetAlpha(1.0)
-        else
-            card.scheduleBtn:SetAlpha(0.55)
-        end
-
-        card.scheduleBtn:SetScript("OnEnter", function(btn)
-            if not GameTooltip then return end
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("|cffffd200Agendar Comemoração|r", 1, 1, 1)
-            if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem agendar comemorações de aniversário.|r", 1, 0.3, 0.3, true)
+        elseif item.itemType == "BIRTHDAY" then
+            local tok = item.class and (CLASS_NAME_TO_TOKEN[item.class:upper()] or item.class:upper()) or ""
+            local coords = tok ~= "" and CLASS_ICON_COORDS[tok]
+            card.cIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+            if coords then
+                card.cIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+                card.cIcon:Show()
+                card.nameText:SetPoint("LEFT", card.cIcon, "RIGHT", 5, 0)
             else
-                GameTooltip:AddLine("|cff00ff00Clique para criar um evento na agenda para este aniversário.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+                card.cIcon:Hide()
+                card.nameText:SetPoint("LEFT", card, "TOPLEFT", 8, -6)
             end
-            GameTooltip:Show()
-        end)
-        card.scheduleBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
-        card.scheduleBtn:SetScript("OnClick", function()
-            if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
-                return
-            end
-            if self._onCreateBirthdayEventCallback and item.member then
-                self._onCreateBirthdayEventCallback(item.member)
+            card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(Nv " .. (item.level or 1) .. ")|r")
+            local rk = item.rank or ""
+            if rk ~= "" then rk = " • " .. rk end
+            card.detailText:SetText(string.format("%sAniv: %s|r%s", itemTheme.colorCode, item.birthday or "--/--", rk))
+            card.countdownText:SetText(item.daysText or "")
+
+            card.actionBtn:SetText("+ Agendar")
+            card.actionBtn:SetWidth(72)
+            if canOfficer then
+                card.actionBtn:SetAlpha(1.0)
             else
-                -- Fallback: abre modal de criação pré-preenchida
-                local curYear = (date and date("*t") and date("*t").year) or 2026
-                local m, d = (item.birthday or ""):match("^(%d%d?)/(%d%d?)$")
-                local targetDate = string.format("%02d/%02d/%04d", tonumber(d) or 1, tonumber(m) or 1, item.targetYear or curYear)
-                self:openEventModal(nil, {
-                    title = "Aniversário de " .. (item.cleanName or item.name) .. " 🎂",
-                    type = "ANIVERSARIO",
-                    date = targetDate,
-                    time = "20:00",
-                    description = "Comemoração de aniversário de " .. (item.cleanName or item.name) .. "!",
-                })
+                card.actionBtn:SetAlpha(0.55)
             end
-        end)
+            card.actionBtn:SetScript("OnEnter", function(btn)
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+                GameTooltip:AddLine("|cffffd200Agendar Comemoração|r", 1, 1, 1)
+                if not canOfficer then
+                    GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem agendar comemorações.|r", 1, 0.3, 0.3, true)
+                else
+                    GameTooltip:AddLine("|cff00ff00Clique para criar um evento na agenda para este aniversário.|r", 0.2, 1.0, 0.2)
+                end
+                GameTooltip:Show()
+            end)
+            card.actionBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+            card.actionBtn:SetScript("OnClick", function()
+                if not canOfficer then
+                    print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
+                    return
+                end
+                if self._onCreateBirthdayEventCallback and item.member then
+                    self._onCreateBirthdayEventCallback(item.member)
+                else
+                    local curYear = (date and date("*t") and date("*t").year) or 2026
+                    local m, d = (item.birthday or ""):match("^(%d%d?)/(%d%d?)$")
+                    local targetDate = string.format("%02d/%02d/%04d", tonumber(d) or 1, tonumber(m) or 1, item.targetYear or curYear)
+                    self:openEventModal(nil, {
+                        title = "Aniversário de " .. (item.cleanName or item.name),
+                        type = "ANIVERSARIO",
+                        date = targetDate,
+                        time = "20:00",
+                        description = "Comemoração de aniversário de " .. (item.cleanName or item.name) .. "!",
+                    })
+                end
+            end)
+
+        elseif item.itemType == "PROMOTION" then
+            card.cIcon:SetTexture("Interface\\Icons\\INV_Shield_06")
+            card.cIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            card.cIcon:Show()
+            card.nameText:SetPoint("LEFT", card.cIcon, "RIGHT", 5, 0)
+
+            card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(Nv " .. (item.level or 1) .. ")|r")
+            card.detailText:SetText(string.format("Cargo: %s%s|r (%dd / %dd)", itemTheme.colorCode, item.targetRank or "", item.daysInGuild or 0, item.requiredDays or 0))
+            card.countdownText:SetText(item.isEligibleNow and "|cff00ff00Elegível Hoje!|r" or (item.daysText or ""))
+
+            card.actionBtn:SetText(L["AGENDA_PROMOTE_BTN"] or "Promover")
+            card.actionBtn:SetWidth(68)
+            if canOfficer and item.isEligibleNow then
+                card.actionBtn:SetAlpha(1.0)
+            else
+                card.actionBtn:SetAlpha(0.50)
+            end
+            card.actionBtn:SetScript("OnEnter", function(btn)
+                if not GameTooltip then return end
+                GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+                GameTooltip:AddLine(string.format("|cffffd200Promoção para %s|r", item.targetRank or ""), 1, 1, 1)
+                GameTooltip:AddLine(string.format("Tempo na guilda: |cffffff00%d dias|r (Meta: %d dias)", item.daysInGuild or 0, item.requiredDays or 0), 1, 1, 1)
+                if not canOfficer then
+                    GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem promover membros.|r", 1, 0.3, 0.3, true)
+                elseif item.isEligibleNow then
+                    GameTooltip:AddLine("|cff00ff00Clique para promover este membro no jogo!|r", 0.2, 1.0, 0.2)
+                else
+                    GameTooltip:AddLine(string.format("|cffaaaaaaMembro ainda não atingiu o tempo mínimo (%d dias restantes).|r", item.daysUntil or 0), 0.7, 0.7, 0.7)
+                end
+                GameTooltip:Show()
+            end)
+            card.actionBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+            card.actionBtn:SetScript("OnClick", function()
+                if not canOfficer then
+                    print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem promover membros.")
+                    return
+                end
+                if not item.isEligibleNow then
+                    print(string.format("|cffffaa00[GuildManager]|r %s ainda não atingiu os %d dias necessários para esta promoção (%d dias restantes).", item.cleanName or item.name, item.requiredDays or 0, item.daysUntil or 0))
+                    return
+                end
+                if self._onPromoteMemberCallback then
+                    self._onPromoteMemberCallback(item.name or item.cleanName, item.targetRank)
+                end
+            end)
+        end
 
         card:Show()
         totalY = totalY + cardHeight + gap
     end
 
     self._birthdaysScrollChild:SetHeight(math.max(totalY, 1))
+end
+
+--- Renderiza a agenda: atualiza calendário, eventos do dia e o feed de próximos eventos.
+function AgendaView:renderEvents()
+    self:renderCalendar()
+    self:renderSelectedDayEvents()
+    self:renderUpcomingFeed()
+end
+
+--- Renderiza a lista de aniversários e promoções (chama o feed de próximos eventos).
+function AgendaView:renderBirthdays()
+    self:renderUpcomingFeed()
 end
 
 --- =========================================================================
