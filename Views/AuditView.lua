@@ -128,6 +128,8 @@ function AuditView:new()
     instance._flatRows = {}
     instance._filteredRows = {}
     instance._offset = 0
+    instance._currentPage = 1
+    instance._pageSize = 40
     instance._hOffset = 0
     instance._maxHOffset = 0
     instance._rows = {}
@@ -140,6 +142,12 @@ function AuditView:new()
     instance._onSaveCallback = nil
     instance._editModal = nil
     instance._editingMember = nil
+    instance._paginationFrame = nil
+    instance._pageText = nil
+    instance._firstPageBtn = nil
+    instance._prevPageBtn = nil
+    instance._nextPageBtn = nil
+    instance._lastPageBtn = nil
 
     instance:createUI()
 
@@ -334,6 +342,8 @@ function AuditView:createUI()
             searchHint:Show()
         end
         self._filterText = txt or ""
+        self._currentPage = 1
+        self._offset = 0
         self:applyFilters()
     end)
     searchEB:SetScript("OnEscapePressed", function(box)
@@ -375,6 +385,8 @@ function AuditView:createUI()
                 return
             end
             self._activeFilter = tabData.id
+            self._currentPage = 1
+            self._offset = 0
             self:updateFilterButtonsVisual()
             self:applyFilters()
         end)
@@ -919,6 +931,103 @@ function AuditView:createUI()
     footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 14)
     footerText:SetText("|cffaaaaaaTotal de membros na guilda: 0|r")
     self._footerText = footerText
+
+    -- Controles de Paginação (40 membros por página, centralizados no rodapé)
+    local paginationFrame = CreateFrame("Frame", "GM_AuditPaginationFrame", frame)
+    paginationFrame:SetPoint("BOTTOM", frame, "BOTTOM", 35, 10)
+    paginationFrame:SetSize(360, 24)
+    paginationFrame:EnableMouseWheel(true)
+    paginationFrame:SetScript("OnMouseWheel", function(_, delta)
+        if delta > 0 then
+            self:prevPage()
+        else
+            self:nextPage()
+        end
+    end)
+    self._paginationFrame = paginationFrame
+
+    local pageText = paginationFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    pageText:SetPoint("CENTER", paginationFrame, "CENTER", 0, 0)
+    pageText:SetText("|cffffd200Página 1 de 1|r")
+    self._pageText = pageText
+
+    local prevPageBtn = CreateFrame("Button", "GM_AuditPrevPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    prevPageBtn:SetSize(24, 22)
+    prevPageBtn:SetText("<")
+    prevPageBtn:SetPoint("RIGHT", pageText, "LEFT", -8, 0)
+    prevPageBtn:SetScript("OnClick", function()
+        self:prevPage()
+    end)
+    prevPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Página Anterior", 1, 0.82, 0)
+            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end
+    end)
+    prevPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._prevPageBtn = prevPageBtn
+
+    local firstPageBtn = CreateFrame("Button", "GM_AuditFirstPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    firstPageBtn:SetSize(28, 22)
+    firstPageBtn:SetText("<<")
+    firstPageBtn:SetPoint("RIGHT", prevPageBtn, "LEFT", -4, 0)
+    firstPageBtn:SetScript("OnClick", function()
+        self:firstPage()
+    end)
+    firstPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Primeira Página", 1, 0.82, 0)
+            GameTooltip:Show()
+        end
+    end)
+    firstPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._firstPageBtn = firstPageBtn
+
+    local nextPageBtn = CreateFrame("Button", "GM_AuditNextPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    nextPageBtn:SetSize(24, 22)
+    nextPageBtn:SetText(">")
+    nextPageBtn:SetPoint("LEFT", pageText, "RIGHT", 8, 0)
+    nextPageBtn:SetScript("OnClick", function()
+        self:nextPage()
+    end)
+    nextPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Próxima Página", 1, 0.82, 0)
+            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end
+    end)
+    nextPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._nextPageBtn = nextPageBtn
+
+    local lastPageBtn = CreateFrame("Button", "GM_AuditLastPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    lastPageBtn:SetSize(28, 22)
+    lastPageBtn:SetText(">>")
+    lastPageBtn:SetPoint("LEFT", nextPageBtn, "RIGHT", 4, 0)
+    lastPageBtn:SetScript("OnClick", function()
+        self:lastPage()
+    end)
+    lastPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Última Página", 1, 0.82, 0)
+            GameTooltip:Show()
+        end
+    end)
+    lastPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._lastPageBtn = lastPageBtn
 
     -- Botão Atualizar
     local refreshBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -2309,11 +2418,14 @@ function AuditView:applyFilters()
         end
     end
 
-    local total = #self._filteredRows
-    local maxOffset = math.max(0, total - self._numVisibleRows)
+    local currentPage, totalPages, startIndex, endIndex, pageCount, total = self:getPageInfo()
+    local maxOffset = math.max(0, pageCount - self._numVisibleRows)
 
     if self._offset > maxOffset then
         self._offset = maxOffset
+    end
+    if self._offset < 0 then
+        self._offset = 0
     end
 
     if self._scrollBar then
@@ -2328,8 +2440,8 @@ function AuditView:applyFilters()
 
     if self._footerText then
         self._footerText:SetText(string.format(
-            "|cffaaaaaaTotal na guilda: %d membros (%d Mains, %d Alts) • Exibindo: %d linha(s)|r",
-            #self._members, self._totalMainsCount or 0, self._totalAltsCount or 0, total
+            "|cffaaaaaaTotal na guilda: %d membros (%d Mains, %d Alts)|r",
+            #self._members, self._totalMainsCount or 0, self._totalAltsCount or 0
         ))
     end
 
@@ -2337,18 +2449,19 @@ function AuditView:applyFilters()
     self:renderRows()
 end
 
---- Renderiza as linhas visíveis na tabela com suporte avançado a subnível, identação e células interativas.
+--- Renderiza as linhas visíveis na tabela com paginação (40 membros por página).
 function AuditView:renderRows()
-    local total = #self._filteredRows
     local isOfficer = self:isPlayerOfficerOrLeader()
+    local currentPage, totalPages, startIndex, endIndex, pageCount, total = self:getPageInfo()
 
-    if total == 0 then
+    if total == 0 or pageCount == 0 then
         if self._emptyNotice then
             self._emptyNotice:Show()
         end
         for _, row in ipairs(self._rows) do
             row:Hide()
         end
+        self:updatePaginationControls()
         return
     else
         if self._emptyNotice then
@@ -2357,9 +2470,9 @@ function AuditView:renderRows()
     end
 
     for i = 1, self._numVisibleRows do
-        local dataIndex = self._offset + i
+        local dataIndex = startIndex - 1 + self._offset + i
         local row = self._rows[i]
-        local rowData = self._filteredRows[dataIndex]
+        local rowData = (dataIndex <= endIndex) and self._filteredRows[dataIndex] or nil
 
         if rowData and row then
             row.rowData = rowData
@@ -2495,13 +2608,116 @@ function AuditView:renderRows()
             row:Hide()
         end
     end
+
+    self:updatePaginationControls()
 end
 
---- Controla o scroll vertical da tabela via roda do mouse ou botões de seta.
+--- Retorna os detalhes de paginação atuais (página atual, total de páginas, índices inicial e final).
+---@return number currentPage
+---@return number totalPages
+---@return number startIndex
+---@return number endIndex
+---@return number pageCount
+---@return number totalRows
+function AuditView:getPageInfo()
+    local totalRows = #self._filteredRows
+    local pageSize = self._pageSize or 40
+    local totalPages = math.max(1, math.ceil(totalRows / pageSize))
+    local currentPage = math.max(1, math.min(self._currentPage or 1, totalPages))
+    self._currentPage = currentPage
+
+    local startIndex = 0
+    local endIndex = 0
+    local pageCount = 0
+
+    if totalRows > 0 then
+        startIndex = (currentPage - 1) * pageSize + 1
+        endIndex = math.min(startIndex + pageSize - 1, totalRows)
+        pageCount = math.max(0, endIndex - startIndex + 1)
+    end
+
+    return currentPage, totalPages, startIndex, endIndex, pageCount, totalRows
+end
+
+--- Atualiza o texto e o estado dos botões de navegação por página.
+function AuditView:updatePaginationControls()
+    if not self._paginationFrame then return end
+
+    local currentPage, totalPages, startIndex, endIndex, pageCount, totalRows = self:getPageInfo()
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+
+    if self._pageText then
+        if totalRows == 0 then
+            self._pageText:SetText(isEn and "|cffffd200Page 1 of 1|r |cff888888(0)|r" or "|cffffd200Página 1 de 1|r |cff888888(0)|r")
+        else
+            if isEn then
+                self._pageText:SetText(string.format("|cffffd200Page %d of %d|r  |cff888888(%d-%d of %d)|r", currentPage, totalPages, startIndex, endIndex, totalRows))
+            else
+                self._pageText:SetText(string.format("|cffffd200Página %d de %d|r  |cff888888(%d-%d de %d)|r", currentPage, totalPages, startIndex, endIndex, totalRows))
+            end
+        end
+        local w = self._pageText:GetStringWidth() or 120
+        self._pageText:SetWidth(w + 10)
+    end
+
+    local canPrev = (currentPage > 1)
+    local canNext = (currentPage < totalPages)
+
+    if self._firstPageBtn then
+        if canPrev then self._firstPageBtn:Enable() else self._firstPageBtn:Disable() end
+    end
+    if self._prevPageBtn then
+        if canPrev then self._prevPageBtn:Enable() else self._prevPageBtn:Disable() end
+    end
+    if self._nextPageBtn then
+        if canNext then self._nextPageBtn:Enable() else self._nextPageBtn:Disable() end
+    end
+    if self._lastPageBtn then
+        if canNext then self._lastPageBtn:Enable() else self._lastPageBtn:Disable() end
+    end
+end
+
+--- Define a página atual da tabela de auditoria e atualiza a exibição.
+---@param page number
+function AuditView:setPage(page)
+    local _, totalPages = self:getPageInfo()
+    local targetPage = math.max(1, math.min(page, totalPages))
+    if targetPage ~= self._currentPage or self._offset ~= 0 then
+        self._currentPage = targetPage
+        self._offset = 0
+        if self._scrollBar then
+            self._scrollBar:SetValue(0)
+        end
+        self:applyFilters()
+    end
+end
+
+--- Avança para a próxima página.
+function AuditView:nextPage()
+    self:setPage((self._currentPage or 1) + 1)
+end
+
+--- Retorna para a página anterior.
+function AuditView:prevPage()
+    self:setPage((self._currentPage or 1) - 1)
+end
+
+--- Vai para a primeira página.
+function AuditView:firstPage()
+    self:setPage(1)
+end
+
+--- Vai para a última página.
+function AuditView:lastPage()
+    local _, totalPages = self:getPageInfo()
+    self:setPage(totalPages)
+end
+
+--- Controla o scroll vertical da tabela via roda do mouse ou botões de seta dentro da página atual.
 ---@param delta number
 function AuditView:scroll(delta)
-    local total = #self._filteredRows
-    local maxOffset = math.max(0, total - self._numVisibleRows)
+    local currentPage, totalPages, startIndex, endIndex, pageCount = self:getPageInfo()
+    local maxOffset = math.max(0, pageCount - self._numVisibleRows)
     local newOffset = self._offset - delta
 
     if newOffset < 0 then
@@ -2620,7 +2836,10 @@ function AuditView:updateLocale()
 
     -- Atualiza rodapé
     if self._footerText and self._members then
-        self._footerText:SetText(string.format("|cffaaaaaa" .. (curL["TOTAL_MEMBERS"] or "Total: %d") .. "|r", #self._members))
+        self._footerText:SetText(string.format(
+            "|cffaaaaaaTotal na guilda: %d membros (%d Mains, %d Alts)|r",
+            #self._members, self._totalMainsCount or 0, self._totalAltsCount or 0
+        ))
     end
 
     -- Re-renderiza linhas visíveis
