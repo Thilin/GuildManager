@@ -90,6 +90,16 @@ function LogView:new()
     instance._rowHeight = 23
     instance._onRefreshCallback = nil
 
+    -- Paginação (50 registros por página)
+    instance._currentPage = 1
+    instance._pageSize = 50
+    instance._paginationFrame = nil
+    instance._pageText = nil
+    instance._prevPageBtn = nil
+    instance._firstPageBtn = nil
+    instance._nextPageBtn = nil
+    instance._lastPageBtn = nil
+
     instance:createUI()
 
     return instance
@@ -255,6 +265,9 @@ function LogView:createUI()
             searchHint:Show()
         end
         self._filterText = txt or ""
+        self._currentPage = 1
+        self._offset = 0
+        if self._scrollBar then self._scrollBar:SetValue(0) end
         self:applyFilters()
     end)
     searchEB:SetScript("OnEscapePressed", function(box)
@@ -296,6 +309,9 @@ function LogView:createUI()
 
         tabBtn:SetScript("OnClick", function()
             self._activeEventFilter = tabData.id
+            self._currentPage = 1
+            self._offset = 0
+            if self._scrollBar then self._scrollBar:SetValue(0) end
             self:updateFilterButtonsVisual()
             self:applyFilters()
         end)
@@ -509,6 +525,103 @@ function LogView:createUI()
     footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 14)
     footerText:SetText("|cffaaaaaaTotal de registros: 0|r")
     self._footerText = footerText
+
+    -- Controles de Paginação (50 registros por página, centralizados no rodapé)
+    local paginationFrame = CreateFrame("Frame", "GM_LogPaginationFrame", frame)
+    paginationFrame:SetPoint("BOTTOM", frame, "BOTTOM", 15, 10)
+    paginationFrame:SetSize(360, 24)
+    paginationFrame:EnableMouseWheel(true)
+    paginationFrame:SetScript("OnMouseWheel", function(_, delta)
+        if delta > 0 then
+            self:prevPage()
+        else
+            self:nextPage()
+        end
+    end)
+    self._paginationFrame = paginationFrame
+
+    local pageText = paginationFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    pageText:SetPoint("CENTER", paginationFrame, "CENTER", 0, 0)
+    pageText:SetText("|cffffd200Página 1 de 1|r")
+    self._pageText = pageText
+
+    local prevPageBtn = CreateFrame("Button", "GM_LogPrevPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    prevPageBtn:SetSize(24, 22)
+    prevPageBtn:SetText("<")
+    prevPageBtn:SetPoint("RIGHT", pageText, "LEFT", -8, 0)
+    prevPageBtn:SetScript("OnClick", function()
+        self:prevPage()
+    end)
+    prevPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Página Anterior", 1, 0.82, 0)
+            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end
+    end)
+    prevPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._prevPageBtn = prevPageBtn
+
+    local firstPageBtn = CreateFrame("Button", "GM_LogFirstPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    firstPageBtn:SetSize(28, 22)
+    firstPageBtn:SetText("<<")
+    firstPageBtn:SetPoint("RIGHT", prevPageBtn, "LEFT", -4, 0)
+    firstPageBtn:SetScript("OnClick", function()
+        self:firstPage()
+    end)
+    firstPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Primeira Página", 1, 0.82, 0)
+            GameTooltip:Show()
+        end
+    end)
+    firstPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._firstPageBtn = firstPageBtn
+
+    local nextPageBtn = CreateFrame("Button", "GM_LogNextPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    nextPageBtn:SetSize(24, 22)
+    nextPageBtn:SetText(">")
+    nextPageBtn:SetPoint("LEFT", pageText, "RIGHT", 8, 0)
+    nextPageBtn:SetScript("OnClick", function()
+        self:nextPage()
+    end)
+    nextPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Próxima Página", 1, 0.82, 0)
+            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end
+    end)
+    nextPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._nextPageBtn = nextPageBtn
+
+    local lastPageBtn = CreateFrame("Button", "GM_LogLastPageBtn", paginationFrame, "UIPanelButtonTemplate")
+    lastPageBtn:SetSize(28, 22)
+    lastPageBtn:SetText(">>")
+    lastPageBtn:SetPoint("LEFT", nextPageBtn, "RIGHT", 4, 0)
+    lastPageBtn:SetScript("OnClick", function()
+        self:lastPage()
+    end)
+    lastPageBtn:SetScript("OnEnter", function(btn)
+        if GameTooltip then
+            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+            GameTooltip:AddLine("Última Página", 1, 0.82, 0)
+            GameTooltip:Show()
+        end
+    end)
+    lastPageBtn:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._lastPageBtn = lastPageBtn
 
     -- Botão Atualizar
     local refreshBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -998,6 +1111,12 @@ function LogView:setLogs(logs)
         return (a:getId() or 0) > (b:getId() or 0)
     end)
 
+    self._currentPage = 1
+    self._offset = 0
+    if self._scrollBar then
+        self._scrollBar:SetValue(0)
+    end
+
     self:applyFilters()
 end
 
@@ -1079,11 +1198,14 @@ function LogView:applyFilters()
         end
     end
 
-    local total = #self._filteredLogs
-    local maxOffset = math.max(0, total - self._numVisibleRows)
+    local currentPage, totalPages, startIndex, endIndex, pageCount, total = self:getPageInfo()
+    local maxOffset = math.max(0, pageCount - self._numVisibleRows)
 
     if self._offset > maxOffset then
         self._offset = maxOffset
+    end
+    if self._offset < 0 then
+        self._offset = 0
     end
 
     if self._scrollBar then
@@ -1097,7 +1219,7 @@ function LogView:applyFilters()
     end
 
     if self._footerText then
-        self._footerText:SetText(string.format("|cffaaaaaaExibindo %d de %d registro(s)|r", total, #self._logs))
+        self._footerText:SetText(string.format("|cffaaaaaaTotal de registros: %d|r", #self._logs))
     end
 
     self:renderRows()
@@ -1431,17 +1553,119 @@ function LogView:formatColoredMessage(log)
     return rawMsg
 end
 
---- Renderiza as linhas visíveis da tabela de acordo com o offset atual.
-function LogView:renderRows()
-    local total = #self._filteredLogs
+--- Retorna os detalhes de paginação atuais (página atual, total de páginas, índices inicial e final).
+---@return number currentPage
+---@return number totalPages
+---@return number startIndex
+---@return number endIndex
+---@return number pageCount
+---@return number totalLogs
+function LogView:getPageInfo()
+    local totalLogs = #self._filteredLogs
+    local pageSize = self._pageSize or 50
+    local totalPages = math.max(1, math.ceil(totalLogs / pageSize))
+    local currentPage = math.max(1, math.min(self._currentPage or 1, totalPages))
+    self._currentPage = currentPage
 
-    if total == 0 then
+    local startIndex = 0
+    local endIndex = 0
+    local pageCount = 0
+
+    if totalLogs > 0 then
+        startIndex = (currentPage - 1) * pageSize + 1
+        endIndex = math.min(startIndex + pageSize - 1, totalLogs)
+        pageCount = math.max(0, endIndex - startIndex + 1)
+    end
+
+    return currentPage, totalPages, startIndex, endIndex, pageCount, totalLogs
+end
+
+--- Atualiza o texto e o estado dos botões de navegação por página.
+function LogView:updatePaginationControls()
+    if not self._paginationFrame then return end
+
+    local currentPage, totalPages, startIndex, endIndex, pageCount, totalLogs = self:getPageInfo()
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+
+    if self._pageText then
+        if totalLogs == 0 then
+            self._pageText:SetText(isEn and "|cffffd200Page 1 of 1|r |cff888888(0)|r" or "|cffffd200Página 1 de 1|r |cff888888(0)|r")
+        else
+            if isEn then
+                self._pageText:SetText(string.format("|cffffd200Page %d of %d|r  |cff888888(%d-%d of %d)|r", currentPage, totalPages, startIndex, endIndex, totalLogs))
+            else
+                self._pageText:SetText(string.format("|cffffd200Página %d de %d|r  |cff888888(%d-%d de %d)|r", currentPage, totalPages, startIndex, endIndex, totalLogs))
+            end
+        end
+        local w = self._pageText:GetStringWidth() or 120
+        self._pageText:SetWidth(w + 10)
+    end
+
+    local canPrev = (currentPage > 1)
+    local canNext = (currentPage < totalPages)
+
+    if self._firstPageBtn then
+        if canPrev then self._firstPageBtn:Enable() else self._firstPageBtn:Disable() end
+    end
+    if self._prevPageBtn then
+        if canPrev then self._prevPageBtn:Enable() else self._prevPageBtn:Disable() end
+    end
+    if self._nextPageBtn then
+        if canNext then self._nextPageBtn:Enable() else self._nextPageBtn:Disable() end
+    end
+    if self._lastPageBtn then
+        if canNext then self._lastPageBtn:Enable() else self._lastPageBtn:Disable() end
+    end
+end
+
+--- Define a página atual da tabela de logs e atualiza a exibição.
+---@param page number
+function LogView:setPage(page)
+    local _, totalPages = self:getPageInfo()
+    local targetPage = math.max(1, math.min(page, totalPages))
+    if targetPage ~= self._currentPage or self._offset ~= 0 then
+        self._currentPage = targetPage
+        self._offset = 0
+        if self._scrollBar then
+            self._scrollBar:SetValue(0)
+        end
+        self:applyFilters()
+    end
+end
+
+--- Avança para a próxima página.
+function LogView:nextPage()
+    self:setPage((self._currentPage or 1) + 1)
+end
+
+--- Retorna para a página anterior.
+function LogView:prevPage()
+    self:setPage((self._currentPage or 1) - 1)
+end
+
+--- Vai para a primeira página.
+function LogView:firstPage()
+    self:setPage(1)
+end
+
+--- Vai para a última página.
+function LogView:lastPage()
+    local _, totalPages = self:getPageInfo()
+    self:setPage(totalPages)
+end
+
+--- Renderiza as linhas visíveis da tabela de acordo com o offset atual na página ativa.
+function LogView:renderRows()
+    local currentPage, totalPages, startIndex, endIndex, pageCount, totalLogs = self:getPageInfo()
+
+    if totalLogs == 0 or pageCount == 0 then
         if self._emptyNotice then
             self._emptyNotice:Show()
         end
         for _, row in ipairs(self._rows) do
             row:Hide()
         end
+        self:updatePaginationControls()
         return
     else
         if self._emptyNotice then
@@ -1450,9 +1674,9 @@ function LogView:renderRows()
     end
 
     for i = 1, self._numVisibleRows do
-        local dataIndex = self._offset + i
+        local dataIndex = startIndex - 1 + self._offset + i
         local row = self._rows[i]
-        local log = self._filteredLogs[dataIndex]
+        local log = (dataIndex <= endIndex) and self._filteredLogs[dataIndex] or nil
 
         if log and row then
             row.logData = log
@@ -1470,13 +1694,15 @@ function LogView:renderRows()
             row:Hide()
         end
     end
+
+    self:updatePaginationControls()
 end
 
---- Controla o scroll da tabela via roda do mouse ou botões de seta.
+--- Controla o scroll vertical da tabela via roda do mouse ou botões de seta dentro da página atual.
 ---@param delta number
 function LogView:scroll(delta)
-    local total = #self._filteredLogs
-    local maxOffset = math.max(0, total - self._numVisibleRows)
+    local currentPage, totalPages, startIndex, endIndex, pageCount = self:getPageInfo()
+    local maxOffset = math.max(0, pageCount - self._numVisibleRows)
     local newOffset = self._offset - delta
 
     if newOffset < 0 then
@@ -1540,6 +1766,7 @@ function LogView:updateLocale()
 
     -- Re-aplica filtros para atualizar mensagens formatadas e rodapé
     self:applyFilters()
+    self:updatePaginationControls()
 end
 
 --- Exibe a janela de logs.
