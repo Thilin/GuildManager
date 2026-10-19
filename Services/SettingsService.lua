@@ -29,6 +29,12 @@ function SettingsService:new(db, logRepository, memberService, guildRosterServic
         instance._db.settings._syncChatFlagInit = true
     end
 
+    -- Garante que a fixação de pinos na borda do minimapa inicie como false por padrão
+    if not instance._db.settings._clampPinsInit then
+        instance._db.settings.clampMinimapPins = false
+        instance._db.settings._clampPinsInit = true
+    end
+
     instance._logRepository = logRepository
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService

@@ -15,7 +15,7 @@ local DEFAULTS = {
     showMinimapButton = true,    -- Exibir ícone do GuildManager no minimapa
     minimapPos = 215,            -- Ângulo de posição no minimapa
     showMinimapPins = true,      -- Exibir marcadores dos colegas no minimapa
-    clampMinimapPins = true,     -- Fixar membros distantes na borda do minimapa
+    clampMinimapPins = false,    -- Fixar membros distantes na borda do minimapa (desativado por padrão: somem fora de alcance)
     autoScanRoster = true,       -- Varredura automática do roster ao conectar e em eventos
     showOfflineMembers = true,   -- Exibir membros desconectados na auditoria
     notifyNewRecruit = true,     -- Notificar no chat local ao identificar novo membro
@@ -104,7 +104,7 @@ function GMSettings:isJoinDatePromotionsEnabled() return self._enableJoinDatePro
 function GMSettings:getRankPromotionDays() return self._rankPromotionDays or {} end
 
 function GMSettings:isShowMinimapPins() return self._showMinimapPins ~= false end
-function GMSettings:isClampMinimapPins() return self._clampMinimapPins ~= false end
+function GMSettings:isClampMinimapPins() return self._clampMinimapPins == true end
 
 function GMSettings:isShowWorldMapButton() return self._showWorldMapButton ~= false end
 function GMSettings:isAutoScanWorldMap() return self._autoScanWorldMap ~= false end

@@ -703,7 +703,7 @@ function MinimapPinManager:new(parentButton)
     instance._lastThrottle = 0
     instance._forceUpdate = true
     instance._showPins = true
-    instance._clampToEdge = true
+    instance._clampToEdge = false
     return instance
 end
 
@@ -713,19 +713,22 @@ function MinimapPinManager:start(locService)
     self._locService = locService or self._locService or (_G.GM and _G.GM.locationService)
 
     -- Carrega as opções de configurações
+    self._showPins = true
+    self._clampToEdge = false
+
     if _G.GM and _G.GM.settingsService then
         if _G.GM.settingsService:get("showMinimapPins") == false then
             self._showPins = false
         end
-        if _G.GM.settingsService:get("clampMinimapPins") == false then
-            self._clampToEdge = false
+        if _G.GM.settingsService:get("clampMinimapPins") == true then
+            self._clampToEdge = true
         end
     elseif _G.GM_DB and _G.GM_DB.settings then
         if _G.GM_DB.settings.showMinimapPins == false then
             self._showPins = false
         end
-        if _G.GM_DB.settings.clampMinimapPins == false then
-            self._clampToEdge = false
+        if _G.GM_DB.settings.clampMinimapPins == true then
+            self._clampToEdge = true
         end
     end
 
@@ -1057,12 +1060,19 @@ function MinimapPinManager:updatePins()
                     local diffY = effY / mapRadius
                     local distFromCenter = math.sqrt(diffX * diffX + diffY * diffY)
 
-                    local maxRadius = 0.88
+                    local maxRadius = 0.90
                     local onEdge = false
                     local screenX, screenY
                     local shape = GetMinimapShape and GetMinimapShape() or "ROUND"
 
-                    if distFromCenter <= maxRadius then
+                    local inRange = false
+                    if shape == "SQUARE" then
+                        inRange = (math.max(math.abs(diffX), math.abs(diffY)) <= maxRadius)
+                    else
+                        inRange = (distFromCenter <= maxRadius)
+                    end
+
+                    if inRange then
                         screenX = diffX * minimapWidth
                         screenY = diffY * minimapHeight
                     else
