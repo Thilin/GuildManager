@@ -1205,7 +1205,9 @@ function SettingsView:createSettingsColumns()
     tutorialBtn:SetPoint("TOPLEFT", resetAllBtn, "BOTTOMLEFT", 0, -8)
     tutorialBtn:SetText(L["INTRO_REOPEN_BUTTON"] or "Rever Tutorial / Introdução")
     tutorialBtn:SetScript("OnClick", function()
-        if _G.GM and _G.GM.introView then
+        if _G.GM and _G.GM.introController then
+            _G.GM.introController:showTutorial(false)
+        elseif _G.GM and _G.GM.introView then
             _G.GM.introView:show()
         end
     end)

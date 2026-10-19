@@ -376,3 +376,39 @@ function GuildRosterService:isMemberInRoster(name, guid)
 
     return false
 end
+
+--- Retorna o nome do líder da guilda (Guild Master, rankIndex 0).
+---@return string|nil
+function GuildRosterService:getGuildLeaderName()
+    if IsInGuild and not IsInGuild() then
+        return nil
+    end
+
+    if IsGuildLeader and IsGuildLeader() then
+        local myName = UnitName and UnitName("player")
+        if myName and myName ~= "" then
+            local clean = (myName:match("^[^-]+") or myName):match("^%s*(.-)%s*$") or myName
+            return clean
+        end
+    end
+
+    local numMembers = GetNumGuildMembers and GetNumGuildMembers() or 0
+    for i = 1, numMembers do
+        local name, rankName, rankIndex = GetGuildRosterInfo(i)
+        if name and rankIndex == 0 then
+            local clean = (name:match("^[^-]+") or name):match("^%s*(.-)%s*$") or name
+            return clean
+        end
+    end
+
+    if self._memberService and self._memberService.getAllMembers then
+        local members = self._memberService:getAllMembers()
+        for _, m in ipairs(members) do
+            if m:getRankIndex() == 0 and m:getName() and m:getName() ~= "" then
+                return m:getName()
+            end
+        end
+    end
+
+    return nil
+end

@@ -325,6 +325,11 @@ function MemberController:initHooks()
                 SlashCmdList["GUILDMANAGER_SYNC"]("force")
                 return
             end
+        elseif arg == "tutorial" or arg == "intro" or arg == "apresentacao" or arg == "apresentação" or arg == "guiado" then
+            if _G.GM and _G.GM.introController then
+                _G.GM.introController:showTutorial(false)
+                return
+            end
         end
 
         if IsInGuild and IsInGuild() then

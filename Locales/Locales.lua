@@ -722,6 +722,26 @@ Locales.strings["enUS"] = {
     ["INTRO_STEP8_BDAY_SAVED"] = "Birthday saved: %s",
     ["INTRO_STEP8_BDAY_OPTIONAL"] = "(Optional - you can also set it later in Audit or Member profile)",
     ["INTRO_STEP8_OPEN_CONFIG"] = "Open Settings (/gmconfig)",
+    ["INTRO_REOPENED_MSG"] = "Guild Presentation reopened! You can view it anytime with /gmtutorial.",
+
+    -- Sync Conflict Dialog (Guild Leader Protection)
+    ["SYNC_CONFLICT_TITLE"] = "Sync Conflict - Leader Decision",
+    ["SYNC_CONFLICT_SUBTITLE"] = "A member sent data that conflicts with existing records in your database.",
+    ["SYNC_CONFLICT_MEMBER"] = "Member:",
+    ["SYNC_CONFLICT_SENDER"] = "Received from:",
+    ["SYNC_CONFLICT_FIELD"] = "Field in Conflict:",
+    ["SYNC_CONFLICT_BEFORE"] = "Existing in Leader DB (Before):",
+    ["SYNC_CONFLICT_AFTER"] = "Received from Sync (After):",
+    ["SYNC_CONFLICT_QUESTION"] = "Do you want to replace the existing information in your database?",
+    ["SYNC_CONFLICT_BTN_REPLACE"] = "Replace",
+    ["SYNC_CONFLICT_BTN_CONCAT"] = "Concatenate",
+    ["SYNC_CONFLICT_BTN_KEEP"] = "Keep Current",
+    ["SYNC_CONFLICT_QUEUE_COUNT"] = "Conflict %d of %d",
+    ["SYNC_CONFLICT_FIELD_BDAY"] = "Birthday Date",
+    ["SYNC_CONFLICT_FIELD_REC"] = "Recruiter",
+    ["SYNC_CONFLICT_CHAT_REPLACED"] = "[GuildManager] %s for %s was replaced in leader database.",
+    ["SYNC_CONFLICT_CHAT_CONCAT"] = "[GuildManager] %s for %s was concatenated in leader database.",
+    ["SYNC_CONFLICT_CHAT_KEPT"] = "[GuildManager] Kept current %s for %s in leader database.",
 }
 
 -- =========================================================================
@@ -1361,4 +1381,24 @@ Locales.strings["ptBR"] = {
     ["INTRO_STEP8_BDAY_SAVED"] = "Aniversário configurado: %s",
     ["INTRO_STEP8_BDAY_OPTIONAL"] = "(Opcional - você também pode preencher depois na Auditoria ou Perfil)",
     ["INTRO_STEP8_OPEN_CONFIG"] = "Abrir Configurações (/gmconfig)",
+    ["INTRO_REOPENED_MSG"] = "Apresentação da guilda reaberta! Você pode rever a qualquer momento com /gmtutorial.",
+
+    -- Sync Conflict Dialog (Proteção do Banco do Líder)
+    ["SYNC_CONFLICT_TITLE"] = "Conflito de Sincronização - Decisão do Líder",
+    ["SYNC_CONFLICT_SUBTITLE"] = "Um membro enviou dados que conflitam com as informações existentes no seu banco de dados.",
+    ["SYNC_CONFLICT_MEMBER"] = "Membro:",
+    ["SYNC_CONFLICT_SENDER"] = "Recebido de:",
+    ["SYNC_CONFLICT_FIELD"] = "Dado em Conflito:",
+    ["SYNC_CONFLICT_BEFORE"] = "Atual no seu Banco (Antes):",
+    ["SYNC_CONFLICT_AFTER"] = "Recebido do Colega (Depois):",
+    ["SYNC_CONFLICT_QUESTION"] = "Deseja substituir as informações existentes no seu banco de dados?",
+    ["SYNC_CONFLICT_BTN_REPLACE"] = "Substituir",
+    ["SYNC_CONFLICT_BTN_CONCAT"] = "Concatenar",
+    ["SYNC_CONFLICT_BTN_KEEP"] = "Manter Atual",
+    ["SYNC_CONFLICT_QUEUE_COUNT"] = "Conflito %d de %d",
+    ["SYNC_CONFLICT_FIELD_BDAY"] = "Data de Aniversário",
+    ["SYNC_CONFLICT_FIELD_REC"] = "Recrutador",
+    ["SYNC_CONFLICT_CHAT_REPLACED"] = "[GuildManager] %s de %s foi substituído no banco do líder.",
+    ["SYNC_CONFLICT_CHAT_CONCAT"] = "[GuildManager] %s de %s foi concatenado no banco do líder.",
+    ["SYNC_CONFLICT_CHAT_KEPT"] = "[GuildManager] %s de %s mantido inalterado no banco do líder.",
 }

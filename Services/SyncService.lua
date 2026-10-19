@@ -70,7 +70,7 @@ end
 local SYNC_PREFIX = "GM_SYNC"
 local COMM_CHANNEL_NAME = "AJShare"
 local RETRANSMIT_INTERVAL = 2.5       -- Intervalo entre retransmissões de pacotes pendentes (2.5s)
-local SEND_QUEUE_INTERVAL = 0.12      -- Intervalo compassado de envio de pacotes (evita throttle do chat)
+local SEND_QUEUE_INTERVAL = 0.25      -- Intervalo compassado de envio de pacotes (otimizado: 4 pkt/s, zero throttle e sem stutter)
 local PEER_LIVENESS_WINDOW = 35.0     -- Tempo em segundos sem sinal para considerar peer offline (35s)
 local MAX_RETRANSMIT_ATTEMPTS = 60    -- Limite máximo de tentativas por atualização (evita loop infinito)
 local MAX_QUEUE_SIZE = 250            -- Capacidade máxima da fila compassada para proteção contra vazamento de memória
@@ -85,12 +85,16 @@ end
 ---@param memberService MemberService
 ---@param locationService LocationService|nil
 ---@param settingsService SettingsService|nil
+---@param guildRosterService GuildRosterService|nil
 ---@return SyncService
-function SyncService:new(memberService, locationService, settingsService)
+function SyncService:new(memberService, locationService, settingsService, guildRosterService)
     local instance = setmetatable({}, self)
     instance._memberService = memberService
     instance._locationService = locationService
     instance._settingsService = settingsService
+    instance._guildRosterService = guildRosterService
+    instance._syncConflictView = nil
+    instance._refreshDebounceTimer = nil
 
     -- Tabela de pares conhecidos com o Addon ativo: [peerNameLower] = { name = peerName, lastSeen = GetTime(), isActive = true }
     instance._peers = {}
@@ -123,6 +127,108 @@ function SyncService:new(memberService, locationService, settingsService)
     instance._syncChatFrame = nil
 
     return instance
+end
+
+--- Vincula a view de conflito de sincronização para decisões do Líder da Guilda.
+---@param view SyncConflictView
+function SyncService:setSyncConflictView(view)
+    self._syncConflictView = view
+    if view and view.setOnActionCallback then
+        view:setOnActionCallback(function(conflict, action)
+            self:onLeaderResolveConflict(conflict, action)
+        end)
+    end
+end
+
+--- Trata a decisão do Líder da Guilda sobre um conflito de sincronização.
+---@param conflict table
+---@param action string @"REPLACE", "CONCAT", "KEEP"
+function SyncService:onLeaderResolveConflict(conflict, action)
+    if not conflict or not conflict.member then return end
+    local member = conflict.member
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local fName = conflict.fieldName or conflict.fieldKey or "Dado"
+    local mName = conflict.memberName or member:getName()
+
+    if action == "REPLACE" then
+        if conflict.fieldKey == "birthday" then
+            member:setBirthday(conflict.newValue or "")
+        elseif conflict.fieldKey == "recruiter" then
+            member:setRecruiter(conflict.newValue or "")
+        end
+        if conflict.timestamp and member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(conflict.timestamp)
+        end
+        if self._memberService then
+            self._memberService:saveMember(member, true)
+        end
+        self:refreshActiveViews(mName)
+        print(string.format(curL["SYNC_CONFLICT_CHAT_REPLACED"] or "|cff00ff00[GuildManager]|r %s de %s foi substituído no banco do líder.", fName, mName))
+    elseif action == "CONCAT" then
+        local combined = tostring(conflict.oldValue or "")
+        local newVal = tostring(conflict.newValue or "")
+        if combined ~= "" and newVal ~= "" then
+            combined = combined .. " | " .. newVal
+        elseif newVal ~= "" then
+            combined = newVal
+        end
+        if conflict.fieldKey == "birthday" then
+            member:setBirthday(combined)
+        elseif conflict.fieldKey == "recruiter" then
+            member:setRecruiter(combined)
+        end
+        if conflict.timestamp and member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(conflict.timestamp)
+        end
+        if self._memberService then
+            self._memberService:saveMember(member, true)
+        end
+        self:refreshActiveViews(mName)
+        print(string.format(curL["SYNC_CONFLICT_CHAT_CONCAT"] or "|cff00ff00[GuildManager]|r %s de %s foi concatenado no banco do líder.", fName, mName))
+    elseif action == "KEEP" then
+        print(string.format(curL["SYNC_CONFLICT_CHAT_KEPT"] or "|cffff9900[GuildManager]|r %s de %s mantido inalterado no banco do líder.", fName, mName))
+    end
+end
+
+--- Verifica se o remetente é comprovadamente o Líder da Guilda (Guild Master, rankIndex 0).
+---@param sender string|nil
+---@return boolean
+function SyncService:isSenderGuildLeader(sender)
+    if not sender or sender == "" then return false end
+    local sClean = cleanName(sender):lower()
+
+    if self:isSelf(sender) then
+        return (IsGuildLeader and IsGuildLeader() == true) or false
+    end
+
+    if self._guildRosterService and self._guildRosterService.getGuildLeaderName then
+        local leaderName = self._guildRosterService:getGuildLeaderName()
+        if leaderName and cleanName(leaderName):lower() == sClean then
+            return true
+        end
+    end
+
+    local numMembers = GetNumGuildMembers and GetNumGuildMembers() or 0
+    for i = 1, numMembers do
+        local name, rankName, rankIndex = GetGuildRosterInfo(i)
+        if name and rankIndex == 0 then
+            local clean = cleanName(name):lower()
+            if clean == sClean then
+                return true
+            end
+        end
+    end
+
+    if self._memberService and self._memberService.getAllMembers then
+        local members = self._memberService:getAllMembers()
+        for _, m in ipairs(members) do
+            if m:getRankIndex() == 0 and cleanName(m:getName()):lower() == sClean then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 --- Verifica se a exibição de logs de sincronização no chat está ativada nas configurações.
@@ -478,12 +584,29 @@ function SyncService:broadcastMemberCustomData(member, force)
         return false
     end
 
-    local dateJoin = member:getDateJoin() or ""
+    local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+
+    local dateJoin = ""
+    local altsCsv = ""
+    local isMain = false
+
+    -- Regra 1: Data de entrada e Lista de Alts só sincronizam a partir do Líder da guilda!
+    if isLeader then
+        dateJoin = member:getDateJoin() or ""
+        local alts = member:getAlts() or {}
+        altsCsv = table.concat(alts, ",")
+        isMain = member:isMain()
+    end
+
+    -- Regra 2: Aniversário e Recrutador continuam sendo syncados entre todos os membros
     local birthday = member:getBirthday() or ""
     local recruiter = member:getRecruiter() or ""
-    local alts = member:getAlts() or {}
-    local altsCsv = table.concat(alts, ",")
-    local isMain = member:isMain()
+
+    -- Regra 3: Nota interna NUNCA recebe sync (nunca é transmitida)
+    -- Se não é o líder e não possui aniversário nem recrutador, descarta o envio para economizar 100% de CPU/rede
+    if not isLeader and birthday == "" and recruiter == "" then
+        return false
+    end
 
     local signature = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMain)
     local memberLower = memberName:lower()
@@ -776,9 +899,76 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             member = Member:new({ name = mClean, isInGuild = true })
         end
 
-        -- Aplica os 4 dados customizados requisitados:
-        -- 1. Data de Entrada
-        if dateJoin and dateJoin ~= "" then
+        local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+        local senderIsLeader = self:isSenderGuildLeader(senderClean)
+
+        -- Regra 1: Data de entrada e Lista de Alts só sincronizam a partir do Líder da guilda!
+        -- Se o remetente NÃO for o Líder da guilda, ignora dateJoin e lista de alts.
+        if not senderIsLeader then
+            dateJoin = ""
+            altsCsv = ""
+            isMainStr = "1"
+        end
+
+        local appliedTimestamp = (timestamp > 0) and timestamp or getCurrentTimestamp()
+
+        -- Regra 4: Proteção do Banco de Dados do Líder da Guilda
+        -- Em nenhuma hipótese as informações Syncada devem substituir diretamente as informações
+        -- registradas no banco de dados do líder da guilda. Se conflitarem, exibe diálogo para decisão.
+        -- Se não for possível perguntar (ex: em combate), concatena a informação.
+        if isLocalLeader and member then
+            -- Verificação de Conflito em Aniversário
+            local currentBday = member:getBirthday() or ""
+            if currentBday ~= "" and birthday ~= "" and birthday ~= currentBday then
+                local inCombat = (InCombatLockdown and InCombatLockdown()) or false
+                if not inCombat and self._syncConflictView then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or L
+                    self._syncConflictView:enqueueConflict({
+                        memberName = mClean,
+                        sender = senderClean,
+                        fieldKey = "birthday",
+                        fieldName = curL["SYNC_CONFLICT_FIELD_BDAY"] or "Data de Aniversário",
+                        oldValue = currentBday,
+                        newValue = birthday,
+                        timestamp = appliedTimestamp,
+                        member = member,
+                    })
+                    -- Mantém o valor atual inalterado até a decisão do Líder
+                    birthday = currentBday
+                else
+                    -- Não foi possível perguntar: apenas concatena a informação
+                    birthday = currentBday .. " | " .. birthday
+                end
+            end
+
+            -- Verificação de Conflito em Recrutador
+            local currentRec = member:getRecruiter() or ""
+            if currentRec ~= "" and recruiter ~= "" and recruiter ~= currentRec then
+                local inCombat = (InCombatLockdown and InCombatLockdown()) or false
+                if not inCombat and self._syncConflictView then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or L
+                    self._syncConflictView:enqueueConflict({
+                        memberName = mClean,
+                        sender = senderClean,
+                        fieldKey = "recruiter",
+                        fieldName = curL["SYNC_CONFLICT_FIELD_REC"] or "Recrutador",
+                        oldValue = currentRec,
+                        newValue = recruiter,
+                        timestamp = appliedTimestamp,
+                        member = member,
+                    })
+                    -- Mantém o valor atual inalterado até a decisão do Líder
+                    recruiter = currentRec
+                else
+                    -- Não foi possível perguntar: apenas concatena a informação
+                    recruiter = currentRec .. " | " .. recruiter
+                end
+            end
+        end
+
+        -- Aplica os dados permitidos:
+        -- 1. Data de Entrada (somente se remetente for o Líder)
+        if senderIsLeader and dateJoin and dateJoin ~= "" then
             member:setDateJoin(dateJoin)
         end
 
@@ -792,21 +982,19 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             member:setRecruiter(recruiter)
         end
 
-        -- 4. Alts Vinculados e Main/Alt
+        -- 4. Alts Vinculados e Main/Alt (somente se remetente for o Líder)
         local altsList = {}
-        if altsCsv and altsCsv ~= "" then
+        if senderIsLeader and altsCsv and altsCsv ~= "" then
             for altName in string.gmatch(altsCsv, "([^,]+)") do
                 local cAlt = cleanName(altName)
                 if cAlt ~= "" and cAlt:lower() ~= mClean:lower() then
                     table.insert(altsList, cAlt)
                 end
             end
+            member:setAlts(altsList)
+            member:setMain(isMainStr == "1")
         end
 
-        member:setAlts(altsList)
-        member:setMain(isMainStr == "1")
-
-        local appliedTimestamp = (timestamp > 0) and timestamp or getCurrentTimestamp()
         if member.setCustomDataTimestamp then
             member:setCustomDataTimestamp(appliedTimestamp)
         end
@@ -820,7 +1008,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             self._memberService:saveMember(member, true)
 
             -- Mantém a reciprocidade da família de alts se houver lista (skipSync = true evita flood)
-            if #altsList > 0 and self._memberService.syncAltFamily then
+            if senderIsLeader and #altsList > 0 and self._memberService.syncAltFamily then
                 local familyNames = { mClean }
                 for _, aName in ipairs(altsList) do
                     table.insert(familyNames, aName)
@@ -1084,9 +1272,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     end
 end
 
---- Atualiza as janelas abertas para refletir os novos dados em tempo real.
+--- Executa a atualização das janelas abertas de forma otimizada.
 ---@param memberName string
-function SyncService:refreshActiveViews(memberName)
+function SyncService:executeRefreshViews(memberName)
     -- Atualiza tela de auditoria se aberta
     if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit then
         local aView = _G.GM.auditView
@@ -1119,6 +1307,24 @@ function SyncService:refreshActiveViews(memberName)
         if pView and pView.isShown and pView:isShown() then
             _G.GM.professionController:refreshView()
         end
+    end
+end
+
+--- Atualiza as janelas abertas para refletir os novos dados com debounce suave (350ms),
+--- eliminando picos de CPU e congelamentos quando múltiplos pacotes chegam em lote.
+---@param memberName string
+function SyncService:refreshActiveViews(memberName)
+    if self._refreshDebounceTimer then
+        return
+    end
+
+    if C_Timer and C_Timer.After then
+        self._refreshDebounceTimer = C_Timer.After(0.35, function()
+            self._refreshDebounceTimer = nil
+            self:executeRefreshViews(memberName)
+        end)
+    else
+        self:executeRefreshViews(memberName)
     end
 end
 
@@ -1501,7 +1707,13 @@ function SyncService:initHooks()
     -- Loop em segundo plano para envio compassado da fila e retransmissão periódica
     local sendQueueTicker = 0
     local retransmitTicker = 0
+    local cleanupTicker = 0
     frame:SetScript("OnUpdate", function(_, elapsed)
+        -- Regra de Performance: Pausa total de processamento em combate para zero stuttering e FPS máximo!
+        if InCombatLockdown and InCombatLockdown() then
+            return
+        end
+
         sendQueueTicker = sendQueueTicker + elapsed
         if sendQueueTicker >= SEND_QUEUE_INTERVAL then
             sendQueueTicker = 0
@@ -1512,6 +1724,18 @@ function SyncService:initHooks()
         if retransmitTicker >= RETRANSMIT_INTERVAL then
             retransmitTicker = 0
             self:processRetransmission()
+        end
+
+        cleanupTicker = cleanupTicker + elapsed
+        if cleanupTicker >= 60.0 then
+            cleanupTicker = 0
+            -- Limpeza leve de memória para economizar RAM em sessões longas
+            local now = GetTime and GetTime() or 0
+            for id, t in pairs(self._processedUpdateIds) do
+                if (now - t) > 120.0 then
+                    self._processedUpdateIds[id] = nil
+                end
+            end
         end
     end)
 

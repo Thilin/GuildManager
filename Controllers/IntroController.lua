@@ -212,14 +212,36 @@ function IntroController:checkGuildAndIntroStatus()
     end
 end
 
+--- Exibe a apresentação/tutorial guiado a qualquer momento, mesmo que já concluído.
+---@param isReset boolean|nil @Se verdadeiro, reinicia também o status de conclusão no banco
+function IntroController:showTutorial(isReset)
+    if isReset and _G.GM_DB then
+        _G.GM_DB.introCompleted = false
+        _G.GM_DB.tutorialCompleted = false
+        _G.GM_DB.hasSeenIntro = false
+    end
+
+    if self._introView then
+        self._introView:show()
+        if self._introView.goToStep then
+            self._introView:goToStep(1)
+        end
+    end
+
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local msg = curL["INTRO_REOPENED_MSG"] or "Apresentação da guilda reaberta! Você pode rever a qualquer momento com /gmtutorial."
+    print("|cff00ff00[GuildManager]|r " .. msg)
+end
+
 --- Registra comandos de barra (slash commands) e ouvintes de login e eventos de guilda.
 function IntroController:initHooks()
-    SLASH_GUILDMANAGER_INTRO1 = "/gmintro"
-    SLASH_GUILDMANAGER_INTRO2 = "/gmtutorial"
-    SlashCmdList["GUILDMANAGER_INTRO"] = function()
-        if self._introView then
-            self._introView:show()
-        end
+    SLASH_GUILDMANAGER_INTRO1 = "/gmtutorial"
+    SLASH_GUILDMANAGER_INTRO2 = "/gmintro"
+    SLASH_GUILDMANAGER_INTRO3 = "/gmtutorialreset"
+    SlashCmdList["GUILDMANAGER_INTRO"] = function(msg)
+        local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
+        local isReset = (arg == "reset" or arg == "reiniciar" or arg == "limpar")
+        self:showTutorial(isReset)
     end
 
     if not self._eventFrame then
@@ -269,9 +291,7 @@ end
 
 --- Exibe a introdução manualmente.
 function IntroController:show()
-    if self._introView then
-        self._introView:show()
-    end
+    self:showTutorial(false)
 end
 
 --- Oculta a introdução.

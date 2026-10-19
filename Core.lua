@@ -60,7 +60,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local settingsController = SettingsController:new(settingsService, settingsView, memberService, guildRosterService, logService, minimapButton)
 
         local locationService = LocationService:new(memberService)
-        local syncService = SyncService:new(memberService, locationService, settingsService)
+        local syncConflictView = SyncConflictView:new()
+        local syncService = SyncService:new(memberService, locationService, settingsService, guildRosterService)
+        syncService:setSyncConflictView(syncConflictView)
         memberService:setSyncService(syncService)
 
         local worldMapView = WorldMapView:new()
@@ -115,6 +117,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.professionController = professionController
         GM.introView = introView
         GM.introController = introController
+        GM.syncConflictView = syncConflictView
 
         locationService:initHooks()
         syncService:initHooks()

@@ -44,6 +44,7 @@ Views/MinimapButton.lua
 Views/WorldMapView.lua
 Views/ChatMentionView.lua
 Views/IntroView.lua
+Views/SyncConflictView.lua
 
 Controllers/MemberController.lua
 Controllers/LogController.lua
