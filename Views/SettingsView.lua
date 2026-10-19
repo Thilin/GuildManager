@@ -836,9 +836,17 @@ function SettingsView:createSettingsColumns()
     end)
     self._widgets.resetPosBtn = resetPosBtn
 
+    local cbMinimapPins = createCheckbox(lChild, L["SETTINGS_MINIMAP_PINS"], L["SETTINGS_MINIMAP_PINS_TIP_TITLE"], L["SETTINGS_MINIMAP_PINS_TIP_DESC"])
+    cbMinimapPins:SetPoint("TOPLEFT", posSlider, "BOTTOMLEFT", -4, -10)
+    self._widgets.showMinimapPins = cbMinimapPins
+
+    local cbClampPins = createCheckbox(lChild, L["SETTINGS_MINIMAP_PINS_EDGE"], L["SETTINGS_MINIMAP_PINS_EDGE_TIP_TITLE"], L["SETTINGS_MINIMAP_PINS_EDGE_TIP_DESC"])
+    cbClampPins:SetPoint("TOPLEFT", cbMinimapPins, "BOTTOMLEFT", 0, -2)
+    self._widgets.clampMinimapPins = cbClampPins
+
     -- --- SEÇÃO 4: MAPA MUNDIAL & RASTREAMENTO ---
     local s4Header = lChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    s4Header:SetPoint("TOPLEFT", sliderLabel, "BOTTOMLEFT", -4, -34)
+    s4Header:SetPoint("TOPLEFT", cbClampPins, "BOTTOMLEFT", 0, -14)
     s4Header:SetText(L["SETTINGS_S4_HEADER"])
     self._widgets.s4Header = s4Header
 
@@ -1330,6 +1338,12 @@ function SettingsView:updateLocale()
         self._widgets.sliderLabel:SetText(string.format(curL["SETTINGS_MINIMAP_POS_LABEL"] or "Minimap: %d°", val))
     end
     if self._widgets.resetPosBtn then self._widgets.resetPosBtn:SetText(curL["SETTINGS_MINIMAP_DEFAULT_BTN"]) end
+    if self._widgets.showMinimapPins then
+        self._widgets.showMinimapPins:updateTexts(curL["SETTINGS_MINIMAP_PINS"], curL["SETTINGS_MINIMAP_PINS_TIP_TITLE"], curL["SETTINGS_MINIMAP_PINS_TIP_DESC"])
+    end
+    if self._widgets.clampMinimapPins then
+        self._widgets.clampMinimapPins:updateTexts(curL["SETTINGS_MINIMAP_PINS_EDGE"], curL["SETTINGS_MINIMAP_PINS_EDGE_TIP_TITLE"], curL["SETTINGS_MINIMAP_PINS_EDGE_TIP_DESC"])
+    end
 
     -- Seção 4
     if self._widgets.s4Header then self._widgets.s4Header:SetText(curL["SETTINGS_S4_HEADER"]) end
@@ -1487,6 +1501,12 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.minimapSlider:SetValue(mPos)
     local curL = (_G.GM and _G.GM.L) or _G.L or L
     self._widgets.sliderLabel:SetText(string.format(curL["SETTINGS_MINIMAP_POS_LABEL"] or "Minimap: %d°", mPos))
+    if self._widgets.showMinimapPins then
+        self._widgets.showMinimapPins:SetChecked(settings:isShowMinimapPins())
+    end
+    if self._widgets.clampMinimapPins then
+        self._widgets.clampMinimapPins:SetChecked(settings:isClampMinimapPins())
+    end
 
     -- Mapa Mundial & Rastreamento
     self._widgets.showWorldMapButton:SetChecked(settings:isShowWorldMapButton())
@@ -1542,6 +1562,8 @@ function SettingsView:gatherFormData()
         mentionSoundChoice = w.selectedMentionSound or "whisper",
         showMinimapButton = w.showMinimapButton:GetChecked() == true,
         minimapPos = math.floor(w.minimapSlider:GetValue()),
+        showMinimapPins = (w.showMinimapPins and w.showMinimapPins:GetChecked() == true),
+        clampMinimapPins = (w.clampMinimapPins and w.clampMinimapPins:GetChecked() == true),
         showWorldMapButton = w.showWorldMapButton:GetChecked() == true,
         autoScanWorldMap = w.autoScanWorldMap:GetChecked() == true,
         showMapPins = w.showMapPins:GetChecked() == true,

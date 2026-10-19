@@ -162,13 +162,21 @@ Locales.strings["enUS"] = {
     ["SOUND_READY"] = "Ready Check",
     ["SOUND_COIN"] = "Coin",
 
-    -- Seção 3: Botão do Minimapa
-    ["SETTINGS_S3_HEADER"] = "|cffffd2003. MINIMAP BUTTON|r",
+    -- Seção 3: Minimapa & Rastreamento
+    ["SETTINGS_S3_HEADER"] = "|cffffd2003. MINIMAP & TRACKING|r",
     ["SETTINGS_MINIMAP_BTN"] = "Show GuildManager button around minimap",
     ["SETTINGS_MINIMAP_BTN_TIP_TITLE"] = "Minimap Button",
     ["SETTINGS_MINIMAP_BTN_TIP_DESC"] = "Displays the floating GuildManager icon along the Minimap border.",
     ["SETTINGS_MINIMAP_POS_LABEL"] = "Minimap Orbital Position: %d°",
     ["SETTINGS_MINIMAP_DEFAULT_BTN"] = "Default (215°)",
+    ["SETTINGS_MINIMAP_PINS"] = "Show guild members on Minimap",
+    ["SETTINGS_MINIMAP_PINS_TIP_TITLE"] = "Minimap Member Pins",
+    ["SETTINGS_MINIMAP_PINS_TIP_DESC"] = "Displays real-time pins with class icons for guild members using the AddOn on your Minimap, even when not in a party.",
+    ["SETTINGS_MINIMAP_PINS_EDGE"] = "Clamp distant members to Minimap edge",
+    ["SETTINGS_MINIMAP_PINS_EDGE_TIP_TITLE"] = "Minimap Edge Clamping",
+    ["SETTINGS_MINIMAP_PINS_EDGE_TIP_DESC"] = "Shows directional arrows along the Minimap ring pointing towards guild members in your zone who are outside radar range.",
+    ["MINIMAP_PIN_DISTANCE"] = "Distance:",
+    ["MINIMAP_PIN_FAR"] = "|cffaaaaaa(Beyond Radar)|r",
 
     -- Seção 4: Mapa Mundial & Rastreamento
     ["SETTINGS_S4_HEADER"] = "|cffffd2004. WORLD MAP & TRACKING|r",
@@ -687,13 +695,21 @@ Locales.strings["ptBR"] = {
     ["SOUND_READY"] = "Ready Check",
     ["SOUND_COIN"] = "Moeda",
 
-    -- Seção 3: Botão do Minimapa
-    ["SETTINGS_S3_HEADER"] = "|cffffd2003. BOTÃO DO MINIMAPA|r",
+    -- Seção 3: Minimapa & Rastreamento
+    ["SETTINGS_S3_HEADER"] = "|cffffd2003. MINIMAPA & RASTREAMENTO|r",
     ["SETTINGS_MINIMAP_BTN"] = "Exibir botão do GuildManager ao redor do minimapa",
     ["SETTINGS_MINIMAP_BTN_TIP_TITLE"] = "Botão do Minimapa",
     ["SETTINGS_MINIMAP_BTN_TIP_DESC"] = "Mostra o ícone flutuante do GuildManager na borda do Minimapa.",
     ["SETTINGS_MINIMAP_POS_LABEL"] = "Posição Orbital do Minimapa: %d°",
     ["SETTINGS_MINIMAP_DEFAULT_BTN"] = "Padrão (215°)",
+    ["SETTINGS_MINIMAP_PINS"] = "Exibir membros da guilda no Minimapa",
+    ["SETTINGS_MINIMAP_PINS_TIP_TITLE"] = "Marcadores no Minimapa",
+    ["SETTINGS_MINIMAP_PINS_TIP_DESC"] = "Exibe marcadores em tempo real com ícone de classe para membros da guilda que usam o AddOn no seu Minimapa, mesmo sem grupo.",
+    ["SETTINGS_MINIMAP_PINS_EDGE"] = "Fixar membros distantes na borda do Minimapa",
+    ["SETTINGS_MINIMAP_PINS_EDGE_TIP_TITLE"] = "Fixação na Borda",
+    ["SETTINGS_MINIMAP_PINS_EDGE_TIP_DESC"] = "Mostra setas direcionais ao longo do anel do Minimapa apontando para membros da sua região que estão além do alcance do radar.",
+    ["MINIMAP_PIN_DISTANCE"] = "Distância:",
+    ["MINIMAP_PIN_FAR"] = "|cffaaaaaa(Fora do Radar)|r",
 
     -- Seção 4: Mapa Mundial & Rastreamento
     ["SETTINGS_S4_HEADER"] = "|cffffd2004. MAPA MUNDIAL & RASTREAMENTO|r",

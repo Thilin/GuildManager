@@ -14,6 +14,8 @@ local DEFAULTS = {
     mentionSoundChoice = "whisper", -- "whisper", "raid", "ready", "coin"
     showMinimapButton = true,    -- Exibir ícone do GuildManager no minimapa
     minimapPos = 215,            -- Ângulo de posição no minimapa
+    showMinimapPins = true,      -- Exibir marcadores dos colegas no minimapa
+    clampMinimapPins = true,     -- Fixar membros distantes na borda do minimapa
     autoScanRoster = true,       -- Varredura automática do roster ao conectar e em eventos
     showOfflineMembers = true,   -- Exibir membros desconectados na auditoria
     notifyNewRecruit = true,     -- Notificar no chat local ao identificar novo membro
@@ -97,6 +99,9 @@ function GMSettings:isConfirmEventDelete() return self._confirmEventDelete ~= fa
 function GMSettings:getBirthdayLookaheadDays() return tonumber(self._birthdayLookaheadDays) or 30 end
 function GMSettings:getDefaultEventTime() return self._defaultEventTime or "20:00" end
 
+function GMSettings:isShowMinimapPins() return self._showMinimapPins ~= false end
+function GMSettings:isClampMinimapPins() return self._clampMinimapPins ~= false end
+
 function GMSettings:isShowWorldMapButton() return self._showWorldMapButton ~= false end
 function GMSettings:isAutoScanWorldMap() return self._autoScanWorldMap ~= false end
 function GMSettings:isShowMapPins() return self._showMapPins ~= false end
@@ -124,6 +129,8 @@ function GMSettings:setMentionFlashEnabled(val) self._enableMentionFlash = (val 
 function GMSettings:setMentionSoundChoice(val) self._mentionSoundChoice = tostring(val or "whisper") end
 function GMSettings:setShowMinimapButton(val) self._showMinimapButton = (val == true) end
 function GMSettings:setMinimapPos(val) self._minimapPos = tonumber(val) or 215 end
+function GMSettings:setShowMinimapPins(val) self._showMinimapPins = (val == true) end
+function GMSettings:setClampMinimapPins(val) self._clampMinimapPins = (val == true) end
 function GMSettings:setAutoScanRoster(val) self._autoScanRoster = (val == true) end
 function GMSettings:setShowOfflineMembers(val) self._showOfflineMembers = (val == true) end
 function GMSettings:setNotifyNewRecruit(val) self._notifyNewRecruit = (val == true) end

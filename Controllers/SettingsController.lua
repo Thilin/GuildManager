@@ -54,6 +54,11 @@ function SettingsController:setupCallbacks()
             end
         end
 
+        -- Aplica configurações de marcadores do minimapa imediatamente
+        if self._minimapButton and self._minimapButton.updatePinSettings then
+            self._minimapButton:updatePinSettings(formData.showMinimapPins, formData.clampMinimapPins)
+        end
+
         -- Aplica visibilidade do botão no mapa mundial imediatamente
         if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView._mapButton then
             if formData.showWorldMapButton then
