@@ -17,6 +17,15 @@ function EventRepository:new(db)
     return instance
 end
 
+--- Atualiza a referência de banco de dados do repositório (ex: na troca de guilda).
+---@param db table
+function EventRepository:setDatabase(db)
+    self._db = db or {}
+    if type(self._db.events) ~= "table" then
+        self._db.events = {}
+    end
+end
+
 --- Persiste ou atualiza uma entidade Event no banco de dados.
 ---@param event Event @Instância da entidade a ser gravada
 ---@return boolean @true se a gravação for bem-sucedida

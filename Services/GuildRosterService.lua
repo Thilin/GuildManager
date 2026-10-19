@@ -100,6 +100,9 @@ function GuildRosterService:scanRoster()
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
         end
+        if _G.GM and _G.GM.database and _G.GM.database.migrateLegacyCustomData and self._memberService and self._memberService._repository then
+            pcall(_G.GM.database.migrateLegacyCustomData, _G.GM.database, self._memberService._repository._db, activeRosterNames)
+        end
         local now = GetTime and GetTime() or 0
         if (now - (self._lastLogCleanTime or 0)) >= 300 then
             self._lastLogCleanTime = now
@@ -258,6 +261,13 @@ end
 ---@return Member[]
 function GuildRosterService:getActiveMemberList()
     return self._activeMemberList or {}
+end
+
+--- Limpa o cache do roster ativo em memória (usado na troca de guilda ou personagem)
+function GuildRosterService:clearActiveRoster()
+    self._activeMemberList = nil
+    self._activeRosterNames = nil
+    self._activeRosterGuids = nil
 end
 
 --- Verifica se o jogador local possui cargo de Oficial ou Líder da Guilda.

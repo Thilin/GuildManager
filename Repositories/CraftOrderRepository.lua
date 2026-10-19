@@ -17,6 +17,16 @@ function CraftOrderRepository:new(db)
     return instance
 end
 
+--- Atualiza a referência de banco de dados do repositório (ex: na troca de guilda).
+---@param db table
+function CraftOrderRepository:setDatabase(db)
+    self._db = db or {}
+    if type(self._db.craftOrders) ~= "table" then
+        self._db.craftOrders = {}
+    end
+    self._cache = {}
+end
+
 --- Salva ou atualiza um pedido no banco de dados
 ---@param order CraftOrder
 ---@return boolean

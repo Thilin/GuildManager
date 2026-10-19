@@ -254,3 +254,81 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         self:UnregisterEvent("ADDON_LOADED")
     end
 end)
+
+--- Alterna dinamicamente os repositórios para a guilda ativa do personagem atual.
+--- Garante que dados de uma guilda jamais apareçam em outro personagem de guilda diferente.
+function GM.switchActiveGuild(guildName, realmName, force)
+    local gName = guildName
+    if not gName and GetGuildInfo then
+        local ok, info = pcall(GetGuildInfo, "player")
+        if ok and info and info ~= "" then
+            gName = info
+        end
+    end
+
+    if IsInGuild and not IsInGuild() then
+        gName = nil
+    end
+
+    if GM.database and GM.database.switchGuild then
+        local currentKey = GM.database:getCurrentGuildKey()
+        local newKey = GM.database:getGuildKey(gName, realmName)
+
+        -- Se a guilda não mudou e já está devidamente vinculada, não há necessidade de resetar caches
+        if not force and currentKey and newKey and currentKey == newKey and GM.database:getActiveDatabase() then
+            return GM.database:getActiveDatabase(), currentKey
+        end
+
+        local guildDb, key = GM.database:switchGuild(gName, realmName)
+
+        local targetDb = guildDb
+        if not targetDb then
+            targetDb = { members = {}, logs = {}, groups = {}, events = {}, craftOrders = {}, professions = {} }
+        end
+
+        if GM.memberRepository and GM.memberRepository.setDatabase then
+            GM.memberRepository:setDatabase(targetDb)
+            if GM.memberRepository.resetOnlineStatus then
+                GM.memberRepository:resetOnlineStatus()
+            end
+        end
+        if GM.logRepository and GM.logRepository.setDatabase then
+            GM.logRepository:setDatabase(targetDb)
+        end
+        if GM.groupRepository and GM.groupRepository.setDatabase then
+            GM.groupRepository:setDatabase(targetDb)
+        end
+        if GM.eventRepository and GM.eventRepository.setDatabase then
+            GM.eventRepository:setDatabase(targetDb)
+        end
+        if GM.craftOrderRepository and GM.craftOrderRepository.setDatabase then
+            GM.craftOrderRepository:setDatabase(targetDb)
+        end
+
+        if GM.guildRosterService and GM.guildRosterService.clearActiveRoster then
+            GM.guildRosterService:clearActiveRoster()
+        end
+        if GM.memberService and GM.memberService.clearRosterCache then
+            GM.memberService:clearRosterCache()
+        end
+        if GM.locationService and GM.locationService.clearPeers then
+            GM.locationService:clearPeers()
+        end
+        if GM.worldMapView and GM.worldMapView.clearPins then
+            GM.worldMapView:clearPins()
+        end
+
+        return targetDb, key
+    end
+end
+
+local guildWatchFrame = CreateFrame("Frame")
+guildWatchFrame:RegisterEvent("PLAYER_LOGIN")
+guildWatchFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+guildWatchFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
+guildWatchFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+guildWatchFrame:SetScript("OnEvent", function(_, event)
+    if GM.switchActiveGuild then
+        GM.switchActiveGuild()
+    end
+end)

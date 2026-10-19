@@ -183,6 +183,9 @@ function MemberController:initHooks()
                     self:registerAllHooks()
                 end
             elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_GUILD_UPDATE" then
+                if _G.GM and _G.GM.switchActiveGuild then
+                    _G.GM.switchActiveGuild()
+                end
                 if C_ChatInfo and C_ChatInfo.RegisterAddonPrefix then
                     pcall(C_ChatInfo.RegisterAddonPrefix, "GuildManager")
                 elseif RegisterAddonMessagePrefix then
@@ -241,6 +244,9 @@ function MemberController:initHooks()
                 end
                 self:registerAllHooks()
             elseif event == "GUILD_ROSTER_UPDATE" then
+                if _G.GM and _G.GM.switchActiveGuild then
+                    _G.GM.switchActiveGuild()
+                end
                 if not self._debounceTimer then
                     if C_Timer and C_Timer.After then
                         self._debounceTimer = C_Timer.After(0.3, function()

@@ -386,6 +386,14 @@ function WorldMapController:initHooks()
             return
         end
 
+        -- Garante que o banco de dados da guilda ativa está carregado para o personagem atual
+        if _G.GM and _G.GM.switchActiveGuild then
+            _G.GM.switchActiveGuild()
+        end
+        if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
+            self._guildRosterService:requestRosterUpdate()
+        end
+
         self._worldMapView:updateRealtimePins()
 
         local showBtn = true
@@ -455,12 +463,18 @@ function WorldMapController:initHooks()
     eventFrame:RegisterEvent("ZONE_CHANGED")
     eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     eventFrame:RegisterEvent("ZONE_CHANGED_INDOORS")
+    eventFrame:RegisterEvent("PLAYER_LOGIN")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
     eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
     pcall(function() eventFrame:RegisterEvent("WORLD_MAP_UPDATE") end)
 
     eventFrame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_GUILD_UPDATE" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGIN" then
+            if _G.GM and _G.GM.switchActiveGuild then
+                _G.GM.switchActiveGuild()
+            end
+        end
         if WorldMapFrame and WorldMapFrame:IsShown() then
             if IsInGuild and not IsInGuild() then
                 self._worldMapView:renderNoGuild()
@@ -675,8 +689,14 @@ function WorldMapController:scanCurrentZone()
 
     -- 2. Varre diretamente a API do Roster nativo da Blizzard (dados ao vivo de quem está online)
     -- Valida e resolve nome e sobrenome rigorosamente para garantir a presença e distinção de homônimos
+    local activeNames = self._guildRosterService and self._guildRosterService.getActiveRosterNames and self._guildRosterService:getActiveRosterNames()
+    local activeGuids = self._guildRosterService and self._guildRosterService.getActiveRosterGuids and self._guildRosterService:getActiveRosterGuids()
+
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
+        if num == 0 and self._guildRosterService and self._guildRosterService.requestRosterUpdate then
+            self._guildRosterService:requestRosterUpdate()
+        end
         for i = 1, num do
             local gName, gRankName, _, gLevel, gClassDisplayName, gZone,
                   gPublicNote, gOfficerNote, gIsOnline, _, gClassFileName,
@@ -731,48 +751,7 @@ function WorldMapController:scanCurrentZone()
         end
     end
 
-    -- 3. Complementa com membros do banco local de membros da guilda (preservando nome e sobrenome)
-    for _, m in ipairs(allRosterMembers) do
-        local mGuid = m:getGuid()
-        local mName = m:getName()
-        if not mName:find("%s") and self._memberService and self._memberService.resolveFullName then
-            local res = self._memberService:resolveFullName(mName)
-            if res and res ~= "" and res:find("%s") then
-                mName = res
-            end
-        end
-        local lowerName = mName:lower()
-        local cleanMName = cleanString(mName)
-
-        if not isLocalPlayer(mName, mGuid)
-            and not (mGuid and mGuid ~= "" and addedByGuid[mGuid])
-            and not addedByName[lowerName]
-            and not addedByName[cleanMName]
-            and m:isInGuild()
-            and m:isOnline() then
-
-            local match = self:isZoneMatch(m:getZone(), currentMapName, currentMapID)
-
-            if match then
-                local data = {
-                    name = mName,
-                    level = m:getLevel(),
-                    class = m:getClass(),
-                    classDisplayName = m:getClassDisplayName(),
-                    rankName = m:getRankName(),
-                    publicNote = m:getPublicNote(),
-                    officerNote = m:getOfficerNote(),
-                    zone = m:getZone(),
-                    isOnline = true,
-                    isSelf = false,
-                }
-                table.insert(regionMembers, data)
-                registerAddedMember(mName, mGuid)
-            end
-        end
-    end
-
-    -- 4. Membros que usam o AddOn (LocationService peers, incluindo simulações de teste como /gmloc test)
+    -- 3. Membros que usam o AddOn (LocationService peers, incluindo simulações de teste como /gmloc test)
     if self._locationService then
         local peers = self._locationService:getPeers() or {}
         for pName, p in pairs(peers) do
@@ -786,7 +765,15 @@ function WorldMapController:scanCurrentZone()
             local cleanPName = cleanString(peerFullName)
             local lowerPName = peerFullName:lower():match("^%s*(.-)%s*$")
             local pGuid = p.guid
-            if not isLocalPlayer(peerFullName, pGuid)
+
+            -- Garante que o peer pertença à guilda atual ativa
+            local inRoster = true
+            if activeNames and next(activeNames) ~= nil then
+                inRoster = activeNames[lowerPName] or activeNames[cleanPName] or (p.name and activeNames[p.name:lower()])
+            end
+
+            if inRoster
+                and not isLocalPlayer(peerFullName, pGuid)
                 and not (pGuid and pGuid ~= "" and addedByGuid[pGuid])
                 and not addedByName[lowerPName]
                 and not addedByName[cleanPName]

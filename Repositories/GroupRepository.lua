@@ -17,6 +17,15 @@ function GroupRepository:new(db)
     return instance
 end
 
+--- Atualiza a referência de banco de dados do repositório (ex: na troca de guilda).
+---@param db table
+function GroupRepository:setDatabase(db)
+    self._db = db or {}
+    if type(self._db.groups) ~= "table" then
+        self._db.groups = {}
+    end
+end
+
 --- Persiste ou atualiza uma entidade Group no banco de dados.
 ---@param group Group @Instância da entidade a ser gravada
 ---@return boolean @true se a gravação for bem-sucedida

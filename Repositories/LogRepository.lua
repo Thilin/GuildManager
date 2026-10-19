@@ -17,6 +17,15 @@ function LogRepository:new(db)
     return instance
 end
 
+--- Atualiza a referência de banco de dados do repositório (ex: na troca de guilda).
+---@param db table
+function LogRepository:setDatabase(db)
+    self._db = db or {}
+    if type(self._db.logs) ~= "table" then
+        self._db.logs = {}
+    end
+end
+
 --- Salva ou atualiza uma entidade Log no banco de dados.
 ---@param log Log @Instância da entidade Log a ser persistida
 ---@return boolean @Retorna true se salvo com sucesso

@@ -1284,3 +1284,11 @@ function MemberService:isPlayerOfficerOrLeader()
     return false
 end
 
+--- Limpa o cache de ausências e cache de repositório em memória
+function MemberService:clearRosterCache()
+    self._missingRosterScans = {}
+    if self._repository and self._repository.clearCache then
+        self._repository:clearCache()
+    end
+end
+

@@ -763,3 +763,10 @@ function LocationService:initHooks()
 
     self._eventFrame = frame
 end
+
+--- Limpa todos os peers conhecidos e invalida o cache da guilda (usado na troca de guilda ou personagem)
+function LocationService:clearPeers()
+    self._peers = {}
+    self._cachedGuild = nil
+    self:notifyListeners("PEERS_CLEARED")
+end

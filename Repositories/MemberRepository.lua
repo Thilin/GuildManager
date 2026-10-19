@@ -23,6 +23,29 @@ function MemberRepository:clearCache()
     self._cache = {}
 end
 
+--- Atualiza a referência de banco de dados do repositório (ex: na troca de guilda ou personagem).
+---@param db table
+function MemberRepository:setDatabase(db)
+    self._db = db or {}
+    if type(self._db.members) ~= "table" then
+        self._db.members = {}
+    end
+    self:clearCache()
+end
+
+--- Reseta o status de isOnline em memória de todos os membros do banco ativo.
+--- Garante que dados de sessões passadas salvos em disco não sejam interpretados falsamente como online.
+function MemberRepository:resetOnlineStatus()
+    self:clearCache()
+    if type(self._db.members) == "table" then
+        for _, raw in pairs(self._db.members) do
+            if raw and raw.isOnline then
+                raw.isOnline = false
+            end
+        end
+    end
+end
+
 --- Persiste ou atualiza uma entidade Member no banco de dados.
 ---@param member Member @Instância da entidade a ser gravada
 ---@return boolean @Retorna true se a gravação for bem-sucedida
