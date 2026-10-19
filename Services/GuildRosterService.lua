@@ -49,17 +49,41 @@ function GuildRosterService:scanRoster()
         return 0
     end
 
+    local activeMemberList = {}
     local activeRosterNames = {}
     local activeRosterGuids = {}
     local processedCount = 0
 
     for i = 1, numMembers do
-        local member = self:getAndProcessMember(i)
+        local member, rawCleanName, rawGuid = self:getAndProcessMember(i)
         if member then
-            local cleanName = member:getName()
-            activeRosterNames[cleanName] = true
-            activeRosterNames[cleanName:lower()] = true
-            local guid = member:getGuid()
+            table.insert(activeMemberList, member)
+            local cleanName = member:getName() or rawCleanName or ""
+            local guid = member:getGuid() or rawGuid or ""
+
+            if cleanName ~= "" then
+                activeRosterNames[cleanName] = true
+                activeRosterNames[cleanName:lower()] = true
+
+                local baseName = cleanName:match("^[^-]+") or cleanName
+                baseName = baseName:match("^%s*(.-)%s*$") or baseName
+                if baseName ~= "" then
+                    activeRosterNames[baseName] = true
+                    activeRosterNames[baseName:lower()] = true
+                end
+            end
+
+            if rawCleanName and rawCleanName ~= "" then
+                activeRosterNames[rawCleanName] = true
+                activeRosterNames[rawCleanName:lower()] = true
+                local rawBase = rawCleanName:match("^[^-]+") or rawCleanName
+                rawBase = rawBase:match("^%s*(.-)%s*$") or rawBase
+                if rawBase ~= "" then
+                    activeRosterNames[rawBase] = true
+                    activeRosterNames[rawBase:lower()] = true
+                end
+            end
+
             if guid and guid ~= "" then
                 activeRosterGuids[guid] = true
             end
@@ -69,7 +93,9 @@ function GuildRosterService:scanRoster()
 
     -- Reconcilia membros que saíram da guilda desde a última varredura
     if processedCount > 0 then
+        self._activeMemberList = activeMemberList
         self._activeRosterNames = activeRosterNames
+        self._activeRosterGuids = activeRosterGuids
         self._memberService:reconcileGuildMembers(activeRosterNames, activeRosterGuids)
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
@@ -185,7 +211,7 @@ function GuildRosterService:getAndProcessMember(index)
         isInGuild = true,
     }
 
-    return self._memberService:processRosterMember(rosterData)
+    return self._memberService:processRosterMember(rosterData), cleanName, guid
 end
 
 --- Formata o tempo decorrido desde a última vez que o membro esteve online.
@@ -217,6 +243,18 @@ end
 ---@return table<string, boolean>|nil
 function GuildRosterService:getActiveRosterNames()
     return self._activeRosterNames
+end
+
+--- Retorna a tabela hash dos GUIDs de membros ativos encontrados no último scan.
+---@return table<string, boolean>|nil
+function GuildRosterService:getActiveRosterGuids()
+    return self._activeRosterGuids
+end
+
+--- Retorna a lista de entidades Member processadas diretamente do roster ativo da Blizzard.
+---@return Member[]
+function GuildRosterService:getActiveMemberList()
+    return self._activeMemberList or {}
 end
 
 --- Verifica se o jogador local possui cargo de Oficial ou Líder da Guilda.

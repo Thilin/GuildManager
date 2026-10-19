@@ -94,6 +94,19 @@ function AuditController:initHooks()
         end)
     end
 
+    -- Ouvinte de eventos de atualização do roster para manter a tela sincronizada quando visível
+    if not self._eventFrame then
+        local eventFrame = CreateFrame("Frame")
+        eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
+        eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
+        eventFrame:SetScript("OnEvent", function(_, event)
+            if self._auditView and self._auditView.isShown and self._auditView:isShown() then
+                self:refreshAudit()
+            end
+        end)
+        self._eventFrame = eventFrame
+    end
+
     -- Comando de chat /gmaudit e /guildmanageraudit
     SLASH_GUILDMANAGERAUDIT1 = "/gmaudit"
     SLASH_GUILDMANAGERAUDIT2 = "/guildmanageraudit"
@@ -102,7 +115,42 @@ function AuditController:initHooks()
     end
 end
 
+--- Verifica se uma entidade Member pertence ao roster oficial ativo da Blizzard.
+---@param member Member
+---@param activeRosterNames table<string, boolean>|nil
+---@param activeRosterGuids table<string, boolean>|nil
+---@return boolean
+local function isMemberInActiveRoster(member, activeRosterNames, activeRosterGuids)
+    if not member then return false end
+
+    -- 1. Verificação por GUID (100% único e imutável)
+    local guid = member:getGuid()
+    if guid and guid ~= "" and activeRosterGuids and activeRosterGuids[guid] then
+        return true
+    end
+
+    if not activeRosterNames then return false end
+
+    -- 2. Verificação por Nome exato e minúsculo
+    local name = member:getName() or ""
+    if name ~= "" then
+        if activeRosterNames[name] or activeRosterNames[name:lower()] then
+            return true
+        end
+
+        -- 3. Verificação por Nome base sem reino
+        local base = name:match("^[^-]+") or name
+        base = base:match("^%s*(.-)%s*$") or base
+        if base ~= "" and (activeRosterNames[base] or activeRosterNames[base:lower()]) then
+            return true
+        end
+    end
+
+    return false
+end
+
 --- Atualiza os dados exibidos na View buscando apenas os membros ativos pertencentes à guilda.
+--- Ex-membros (jogadores que saíram ou foram expulsos) são rigorosamente excluídos da visualização.
 function AuditController:refreshAudit()
     if not self._memberService or not self._auditView then
         return
@@ -114,35 +162,59 @@ function AuditController:refreshAudit()
         end
     end
 
-    local all = self._memberService:getAllMembers() or {}
     local activeGuildMembers = {}
-    local activeRosterNames = self._guildRosterService and self._guildRosterService.getActiveRosterNames and self._guildRosterService:getActiveRosterNames()
-    local hasRosterFilter = (activeRosterNames and next(activeRosterNames) ~= nil)
+    local seenMembers = {}
 
-    for _, member in ipairs(all) do
-        local mName = member:getName()
-        local mLower = (mName or ""):lower()
+    -- 1. Fonte primária e incontestável: lista de membros ativos processados diretamente da API da Blizzard
+    local rosterMembers = self._guildRosterService and self._guildRosterService.getActiveMemberList and self._guildRosterService:getActiveMemberList()
 
-        if hasRosterFilter then
-            -- Se temos a lista ativa direta da Blizzard, quem não está no roster NÃO pertence mais à guilda!
-            if activeRosterNames[mName] or activeRosterNames[mLower] then
-                if not member:isInGuild() then
-                    member:setInGuild(true)
-                    self._memberService:saveMember(member)
-                end
-                table.insert(activeGuildMembers, member)
-            else
-                -- Membro ausente no roster oficial da Blizzard: desativa e desvincula dos alts
-                if member:isInGuild() then
-                    member:setInGuild(false)
-                    self._memberService:unlinkMemberOnGuildLeave(mName)
-                    self._memberService:saveMember(member)
+    if rosterMembers and #rosterMembers > 0 then
+        for _, member in ipairs(rosterMembers) do
+            local rankName = member:getRankName() or ""
+            if member:isInGuild() and rankName ~= "" and rankName ~= "-" then
+                local guid = member:getGuid() or ""
+                local name = (member:getName() or ""):lower()
+                local key = (guid ~= "") and guid or name
+                if key ~= "" and not seenMembers[key] then
+                    seenMembers[key] = true
+                    table.insert(activeGuildMembers, member)
                 end
             end
-        else
-            -- Fallback caso scan do roster não esteja disponível no momento
-            if member:isInGuild() then
-                table.insert(activeGuildMembers, member)
+        end
+    else
+        -- 2. Fallback caso a API da Blizzard ainda não tenha retornado dados nesta sessão
+        if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
+            self._guildRosterService:requestRosterUpdate()
+        end
+
+        local all = self._memberService:getAllMembers() or {}
+        local activeRosterNames = self._guildRosterService and self._guildRosterService.getActiveRosterNames and self._guildRosterService:getActiveRosterNames()
+        local activeRosterGuids = self._guildRosterService and self._guildRosterService.getActiveRosterGuids and self._guildRosterService:getActiveRosterGuids()
+        local hasRosterFilter = (activeRosterNames and next(activeRosterNames) ~= nil)
+
+        for _, member in ipairs(all) do
+            local rankName = member:getRankName() or ""
+            -- Exige obrigatoriamente que o membro tenha status ativo e cargo válido da Blizzard (nunca Cargo: -)
+            if member:isInGuild() and rankName ~= "" and rankName ~= "-" then
+                if hasRosterFilter then
+                    if isMemberInActiveRoster(member, activeRosterNames, activeRosterGuids) then
+                        local guid = member:getGuid() or ""
+                        local name = (member:getName() or ""):lower()
+                        local key = (guid ~= "") and guid or name
+                        if key ~= "" and not seenMembers[key] then
+                            seenMembers[key] = true
+                            table.insert(activeGuildMembers, member)
+                        end
+                    end
+                else
+                    local guid = member:getGuid() or ""
+                    local name = (member:getName() or ""):lower()
+                    local key = (guid ~= "") and guid or name
+                    if key ~= "" and not seenMembers[key] then
+                        seenMembers[key] = true
+                        table.insert(activeGuildMembers, member)
+                    end
+                end
             end
         end
     end
@@ -155,6 +227,10 @@ function AuditController:show()
     if not IsInGuild or not IsInGuild() then
         print("|cffff0000[GuildManager]|r Você não está em uma guilda.")
         return
+    end
+
+    if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
+        self._guildRosterService:requestRosterUpdate()
     end
 
     self:refreshAudit()

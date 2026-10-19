@@ -101,6 +101,23 @@ local function getPlayerName()
     return UnitName and UnitName("player") or ""
 end
 
+--- Normaliza texto removendo caracteres especiais e acentuações para ordenação e busca natural.
+---@param txt string|nil
+---@return string
+local function normalizeForSort(txt)
+    if not txt or type(txt) ~= "string" then return "" end
+    local s = txt:lower()
+    s = s:gsub("đ", "d"):gsub("ð", "d")
+    s = s:gsub("ø", "o"):gsub("œ", "oe"):gsub("æ", "ae")
+    s = s:gsub("á", "a"):gsub("à", "a"):gsub("ã", "a"):gsub("â", "a"):gsub("ä", "a"):gsub("å", "a")
+    s = s:gsub("é", "e"):gsub("è", "e"):gsub("ê", "e"):gsub("ë", "e")
+    s = s:gsub("í", "i"):gsub("ì", "i"):gsub("î", "i"):gsub("ï", "i")
+    s = s:gsub("ó", "o"):gsub("ò", "o"):gsub("õ", "o"):gsub("ô", "o"):gsub("ö", "o")
+    s = s:gsub("ú", "u"):gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
+    s = s:gsub("ç", "c"):gsub("ñ", "n"):gsub("ß", "ss")
+    return s
+end
+
 --- Construtor da View de Auditoria da Guilda.
 ---@return AuditView
 function AuditView:new()
@@ -151,7 +168,7 @@ function AuditView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerAuditFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(946, 594)
+    frame:SetSize(946, 614)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -458,7 +475,7 @@ function AuditView:createUI()
     -- ScrollFrame das Linhas (rolagem horizontal vinculada)
     local rowsScrollFrame = CreateFrame("ScrollFrame", "GM_AuditRowsScrollFrame", tableInset)
     rowsScrollFrame:SetPoint("TOPLEFT", headerScrollFrame, "BOTTOMLEFT", 0, -2)
-    rowsScrollFrame:SetPoint("BOTTOMRIGHT", tableInset, "BOTTOMRIGHT", -22, 22)
+    rowsScrollFrame:SetPoint("BOTTOMRIGHT", tableInset, "BOTTOMRIGHT", -22, 24)
     rowsScrollFrame:EnableMouse(true)
     rowsScrollFrame:SetScript("OnMouseWheel", function(_, delta)
         self:onTableMouseWheel(delta)
@@ -1977,9 +1994,17 @@ function AuditView:formatColoredName(name, guid, fallbackClass)
 end
 
 --- Define a lista de membros ativos na guilda e reconstrói a árvore de Mains e Alts.
+--- Ex-membros (isInGuild == false) ou sem cargo válido são rigorosamente ignorados.
 ---@param members Member[]
 function AuditView:setMembers(members)
-    self._members = members or {}
+    local activeOnly = {}
+    for _, m in ipairs(members or {}) do
+        local rName = m and m:getRankName() or ""
+        if m and m:isInGuild() and rName ~= "" and rName ~= "-" then
+            table.insert(activeOnly, m)
+        end
+    end
+    self._members = activeOnly
     self:rebuildFlatRows()
     self:applyFilters()
 end
@@ -2091,7 +2116,7 @@ function AuditView:rebuildFlatRows()
                     local rA = a:getRankIndex() or 99
                     local rB = b:getRankIndex() or 99
                     if rA ~= rB then return rA < rB end
-                    return (a:getName() or "") < (b:getName() or "")
+                    return normalizeForSort(a:getName()) < normalizeForSort(b:getName())
                 end)
                 mainMember = table.remove(altMembers, 1)
             end
@@ -2101,7 +2126,7 @@ function AuditView:rebuildFlatRows()
                 local lvlA = a:getLevel() or 0
                 local lvlB = b:getLevel() or 0
                 if lvlA ~= lvlB then return lvlA > lvlB end
-                return (a:getName() or "") < (b:getName() or "")
+                return normalizeForSort(a:getName()) < normalizeForSort(b:getName())
             end)
 
             table.insert(mainGroups, {
@@ -2111,14 +2136,14 @@ function AuditView:rebuildFlatRows()
         end
     end
 
-    -- Ordena os grupos principais por Rank na guilda (Guild Master -> Oficiais -> Membros) e depois por Nome
+    -- Ordena os grupos principais por Rank na guilda (Guild Master -> Oficiais -> Membros) e depois por Nome normalizado
     table.sort(mainGroups, function(a, b)
         local rankA = a.main:getRankIndex() or 99
         local rankB = b.main:getRankIndex() or 99
         if rankA ~= rankB then
             return rankA < rankB
         end
-        return (a.main:getName() or ""):lower() < (b.main:getName() or ""):lower()
+        return normalizeForSort(a.main:getName()) < normalizeForSort(b.main:getName())
     end)
 
     -- Achata os grupos em uma lista sequencial com indicação clara de Main e Subnível (Alts)
@@ -2202,20 +2227,24 @@ function AuditView:applyFilters()
         end
 
         if matchFilter and search ~= "" then
+            local normSearch = normalizeForSort(search)
             local name = (m:getName() or ""):lower()
+            local normName = normalizeForSort(name)
             local rank = (m:getRankName() or ""):lower()
             local onlineStatus = m:isOnline() and "online" or (m:getLastOnline() or "offline"):lower()
             local pubNote = (m:getPublicNote() or ""):lower()
             local offNote = (m:getOfficerNote() or ""):lower()
             local custNote = (m:getCustomNote() or ""):lower()
             local rec = (m:getRecruiter() or ""):lower()
+            local normRec = normalizeForSort(rec)
             local dateJoin = (m:getDateJoin() or ""):lower()
             local bday = (m:getBirthday() or ""):lower()
 
-            if not (name:find(search, 1, true) or rank:find(search, 1, true) or
+            if not (name:find(search, 1, true) or normName:find(normSearch, 1, true) or
+                    rank:find(search, 1, true) or
                     onlineStatus:find(search, 1, true) or
                     pubNote:find(search, 1, true) or offNote:find(search, 1, true) or
-                    custNote:find(search, 1, true) or rec:find(search, 1, true) or
+                    custNote:find(search, 1, true) or rec:find(search, 1, true) or normRec:find(normSearch, 1, true) or
                     dateJoin:find(search, 1, true) or bday:find(search, 1, true)) then
                 matchFilter = false
             end

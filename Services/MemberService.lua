@@ -545,8 +545,13 @@ function MemberService:reconcileGuildMembers(activeRosterNames, activeRosterGuid
         local nameLower = (memberName or ""):lower()
         local guid = member:getGuid() or ""
 
-        -- Verifica se o membro está presente no roster ativo (por nome ou GUID)
+        -- Verifica se o membro está presente no roster ativo (por nome exato, base sem reino ou GUID)
         local inRoster = activeRosterNames[memberName] or activeRosterNames[nameLower]
+        if not inRoster then
+            local baseName = memberName:match("^[^-]+") or memberName
+            baseName = baseName:match("^%s*(.-)%s*$") or baseName
+            inRoster = activeRosterNames[baseName] or activeRosterNames[baseName:lower()]
+        end
         if not inRoster and guid ~= "" and activeRosterGuids then
             inRoster = activeRosterGuids[guid]
         end
@@ -557,9 +562,15 @@ function MemberService:reconcileGuildMembers(activeRosterNames, activeRosterGuid
                 self._missingRosterScans[nameLower] = nil
             end
         elseif member:isInGuild() then
+            -- Se o membro nem sequer possui cargo na guilda (Cargo: -) e não está no roster,
+            -- é um convite expirado ou registro que não pertence à guilda: desativa imediatamente!
+            local curRank = member:getRankName() or ""
+            if curRank == "" or curRank == "-" then
+                member:setInGuild(false)
+                self._repository:save(member)
             -- 1. Se o membro acabou de entrar na guilda (período de carência de propagação do roster),
             -- NUNCA marca como LEFT!
-            if self:isRecentlyJoined(memberName) then
+            elseif self:isRecentlyJoined(memberName) then
                 -- Membro recém-chegado em trânsito de cache no servidor, preserva o status
             else
                 -- 2. Membro ausente: verifica confirmação no registro oficial de eventos da Blizzard

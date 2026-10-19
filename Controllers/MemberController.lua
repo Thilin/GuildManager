@@ -190,6 +190,9 @@ function MemberController:initHooks()
                 end
                 self:hookInviteAPIs()
                 if IsInGuild and IsInGuild() then
+                    if SetGuildRosterShowOffline and GetGuildRosterShowOffline and not GetGuildRosterShowOffline() then
+                        SetGuildRosterShowOffline(true)
+                    end
                     self._guildRosterService:requestRosterUpdate()
                     self:requestGuildEventLog(true)
                     if GetNumGuildMembers and GetNumGuildMembers() > 0 then
@@ -245,12 +248,18 @@ function MemberController:initHooks()
                             if IsInGuild and IsInGuild() then
                                 self._guildRosterService:scanRoster()
                                 self:requestGuildEventLog()
+                                if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit and _G.GM.auditView and _G.GM.auditView.isShown and _G.GM.auditView:isShown() then
+                                    _G.GM.auditController:refreshAudit()
+                                end
                             end
                         end)
                     else
                         if IsInGuild and IsInGuild() then
                             self._guildRosterService:scanRoster()
                             self:requestGuildEventLog()
+                            if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit and _G.GM.auditView and _G.GM.auditView.isShown and _G.GM.auditView:isShown() then
+                                _G.GM.auditController:refreshAudit()
+                            end
                         end
                     end
                 end
