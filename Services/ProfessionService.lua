@@ -905,6 +905,62 @@ end
 -- CONSULTAS E BUSCAS DE ARTESÃOS E RECEITAS
 -- =========================================================================
 
+--- Verifica se o jogador local possui uma determinada profissão primária (rank > 0)
+---@param profKey string
+---@return boolean
+function ProfessionService:playerHasProfession(profKey)
+    if not profKey or profKey == "" then return false end
+    local key = (ProfessionData and ProfessionData.getProfessionKey and ProfessionData.getProfessionKey(profKey)) or profKey
+
+    -- 1. Verifica no objeto Member do jogador local
+    local member = self:getLocalPlayerMember()
+    if member and member.hasProfession and member:hasProfession(key) then
+        return true
+    end
+
+    -- 2. Fallback via GetSkillLineInfo (WoW Classic / Forever)
+    if GetNumSkillLines and GetSkillLineInfo then
+        local numSkills = GetNumSkillLines()
+        for i = 1, numSkills do
+            local skillName, isHeader, _, skillRank = GetSkillLineInfo(i)
+            local isH = (isHeader == 1 or isHeader == true or isHeader == "1")
+            if not isH and skillName and skillName ~= "" then
+                local k = ProfessionData and ProfessionData.getProfessionKey and ProfessionData.getProfessionKey(skillName)
+                if k == key and (tonumber(skillRank) or 0) > 0 then
+                    if member and member.setProfession then
+                        local existing = member:getProfession(key) or {}
+                        member:setProfession(key, tonumber(skillRank) or 1, 300, existing.recipes or {})
+                    end
+                    return true
+                end
+            end
+        end
+    end
+
+    -- 3. Fallback via GetProfessions (API moderna se disponível)
+    if GetProfessions and GetProfessionInfo then
+        local profs = { GetProfessions() }
+        for i = 1, 2 do
+            local idx = profs[i]
+            if idx then
+                local name, _, rank = GetProfessionInfo(idx)
+                if name and name ~= "" then
+                    local k = ProfessionData and ProfessionData.getProfessionKey and ProfessionData.getProfessionKey(name)
+                    if k == key and (tonumber(rank) or 0) > 0 then
+                        if member and member.setProfession then
+                            local existing = member:getProfession(key) or {}
+                            member:setProfession(key, tonumber(rank) or 1, 300, existing.recipes or {})
+                        end
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 --- Retorna os membros da guilda que possuem a profissão informada
 ---@param profKey string
 ---@return table[]
@@ -1019,6 +1075,23 @@ function ProfessionService:acceptOrder(orderId, crafterName)
     local order = self._craftOrderRepository:findById(orderId)
     if not order then return false end
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    -- Validação: O artesão deve possuir a profissão exigida pelo pedido
+    if not self:playerHasProfession(order:getProfessionKey()) then
+        print(string.format("|cffff0000[GuildManager]|r %s", L["ORDER_ACCEPT_NO_PROFESSION"] or "Você não possui a profissão necessária para aceitar este pedido."))
+        return false
+    end
+
+    -- Solicitante não pode aceitar o próprio pedido
+    local myName = cleanPlayerName(UnitName and UnitName("player"))
+    local myFullName = (self._memberService and self._memberService.resolvePlayerFullName and self._memberService:resolvePlayerFullName()) or ""
+    local req = order:getRequester() or ""
+    if req ~= "" and (cleanPlayerName(req):lower() == myName:lower() or (myFullName ~= "" and cleanPlayerName(req):lower() == cleanPlayerName(myFullName):lower())) then
+        print("|cffff0000[GuildManager]|r Você não pode aceitar seu próprio pedido.")
+        return false
+    end
+
     if not crafterName or crafterName == "" then
         if self._memberService and self._memberService.resolvePlayerFullName then
             local full = self._memberService:resolvePlayerFullName()
@@ -1038,7 +1111,6 @@ function ProfessionService:acceptOrder(orderId, crafterName)
         self._syncService:broadcastCraftOrder(order, "UPDATE")
     end
 
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     print(string.format("|cff00ff00[GuildManager]|r %s |cffffff00%s|r!", L["ORDER_ACCEPTED_SUCCESS"] or "Você aceitou o pedido de", order:getRecipeName()))
 
     return true

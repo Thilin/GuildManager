@@ -2043,9 +2043,13 @@ function ProfessionView:matchesPlayer(targetName, myName, myFullName)
     if not targetName or targetName == "" then return false end
     if not myName or myName == "" then
         myName = cleanPlayerName(UnitName and UnitName("player")):lower()
+    else
+        myName = cleanPlayerName(myName):lower()
     end
     if not myFullName or myFullName == "" then
         myFullName = cleanPlayerName(self:getLocalPlayerFullName()):lower()
+    else
+        myFullName = cleanPlayerName(myFullName):lower()
     end
 
     local cleanTarget = cleanPlayerName(targetName):lower()
@@ -2096,6 +2100,16 @@ function ProfessionView:matchesPlayer(targetName, myName, myFullName)
         end
     end
 
+    return false
+end
+
+--- Verifica se o jogador local possui a profissão exigida pelo pedido
+---@param profKey string
+---@return boolean
+function ProfessionView:playerHasProfession(profKey)
+    if _G.GM and _G.GM.professionService and _G.GM.professionService.playerHasProfession then
+        return _G.GM.professionService:playerHasProfession(profKey)
+    end
     return false
 end
 
@@ -2431,9 +2445,10 @@ function ProfessionView:refreshOrders()
             elseif self._orderFilter == "MINE" then
                 matches = isRequester
             elseif self._orderFilter == "FOR_ME" then
+                local hasProf = self:playerHasProfession(ord:getProfessionKey())
                 if isDirectedToMe or isAcceptedByMe then
                     matches = true
-                elseif ord:isOpenToGuild() and not isRequester and status == CraftOrder.STATUS.PENDING then
+                elseif ord:isOpenToGuild() and not isRequester and status == CraftOrder.STATUS.PENDING and hasProf then
                     matches = true
                 end
             end
@@ -2515,6 +2530,7 @@ function ProfessionView:renderOrderRows()
             local isRequester = self:matchesPlayer(order:getRequester(), myName, myFullName)
             local isDirectedToMe = self:matchesPlayer(order:getCrafter(), myName, myFullName)
             local isAcceptedByMe = self:matchesPlayer(order:getAcceptedBy(), myName, myFullName)
+            local hasProf = self:playerHasProfession(order:getProfessionKey())
 
             local canCancel = false
             local canAccept = false
@@ -2523,19 +2539,27 @@ function ProfessionView:renderOrderRows()
             local isDismissAction = false
 
             if status == CraftOrder.STATUS.PENDING then
-                -- Pode aceitar se o pedido for aberto para a guilda ou direcionado ao jogador
-                if order:isOpenToGuild() or isDirectedToMe then
-                    canAccept = true
-                end
-
-                -- Solicitante pode cancelar
                 if isRequester then
+                    -- Solicitante: só pode cancelar o próprio pedido (NUNCA aceitar)
+                    canAccept = false
                     canCancel = true
                     isRefuseAction = false
-                elseif isDirectedToMe then
-                    -- Artesão direcionado pode recusar
-                    canCancel = true
-                    isRefuseAction = true
+                else
+                    -- Outro jogador: só pode agir se possuir a profissão exigida!
+                    if hasProf then
+                        if order:isOpenToGuild() or isDirectedToMe then
+                            canAccept = true
+                        end
+                        -- Se for direcionado a ele, pode recusar
+                        if isDirectedToMe then
+                            canCancel = true
+                            isRefuseAction = true
+                        end
+                    else
+                        -- Não tem a profissão: apenas visualização (sem botões de aceitar ou recusar)
+                        canAccept = false
+                        canCancel = false
+                    end
                 end
             elseif status == CraftOrder.STATUS.IN_PROGRESS then
                 if isAcceptedByMe or isDirectedToMe then

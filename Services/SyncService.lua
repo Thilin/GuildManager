@@ -476,7 +476,7 @@ function SyncService:syncWithPeer(peerName)
             local orders = _G.GM.craftOrderRepository:findAll()
             for _, ord in ipairs(orders) do
                 if ord:getStatus() ~= "CANCELLED" then
-                    self:broadcastCraftOrder(ord, "UPDATE")
+                    self:broadcastCraftOrder(ord, "UPDATE", cName)
                 end
             end
         end)
@@ -1394,25 +1394,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             local sChar = cleanName(senderClean):match("^(%S+)")
             for _, ord in ipairs(orders) do
                 if ord:getStatus() ~= "CANCELLED" then
-                    local payload = string.format("ORDER~UPDATE~%s~%s~%s~%s~%s~%s~%d~%d~%s~%s~%d",
-                        ord:getId(),
-                        cleanName(ord:getRequester()),
-                        cleanName(ord:getCrafter()),
-                        ord:getProfessionKey() or "ALCHEMY",
-                        tostring(ord:getRecipeId() or 0),
-                        ord:getRecipeName() or "",
-                        ord:getItemCount() or 1,
-                        ord:getTipCopper() or 0,
-                        ord:getStatus() or "PENDING",
-                        cleanName(ord:getAcceptedBy()),
-                        ord:getUpdatedAt() or 0
-                    )
-                    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-                    if Send and sChar and sChar ~= "" and not self:isSelf(sChar) then
-                        pcall(Send, SYNC_PREFIX, payload, "WHISPER", sChar)
-                    else
-                        self:enqueuePacket(payload, "GUILD")
-                    end
+                    self:broadcastCraftOrder(ord, "UPDATE", sChar)
                 end
             end
         end
@@ -1624,7 +1606,8 @@ end
 --- Formato: ORDER~action~id~requester~crafter~profKey~recipeId~recipeName~itemCount~tipCopper~status~acceptedBy~updatedAt
 ---@param order CraftOrder
 ---@param action string @"CREATE", "UPDATE", "DELETE"
-function SyncService:broadcastCraftOrder(order, action)
+---@param specificTarget string|nil @Nome de um jogador para entrega direcionada (opcional)
+function SyncService:broadcastCraftOrder(order, action, specificTarget)
     if not order or not order.getId then return end
     action = action or "UPDATE"
     local requester = order:getRequester() or ""
@@ -1653,20 +1636,36 @@ function SyncService:broadcastCraftOrder(order, action)
     local requesterChar = cleanName(requester):match("^(%S+)")
     local acceptedChar = cleanName(acceptedBy):match("^(%S+)")
     local crafterChar = cleanName(crafter):match("^(%S+)")
+    local targetChar = specificTarget and cleanName(specificTarget):match("^(%S+)")
 
     -- 1. Disparo IMEDIATO para entrega instantânea (sem delay de fila)
     if Send then
         if IsInGuild and IsInGuild() then
             pcall(Send, SYNC_PREFIX, payload, "GUILD")
         end
-        if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) then
+        if targetChar and targetChar ~= "" and not self:isSelf(targetChar) then
+            pcall(Send, SYNC_PREFIX, payload, "WHISPER", targetChar)
+        end
+        if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) and requesterChar ~= targetChar then
             pcall(Send, SYNC_PREFIX, payload, "WHISPER", requesterChar)
         end
-        if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) then
+        if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) and acceptedChar ~= targetChar then
             pcall(Send, SYNC_PREFIX, payload, "WHISPER", acceptedChar)
-        elseif crafterChar and crafterChar ~= "" and crafterChar:upper() ~= "ANY" and not self:isSelf(crafterChar) then
+        elseif crafterChar and crafterChar ~= "" and crafterChar:upper() ~= "ANY" and not self:isSelf(crafterChar) and crafterChar ~= targetChar then
             pcall(Send, SYNC_PREFIX, payload, "WHISPER", crafterChar)
         end
+
+        -- Se o pedido for aberto para qualquer artesão da guilda, dispara via WHISPER para todos os colegas com Addon online
+        if order:isOpenToGuild() then
+            local activePeers = self:getActivePeers()
+            for _, p in ipairs(activePeers) do
+                local pChar = cleanName(p.name):match("^(%S+)")
+                if pChar and pChar ~= "" and not self:isSelf(pChar) and pChar ~= targetChar and pChar ~= requesterChar then
+                    pcall(Send, SYNC_PREFIX, payload, "WHISPER", pChar)
+                end
+            end
+        end
+
         if IsInRaid and IsInRaid() then
             pcall(Send, SYNC_PREFIX, payload, "RAID")
         elseif IsInGroup and IsInGroup() then
@@ -1679,11 +1678,23 @@ function SyncService:broadcastCraftOrder(order, action)
 
     -- 2. Enfileira na fila compassada para garantia contra oscilações de conexão
     self:enqueuePacket(payload, "GUILD")
-    if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) then
+    if targetChar and targetChar ~= "" and not self:isSelf(targetChar) then
+        self:enqueuePacket(payload, "WHISPER", nil, targetChar)
+    end
+    if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) and requesterChar ~= targetChar then
         self:enqueuePacket(payload, "WHISPER", nil, requesterChar)
     end
-    if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) then
+    if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) and acceptedChar ~= targetChar then
         self:enqueuePacket(payload, "WHISPER", nil, acceptedChar)
+    end
+    if order:isOpenToGuild() then
+        local activePeers = self:getActivePeers()
+        for _, p in ipairs(activePeers) do
+            local pChar = cleanName(p.name):match("^(%S+)")
+            if pChar and pChar ~= "" and not self:isSelf(pChar) and pChar ~= targetChar and pChar ~= requesterChar then
+                self:enqueuePacket(payload, "WHISPER", nil, pChar)
+            end
+        end
     end
 
     -- 3. Adiciona à outbox de retransmissão para confirmação ACK (especialmente em UPDATE / COMPLETED / DELETE)
@@ -1713,6 +1724,18 @@ function SyncService:requestOrdersSync()
         pcall(Send, SYNC_PREFIX, payload, "GUILD")
     end
     self:enqueuePacket(payload, "GUILD")
+
+    -- Whispers diretos para todos os colegas com Addon online
+    local activePeers = self:getActivePeers()
+    for _, p in ipairs(activePeers) do
+        local pChar = cleanName(p.name):match("^(%S+)")
+        if pChar and pChar ~= "" and not self:isSelf(pChar) then
+            if Send then
+                pcall(Send, SYNC_PREFIX, payload, "WHISPER", pChar)
+            end
+            self:enqueuePacket(payload, "WHISPER", nil, pChar)
+        end
+    end
 end
 
 --- Força manualmente a sincronização de todos os dados customizados de todos os membros da guilda.
@@ -1893,6 +1916,8 @@ function SyncService:initHooks()
                 self:enqueuePacket(string.format("SYNC_REQ~%s", myName), "GUILD")
                 -- 3. Transmite as profissões e receitas do jogador local para os colegas
                 pcall(function() self:broadcastMemberProfessions() end)
+                -- 4. Solicita pedidos de fabricação ativos da guilda
+                pcall(function() self:requestOrdersSync() end)
             end)
         end
     end
