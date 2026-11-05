@@ -74,6 +74,7 @@ function Member:new(data)
         instance._isInGuild = true
     end
     instance._recruiter = data.recruiter or ""
+    instance._role = data.role or ""
     instance._customDataTimestamp = tonumber(data.customDataTimestamp) or 0
     instance._professions = data.professions or {}
     instance._professionsTimestamp = tonumber(data.professionsTimestamp) or 0
@@ -380,6 +381,7 @@ function Member:serialize()
         isMain = self._isMain,
         isInGuild = self._isInGuild,
         recruiter = self._recruiter,
+        role = self:getRole(),
         customDataTimestamp = self._customDataTimestamp or 0,
         professions = self._professions or {},
         professionsTimestamp = self._professionsTimestamp or 0,
@@ -392,6 +394,7 @@ function Member:updateFromRoster(data)
     if not data then return end
 
     if data.rankName then self._rankName = data.rankName end
+    if data.role and data.role ~= "" then self:setRole(data.role) end
     if data.rankIndex ~= nil then self._rankIndex = tonumber(data.rankIndex) or self._rankIndex end
     if data.level then self:setLevel(data.level) end
     if data.classDisplayName then self._classDisplayName = data.classDisplayName end
@@ -560,6 +563,25 @@ end
 
 --- Obtém o timestamp da última atualização dos dados customizados deste membro.
 ---@return number
+--- Obtém a função/role do membro ("TANK", "HEALER", "DPS" ou "")
+---@return string
+function Member:getRole()
+    return self._role or ""
+end
+
+--- Define a função/role do membro (garante apenas TANK, HEALER, DPS ou "")
+---@param role string|nil
+function Member:setRole(role)
+    if type(role) == "string" then
+        local r = role:upper():match("^%s*(.-)%s*$") or ""
+        if r == "TANK" or r == "HEALER" or r == "DPS" or r == "" then
+            self._role = r
+        end
+    elseif role == nil then
+        self._role = ""
+    end
+end
+
 function Member:getCustomDataTimestamp()
     return self._customDataTimestamp or 0
 end

@@ -499,13 +499,14 @@ end
 ---@param altsCsv string|nil
 ---@param isMain boolean|nil
 ---@return string
-local function makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMain)
-    return string.format("%s~%s~%s~%s~%s",
+local function makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMain, role)
+    return string.format("%s~%s~%s~%s~%s~%s",
         dateJoin or "",
         birthday or "",
         recruiter or "",
         altsCsv or "",
-        isMain and "1" or "0"
+        isMain and "1" or "0",
+        role or ""
     )
 end
 
@@ -605,6 +606,7 @@ function SyncService:broadcastMemberCustomData(member, force)
     if isLeader then
         dateJoin = member:getDateJoin() or ""
         local alts = member:getAlts() or {}
+    local role = member:getRole() or ""
         altsCsv = table.concat(alts, ",")
         isMain = member:isMain()
     end
@@ -619,7 +621,7 @@ function SyncService:broadcastMemberCustomData(member, force)
         return false
     end
 
-    local signature = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMain)
+    local signature = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMain, role)
     local memberLower = memberName:lower()
 
     -- Evita transmissões redundantes se nada mudou
@@ -657,6 +659,7 @@ function SyncService:broadcastMemberCustomData(member, force)
         recruiter = recruiter,
         altsCsv = altsCsv,
         isMain = isMain,
+        role = role,
         timestamp = memberTimestamp,
         acknowledgedPeers = {},
         sendCount = 0,
@@ -937,6 +940,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         local altsCsv = arg6 or ""
         local isMainStr = arg7 or "1"
         local timestamp = tonumber(arg8) or 0
+        local role = arg9 or ""
 
         if not updateId or updateId == "" or not memberName or memberName == "" then
             return
@@ -1032,6 +1036,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if senderIsLeader and dateJoin and dateJoin ~= "" then
             member:setDateJoin(dateJoin)
         end
+        if role and role ~= "" then
+            member:setRole(role)
+        end
 
         -- 2. Aniversário
         if birthday and birthday ~= "" then
@@ -1062,7 +1069,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         -- Atualiza a assinatura local para não retransmitir de volta o que acabou de receber
         local isMainBool = (isMainStr == "1")
-        self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool)
+        self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool, role)
 
         -- Persiste no banco de dados local com normalização e sem retransmissão circular
         if self._memberService then

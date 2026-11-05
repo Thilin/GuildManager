@@ -119,6 +119,10 @@ function MemberController:initHooks()
                 member:setMain(updatedFields.isMain)
                 hasCustomFieldChanged = true
             end
+            if updatedFields.role ~= nil and member:getRole() ~= updatedFields.role then
+                member:setRole(updatedFields.role)
+                hasCustomFieldChanged = true
+            end
             if canOfficer and updatedFields.recruiter ~= nil and member:getRecruiter() ~= updatedFields.recruiter then
                 member:setRecruiter(updatedFields.recruiter)
                 hasCustomFieldChanged = true

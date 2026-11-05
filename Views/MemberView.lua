@@ -26,6 +26,28 @@ local RACE_TRANSLATION_PT = {
     ["elfo sangrento"] = "Elfo Sangrento",
 }
 
+local function getRoleLabel()
+    if _G.GM and _G.GM.GetLocale then
+        if _G.GM.GetLocale() == "enUS" then return "Role:" end
+        return "Função:"
+    end
+    if GetLocale and GetLocale() ~= "ptBR" then
+        return "Role:"
+    end
+    return "Função:"
+end
+
+local function getRolePlaceholder()
+    if _G.GM and _G.GM.GetLocale then
+        if _G.GM.GetLocale() == "enUS" then return "(Select Role)" end
+        return "(Selecione a Função)"
+    end
+    if GetLocale and GetLocale() ~= "ptBR" then
+        return "(Select Role)"
+    end
+    return "(Selecione a Função)"
+end
+
 local function getRaceInPortuguese(race)
     if not race or race == "" then return "" end
     local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
@@ -150,7 +172,7 @@ function MemberView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerMemberFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(370, 528)
+    frame:SetSize(370, 568)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -496,7 +518,7 @@ function MemberView:createUI()
     local inset2 = CreateFrame("Frame", nil, frame, template)
     inset2:SetPoint("TOPLEFT", inset1, "BOTTOMLEFT", 0, -8)
     inset2:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
-    inset2:SetHeight(190)
+    inset2:SetHeight(230)
     if inset2.SetBackdrop then
         inset2:SetBackdrop(CONTAINER_BACKDROP)
         inset2:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
@@ -528,7 +550,7 @@ function MemberView:createUI()
     styleEditBox(birthdayEB, "Data de Aniversário (MM/DD)\n|cffaaaaaaClique para editar|r")
     self._birthdayEB = birthdayEB
 
-    -- 2. Nota Interna Customizada (customNote) - Altura Ampliada até próximo ao Recrutador (deixando espaçamento)
+    -- 2. Nota Interna Customizada (customNote) - Altura Ampliada até próximo à Função/Recrutador
     local customNoteLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     customNoteLabel:SetPoint("TOPLEFT", birthdayEB, "BOTTOMLEFT", 0, -6)
     customNoteLabel:SetText("|cffffd200" .. L["MEMBER_INTERNAL_NOTE"] .. "|r")
@@ -537,7 +559,7 @@ function MemberView:createUI()
     -- Container da Nota Interna com Backdrop clássico (evita o colapso nativo do EditBox multiline no motor do WoW)
     local customNoteBox = CreateFrame("Frame", nil, inset2, template)
     customNoteBox:SetPoint("TOPLEFT", customNoteLabel, "BOTTOMLEFT", 0, -2)
-    customNoteBox:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 10, 36)
+    customNoteBox:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 10, 62)
     customNoteBox:SetWidth(155)
     if customNoteBox.SetBackdrop then
         customNoteBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
@@ -691,9 +713,10 @@ function MemberView:createUI()
         if GameTooltip then GameTooltip:Hide() end
     end)
 
-    -- Parte Inferior do Inset 2: Recrutador (Posicionado quase na borda inferior do container)
+    -- Parte Inferior do Inset 2:
+    -- 1. Recrutador (Posicionado acima da Role: y = 34)
     local recruiterBtn = CreateFrame("Button", nil, inset2, template)
-    recruiterBtn:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 76, 8)
+    recruiterBtn:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 76, 34)
     recruiterBtn:SetPoint("RIGHT", inset2, "RIGHT", -10, 0)
     recruiterBtn:SetHeight(20)
     if recruiterBtn.SetBackdrop then
@@ -701,10 +724,11 @@ function MemberView:createUI()
         recruiterBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
         recruiterBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
     end
+    self._recruiterBtn = recruiterBtn
 
     local recruiterLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     recruiterLabel:SetPoint("RIGHT", recruiterBtn, "LEFT", -6, 0)
-    recruiterLabel:SetText("|cffffd200" .. L["MEMBER_RECRUITER"] .. "|r")
+    recruiterLabel:SetText("|cffffd200" .. (L["MEMBER_RECRUITER"] or "Recrutador:") .. "|r")
     self._recruiterLabel = recruiterLabel
 
     local recruiterLabelHit = CreateFrame("Button", nil, inset2)
@@ -731,77 +755,79 @@ function MemberView:createUI()
     recruiterArrow:SetSize(12, 12)
     recruiterArrow:SetPoint("RIGHT", recruiterBtn, "RIGHT", -4, 0)
     recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+    self._recruiterArrow = recruiterArrow
 
-    recruiterBtn:SetScript("OnEnter", function(btn)
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
+    -- 2. Drop box de Role / Função (Posicionado abaixo de Recrutador: y = 8)
+    local roleBtn = CreateFrame("Button", nil, inset2, template)
+    roleBtn:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 76, 8)
+    roleBtn:SetPoint("RIGHT", inset2, "RIGHT", -10, 0)
+    roleBtn:SetHeight(20)
+    if roleBtn.SetBackdrop then
+        roleBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        roleBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        roleBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+    self._roleBtn = roleBtn
 
-        if not canOfficer then
-            if GameTooltip then
-                GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                GameTooltip:AddLine("|cffffd200Recrutador|r", 1, 1, 1)
-                local rec = self._currentMember and type(self._currentMember.getRecruiter) == "function" and self._currentMember:getRecruiter() or ""
-                GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", rec ~= "" and rec or "(Não informado)"), 0.85, 0.85, 0.85, true)
-                GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.|r", 1, 0.3, 0.3, true)
-                GameTooltip:Show()
-            end
-            return
-        end
+    local roleLabel = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    roleLabel:SetPoint("RIGHT", roleBtn, "LEFT", -6, 0)
+    roleLabel:SetText("|cffffd200" .. getRoleLabel() .. "|r")
+    self._roleLabel = roleLabel
 
+    local roleLabelHit = CreateFrame("Button", nil, inset2)
+    roleLabelHit:SetPoint("TOPLEFT", roleLabel, "TOPLEFT", 0, 0)
+    roleLabelHit:SetPoint("BOTTOMRIGHT", roleLabel, "BOTTOMRIGHT", 0, 0)
+    roleLabelHit:SetScript("OnClick", function()
+        self:toggleRoleDropdown()
+    end)
+
+    local roleBtnText = roleBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    roleBtnText:SetPoint("LEFT", roleBtn, "LEFT", 6, 0)
+    roleBtnText:SetPoint("RIGHT", roleBtn, "RIGHT", -18, 0)
+    roleBtnText:SetJustifyH("LEFT")
+    self._roleBtnText = roleBtnText
+
+    local roleArrow = roleBtn:CreateTexture(nil, "OVERLAY")
+    roleArrow:SetSize(12, 12)
+    roleArrow:SetPoint("RIGHT", roleBtn, "RIGHT", -4, 0)
+    roleArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+    self._roleArrow = roleArrow
+
+    roleBtn:SetScript("OnEnter", function(btn)
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
             btn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
         end
-        if recruiterArrow and recruiterArrow.SetTexture then
-            recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Down")
+        if roleArrow and roleArrow.SetTexture and not (self._roleDropdownFrame and self._roleDropdownFrame:IsShown()) then
+            roleArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Down")
         end
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            local rec = self._currentMember and type(self._currentMember.getRecruiter) == "function" and self._currentMember:getRecruiter() or ""
-            if rec ~= "" then
-                GameTooltip:SetText(string.format("Recrutador: |cffffffff%s|r\n|cff00ff00Clique para selecionar outro membro da guilda|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", rec))
-            else
-                GameTooltip:SetText("Recrutador: |cff888888(Não informado)|r\n|cff00ff00Clique para selecionar um membro da guilda|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r")
-            end
+            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+            local lbl = isEn and "Role" or "Função"
+            GameTooltip:AddLine(string.format("|cffffd200%s|r", lbl), 1, 1, 1)
+            local cur = (self._selectedRole and self._selectedRole ~= "") and self._selectedRole or (isEn and "(Unassigned)" or "(Não definida)")
+            GameTooltip:AddLine(string.format(isEn and "Current value: |cffffffff%s|r" or "Valor atual: |cffffffff%s|r", cur), 0.85, 0.85, 0.85)
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(isEn and "|cff00ff00Click to select (TANK, HEALER, DPS)|r" or "|cff00ff00Clique para abrir a seleção (TANK, HEALER, DPS)|r", 0.2, 1.0, 0.2)
             GameTooltip:Show()
         end
     end)
-    recruiterBtn:SetScript("OnLeave", function(btn)
+
+    roleBtn:SetScript("OnLeave", function(btn)
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
             btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
         end
-        if recruiterArrow and recruiterArrow.SetTexture then
-            recruiterArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+        if roleArrow and roleArrow.SetTexture and not (self._roleDropdownFrame and self._roleDropdownFrame:IsShown()) then
+            roleArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
         end
         if GameTooltip then GameTooltip:Hide() end
     end)
-    recruiterBtn:SetScript("OnClick", function()
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
 
-        if not canOfficer then
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para alterar o recrutador.")
-            return
-        end
-        self:toggleRecruiterPicker()
+    roleBtn:SetScript("OnClick", function()
+        self:toggleRoleDropdown()
     end)
-    self._recruiterBtn = recruiterBtn
-    self._recruiterVal = recruiterBtn
-    self._recruiterArrow = recruiterArrow
 end
 
 --- Salva as alterações feitas nos campos customizados da View de forma automática.
@@ -839,6 +865,7 @@ function MemberView:saveCurrentMember()
         dateJoin = dateJoinVal,
         customNote = self._customNoteEB and self._customNoteEB.GetText and self._customNoteEB:GetText() or "",
         recruiter = recruiterVal,
+        role = self._selectedRole or "",
     }
 
     if self._onSaveCallback then
@@ -1140,7 +1167,10 @@ function MemberView:showMember(member, isLocked)
     end
 
     -- Seção Customizada do Addon
-    self._birthdayEB:SetText(member:getBirthday() or "")
+    if self._roleLabel then self._roleLabel:SetText("|cffffd200" .. getRoleLabel() .. "|r") end
+    self._selectedRole = (member.getRole and member:getRole() or ""):upper()
+    self:updateRoleButtonVisual(self._selectedRole)
+        self._birthdayEB:SetText(member:getBirthday() or "")
     self._dateJoinEB:SetText(member:getDateJoin() or "")
     self._customNoteEB:SetText(member:getCustomNote() or "")
 
@@ -1476,6 +1506,113 @@ function MemberView:createRecruiterPickerUI()
         end)
 
         self._pickerRows[i] = btn
+    end
+end
+
+--- Atualiza o estado visual dos botões de função/role (TANK, HEALER, DPS).
+--- Atualiza o texto e visual do botão de Role.
+---@param role string|nil
+function MemberView:updateRoleButtonVisual(role)
+    if not self._roleBtnText then return end
+    local r = (role or ""):upper()
+    self._selectedRole = r
+    if r == "TANK" then
+        self._roleBtnText:SetText("|cff4a90e2TANK|r")
+    elseif r == "HEALER" then
+        self._roleBtnText:SetText("|cff2ecc71HEALER|r")
+    elseif r == "DPS" then
+        self._roleBtnText:SetText("|cffe74c3cDPS|r")
+    else
+        self._roleBtnText:SetText(string.format("|cff888888%s|r", getRolePlaceholder()))
+    end
+end
+
+--- Seleciona uma função/role específica (TANK, HEALER, DPS), atualiza a interface e salva.
+---@param role string
+function MemberView:selectRole(role)
+    self._selectedRole = role or ""
+    self:updateRoleButtonVisual(self._selectedRole)
+    if self._roleDropdownFrame then
+        self._roleDropdownFrame:Hide()
+    end
+    if self._roleArrow and self._roleArrow.SetTexture then
+        self._roleArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+    end
+    self:saveCurrentMember()
+end
+
+--- Abre ou fecha o menu drop box de seleção de Role (TANK, HEALER, DPS).
+function MemberView:toggleRoleDropdown()
+    if not self._roleDropdownFrame then
+        local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+        local drop = CreateFrame("Frame", nil, UIParent, template)
+        drop:SetFrameStrata("TOOLTIP")
+        drop:SetFrameLevel(200)
+        drop:SetClampedToScreen(true)
+        if drop.SetBackdrop then
+            drop:SetBackdrop(CONTAINER_BACKDROP)
+            drop:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
+            drop:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+        end
+
+        local roles = {
+            { id = "TANK",   text = "|cff4a90e2TANK|r",   color = { 0.29, 0.56, 0.88 } },
+            { id = "HEALER", text = "|cff2ecc71HEALER|r", color = { 0.18, 0.80, 0.44 } },
+            { id = "DPS",    text = "|cffe74c3cDPS|r",    color = { 0.91, 0.30, 0.24 } },
+        }
+
+        drop.buttons = {}
+        for i, rDef in ipairs(roles) do
+            local btn = CreateFrame("Button", nil, drop, template)
+            btn:SetHeight(20)
+            btn:SetPoint("TOPLEFT", drop, "TOPLEFT", 6, -6 - ((i - 1) * 22))
+            btn:SetPoint("RIGHT", drop, "RIGHT", -6, 0)
+            if btn.SetBackdrop then
+                btn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+                btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.9)
+                btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.8)
+            end
+
+            local t = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            t:SetPoint("LEFT", btn, "LEFT", 8, 0)
+            t:SetText(rDef.text)
+            btn.text = t
+
+            btn:SetScript("OnEnter", function(b)
+                if b.SetBackdropBorderColor then
+                    b:SetBackdropBorderColor(rDef.color[1], rDef.color[2], rDef.color[3], 1.0)
+                    b:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], 0.95)
+                end
+            end)
+            btn:SetScript("OnLeave", function(b)
+                if b.SetBackdropBorderColor then
+                    b:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.8)
+                    b:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.9)
+                end
+            end)
+            btn:SetScript("OnClick", function()
+                self:selectRole(rDef.id)
+            end)
+            table.insert(drop.buttons, btn)
+        end
+
+        self._roleDropdownFrame = drop
+    end
+
+    if self._roleDropdownFrame:IsShown() then
+        self._roleDropdownFrame:Hide()
+        if self._roleArrow and self._roleArrow.SetTexture then
+            self._roleArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up")
+        end
+    else
+        self._roleDropdownFrame:ClearAllPoints()
+        self._roleDropdownFrame:SetPoint("TOPLEFT", self._roleBtn, "BOTTOMLEFT", 0, -2)
+        self._roleDropdownFrame:SetPoint("RIGHT", self._roleBtn, "RIGHT", 0, 0)
+        self._roleDropdownFrame:SetHeight(76)
+        self._roleDropdownFrame:Show()
+        if self._roleArrow and self._roleArrow.SetTexture then
+            self._roleArrow:SetTexture("Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Down")
+        end
     end
 end
 

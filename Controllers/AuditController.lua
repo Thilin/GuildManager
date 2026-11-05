@@ -69,6 +69,10 @@ function AuditController:initHooks()
                 member:setDateJoin(fields.dateJoin)
                 hasChanged = true
             end
+            if fields.role ~= nil and member:getRole() ~= fields.role then
+                member:setRole(fields.role)
+                hasChanged = true
+            end
             if fields.birthday ~= nil and member:getBirthday() ~= fields.birthday then
                 member:setBirthday(fields.birthday)
                 hasChanged = true

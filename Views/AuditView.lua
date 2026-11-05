@@ -70,19 +70,20 @@ local PALETTE = {
 
 --- Definição otimizada das colunas com espaçamentos proporcionais e a coluna ONLINE entre Cargo e Nota Pública
 local COLUMNS = {
-    { id = "name",        title = "PERSONAGEM",       x = 0,    width = 200, align = "LEFT",   editable = false },
-    { id = "level",       title = "NV",               x = 200,  width = 34,  align = "CENTER", editable = false },
-    { id = "rank",        title = "CARGO",            x = 234,  width = 95,  align = "LEFT",   editable = false },
-    { id = "online",      title = "ONLINE",           x = 329,  width = 95,  align = "LEFT",   editable = false },
-    { id = "publicNote",  title = "NOTA PÚBLICA",      x = 424,  width = 125, align = "LEFT",   editable = false },
-    { id = "officerNote", title = "NOTA DE OFICIAL",   x = 549,  width = 125, align = "LEFT",   editable = false },
-    { id = "dateJoin",    title = "ENTRADA",          x = 674,  width = 85,  align = "LEFT",   editable = true,  label = "Data de Entrada" },
-    { id = "recruiter",   title = "RECRUTADOR",       x = 759,  width = 105, align = "LEFT",   editable = true,  label = "Recrutador" },
-    { id = "birthday",    title = "ANIVERSÁRIO",      x = 864,  width = 80,  align = "LEFT",   editable = true,  label = "Aniversário" },
-    { id = "customNote",  title = "NOTA INTERNA",     x = 944,  width = 200, align = "LEFT",   editable = true,  label = "Nota Interna" },
+    { id = "name",        title = "PERSONAGEM",       x = 0,    width = 195, align = "LEFT",   editable = false },
+    { id = "level",       title = "NV",               x = 195,  width = 32,  align = "CENTER", editable = false },
+    { id = "role",        title = "FUNÇÃO",           x = 227,  width = 68,  align = "CENTER", editable = true,  label = "Função / Role" },
+    { id = "rank",        title = "CARGO",            x = 295,  width = 90,  align = "LEFT",   editable = false },
+    { id = "online",      title = "ONLINE",           x = 385,  width = 90,  align = "LEFT",   editable = false },
+    { id = "publicNote",  title = "NOTA PÚBLICA",      x = 475,  width = 120, align = "LEFT",   editable = false },
+    { id = "officerNote", title = "NOTA DE OFICIAL",   x = 595,  width = 120, align = "LEFT",   editable = false },
+    { id = "dateJoin",    title = "ENTRADA",          x = 715,  width = 85,  align = "LEFT",   editable = true,  label = "Data de Entrada" },
+    { id = "recruiter",   title = "RECRUTADOR",       x = 800,  width = 100, align = "LEFT",   editable = true,  label = "Recrutador" },
+    { id = "birthday",    title = "ANIVERSÁRIO",      x = 900,  width = 80,  align = "LEFT",   editable = true,  label = "Aniversário" },
+    { id = "customNote",  title = "NOTA INTERNA",     x = 980,  width = 190, align = "LEFT",   editable = true,  label = "Nota Interna" },
 }
 
-local TOTAL_TABLE_WIDTH = 1144
+local TOTAL_TABLE_WIDTH = 1170
 
 --- Retorna a data de hoje no formato AAAA-MM-DD.
 ---@return string
@@ -691,39 +692,39 @@ function AuditView:createUI()
 
         -- Coluna 2: Nível (Centralizado)
         local levelTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        levelTxt:SetPoint("LEFT", row, "LEFT", 200, 0)
-        levelTxt:SetWidth(34)
+        levelTxt:SetPoint("LEFT", row, "LEFT", 195, 0)
+        levelTxt:SetWidth(32)
         levelTxt:SetJustifyH("CENTER")
         row.levelTxt = levelTxt
 
         -- Coluna 3: Cargo (Rank da Guilda)
         local rankTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        rankTxt:SetPoint("LEFT", row, "LEFT", 234, 0)
-        rankTxt:SetWidth(92)
+        rankTxt:SetPoint("LEFT", row, "LEFT", 295, 0)
+        rankTxt:SetWidth(88)
         rankTxt:SetJustifyH("LEFT")
         rankTxt:SetWordWrap(false)
         row.rankTxt = rankTxt
 
         -- Coluna 4: ONLINE (Status de Conexão ou Tempo desde Última Vez Online)
         local onlineTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        onlineTxt:SetPoint("LEFT", row, "LEFT", 329, 0)
-        onlineTxt:SetWidth(92)
+        onlineTxt:SetPoint("LEFT", row, "LEFT", 385, 0)
+        onlineTxt:SetWidth(88)
         onlineTxt:SetJustifyH("LEFT")
         onlineTxt:SetWordWrap(false)
         row.onlineTxt = onlineTxt
 
         -- Coluna 5: Nota Pública (Blizzard - Somente Leitura)
         local publicNoteTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        publicNoteTxt:SetPoint("LEFT", row, "LEFT", 424, 0)
-        publicNoteTxt:SetWidth(121)
+        publicNoteTxt:SetPoint("LEFT", row, "LEFT", 475, 0)
+        publicNoteTxt:SetWidth(116)
         publicNoteTxt:SetJustifyH("LEFT")
         publicNoteTxt:SetWordWrap(false)
         row.publicNoteTxt = publicNoteTxt
 
         -- Coluna 6: Nota de Oficial (Blizzard - Somente Leitura)
         local officerNoteTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        officerNoteTxt:SetPoint("LEFT", row, "LEFT", 549, 0)
-        officerNoteTxt:SetWidth(121)
+        officerNoteTxt:SetPoint("LEFT", row, "LEFT", 595, 0)
+        officerNoteTxt:SetWidth(116)
         officerNoteTxt:SetJustifyH("LEFT")
         officerNoteTxt:SetWordWrap(false)
         row.officerNoteTxt = officerNoteTxt
@@ -760,7 +761,10 @@ function AuditView:createUI()
                     local currentVal = cellTxt:GetText() or ""
                     GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", currentVal), 0.85, 0.85, 0.85, true)
                     GameTooltip:AddLine(" ")
-                    if (colId == "dateJoin" or colId == "recruiter") then
+                    if colId == "role" then
+                        GameTooltip:AddLine("|cff00ff00Clique com botão esquerdo para alternar (TANK -> HEALER -> DPS)|r", 0.2, 1.0, 0.2)
+                        GameTooltip:AddLine("|cffaaaaaaClique com botão direito para abrir a janela de edição|r", 0.7, 0.7, 0.7)
+                    elseif (colId == "dateJoin" or colId == "recruiter") then
                         local canOfficer = false
                         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
                             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -785,8 +789,32 @@ function AuditView:createUI()
                 GameTooltip:Hide()
             end)
 
-            cellBtn:SetScript("OnClick", function()
+            cellBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            cellBtn:SetScript("OnClick", function(_, button)
                 if row.rowData and row.rowData.member then
+                    if colId == "role" and button == "LeftButton" then
+                        local m = row.rowData.member
+                        local cur = (m.getRole and m:getRole() or ""):upper()
+                        local nextR = "TANK"
+                        if cur == "TANK" then
+                            nextR = "HEALER"
+                        elseif cur == "HEALER" then
+                            nextR = "DPS"
+                        elseif cur == "DPS" then
+                            nextR = "TANK"
+                        end
+                        m:setRole(nextR)
+                        m:setCustomDataTimestamp(getCurrentTimestamp())
+                        if self._onSaveCallback then
+                            self._onSaveCallback(m, { role = nextR })
+                        else
+                            if _G.GM and _G.GM.memberService then
+                                _G.GM.memberService:saveMember(m)
+                            end
+                        end
+                        self:refreshRows()
+                        return
+                    end
                     self:openEditModal(row.rowData.member, colId)
                 end
             end)
@@ -794,23 +822,28 @@ function AuditView:createUI()
             return cellBtn
         end
 
+        -- Coluna 2.5: Função / Role (Editável)
+        local roleCell = setupEditableCell("role", 227, 68, "Função / Role")
+        row.roleBtn = roleCell
+        row.roleTxt = roleCell.txt
+
         -- Coluna 7: Data de Entrada (Editável)
-        local dateJoinCell = setupEditableCell("dateJoin", 674, 85, "Data de Entrada")
+        local dateJoinCell = setupEditableCell("dateJoin", 715, 85, "Data de Entrada")
         row.dateJoinBtn = dateJoinCell
         row.dateJoinTxt = dateJoinCell.txt
 
         -- Coluna 8: Recrutador (Editável)
-        local recruiterCell = setupEditableCell("recruiter", 759, 105, "Recrutador")
+        local recruiterCell = setupEditableCell("recruiter", 800, 100, "Recrutador")
         row.recruiterBtn = recruiterCell
         row.recruiterTxt = recruiterCell.txt
 
         -- Coluna 9: Aniversário (Editável)
-        local birthdayCell = setupEditableCell("birthday", 864, 80, "Aniversário")
+        local birthdayCell = setupEditableCell("birthday", 900, 80, "Aniversário")
         row.birthdayBtn = birthdayCell
         row.birthdayTxt = birthdayCell.txt
 
         -- Coluna 10: Nota Interna (Editável)
-        local customNoteCell = setupEditableCell("customNote", 944, 200, "Nota Interna")
+        local customNoteCell = setupEditableCell("customNote", 980, 190, "Nota Interna")
         row.customNoteBtn = customNoteCell
         row.customNoteTxt = customNoteCell.txt
 
@@ -1486,7 +1519,7 @@ function AuditView:createEditModal()
 
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local modal = CreateFrame("Frame", "GuildManagerAuditEditModal", UIParent, template)
-    modal:SetSize(460, 390)
+    modal:SetSize(460, 426)
     modal:SetFrameStrata("DIALOG")
     modal:SetToplevel(true)
     modal:SetClampedToScreen(true)
@@ -1776,9 +1809,44 @@ function AuditView:createEditModal()
     birthdayHint:SetPoint("LEFT", birthdayEB, "RIGHT", 8, 0)
     birthdayHint:SetText("|cff888888Exemplo: 15/07|r")
 
+    -- CAMPO: FUNÇÃO / ROLE
+    local roleModalLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    roleModalLabel:SetPoint("TOPLEFT", birthdayEB, "BOTTOMLEFT", 0, -10)
+    roleModalLabel:SetText("|cffffd200" .. (L["EDIT_ROLE_LABEL"] or "Função / Role:") .. "|r")
+    modal.roleLabel = roleModalLabel
+
+    local roleBtnDefs = {
+        { id = "TANK",   text = "TANK",   color = { 0.29, 0.56, 0.88 } },
+        { id = "HEALER", text = "HEALER", color = { 0.18, 0.80, 0.44 } },
+        { id = "DPS",    text = "DPS",    color = { 0.91, 0.30, 0.24 } },
+    }
+    modal.roleButtons = {}
+    for i, rDef in ipairs(roleBtnDefs) do
+        local rBtn = CreateFrame("Button", nil, modal, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        rBtn:SetPoint("TOPLEFT", roleModalLabel, "BOTTOMLEFT", (i - 1) * 88, -4)
+        rBtn:SetSize(82, 22)
+        if rBtn.SetBackdrop then
+            rBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
+            rBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.9)
+            rBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.8)
+        end
+
+        local t = rBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        t:SetPoint("CENTER", rBtn, "CENTER", 0, 0)
+        t:SetText(rDef.text)
+        rBtn.text = t
+        rBtn.rDef = rDef
+
+        rBtn:SetScript("OnClick", function()
+            modal.selectedRole = rDef.id
+            self:updateModalRoleButtons(modal.selectedRole)
+        end)
+        modal.roleButtons[rDef.id] = rBtn
+    end
+
     -- 4. CAMPO: NOTA INTERNA
     local customNoteLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    customNoteLabel:SetPoint("TOPLEFT", birthdayEB, "BOTTOMLEFT", 0, -10)
+    customNoteLabel:SetPoint("TOPLEFT", modal.roleButtons["TANK"], "BOTTOMLEFT", 0, -10)
     customNoteLabel:SetText("|cffffd200" .. L["EDIT_CUSTOM_NOTE_LABEL"] .. "|r")
     modal.customNoteLabel = customNoteLabel
 
@@ -1843,6 +1911,30 @@ end
 --- Abre a modal de edição para um determinado membro e foca no campo especificado.
 ---@param member Member
 ---@param fieldToFocus string|nil @"dateJoin"|"recruiter"|"birthday"|"customNote"
+--- Atualiza o estado visual dos botões de Role na modal de edição.
+---@param activeRole string|nil
+function AuditView:updateModalRoleButtons(activeRole)
+    local modal = self._editModal
+    if not modal or not modal.roleButtons then return end
+    for rId, btn in pairs(modal.roleButtons) do
+        local isActive = (rId == activeRole)
+        if isActive then
+            local color = btn.rDef.color
+            if btn.SetBackdropBorderColor then
+                btn:SetBackdropBorderColor(color[1], color[2], color[3], 1.0)
+                btn:SetBackdropColor(color[1] * 0.25, color[2] * 0.25, color[3] * 0.25, 0.95)
+            end
+            btn.text:SetTextColor(color[1], color[2], color[3])
+        else
+            if btn.SetBackdropBorderColor then
+                btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.8)
+                btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.9)
+            end
+            btn.text:SetTextColor(0.7, 0.7, 0.7)
+        end
+    end
+end
+
 function AuditView:openEditModal(member, fieldToFocus)
     if not member then return end
     self:createEditModal()
@@ -1864,6 +1956,8 @@ function AuditView:openEditModal(member, fieldToFocus)
     modal.recruiterEB:SetText(member:getRecruiter() or "")
     modal.birthdayEB:SetText(member:getBirthday() or "")
     modal.customNoteEB:SetText(member:getCustomNote() or "")
+    modal.selectedRole = (member.getRole and member:getRole() or ""):upper()
+    self:updateModalRoleButtons(modal.selectedRole)
 
     local canOfficer = false
     if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
@@ -1970,6 +2064,7 @@ function AuditView:saveModalChanges()
         recruiter = newRecruiter,
         birthday = newBirthday,
         customNote = newCustomNote,
+        role = modal.selectedRole or "",
     }
 
     if self._onSaveCallback then
@@ -1987,6 +2082,7 @@ function AuditView:saveModalChanges()
 
         member:setBirthday(newBirthday)
         member:setCustomNote(newCustomNote)
+        if modal.selectedRole and modal.selectedRole ~= "" then member:setRole(modal.selectedRole) end
 
         if _G.GM and _G.GM.memberService and _G.GM.memberService.saveMember then
             _G.GM.memberService:saveMember(member)
@@ -2516,6 +2612,18 @@ function AuditView:renderRows()
             -- Coluna 2: Nível (Centralizado e nítido)
             local lvl = m:getLevel() or 1
             row.levelTxt:SetText(string.format("|cffffffff%d|r", lvl))
+
+            -- Coluna Função / Role
+            local roleVal = (m.getRole and m:getRole() or ""):upper()
+            if roleVal == "TANK" then
+                row.roleTxt:SetText("|cff4a90e2TANK|r")
+            elseif roleVal == "HEALER" then
+                row.roleTxt:SetText("|cff2ecc71HEALER|r")
+            elseif roleVal == "DPS" then
+                row.roleTxt:SetText("|cffe74c3cDPS|r")
+            else
+                row.roleTxt:SetText("|cff777777-|r")
+            end
 
             -- Coluna 3: Cargo (Rank da guilda)
             local rank = m:getRankName()
