@@ -37,6 +37,53 @@ local function getRoleLabel()
     return "Função:"
 end
 
+
+local PRIMARY_PROF_ORDER = {
+    "ALCHEMY", "BLACKSMITHING", "ENCHANTING", "ENGINEERING", "LEATHERWORKING", "TAILORING",
+    "MINING", "HERBALISM", "SKINNING"
+}
+
+local SECONDARY_PROF_ORDER = {
+    "COOKING", "FIRST_AID", "FISHING"
+}
+
+local PROF_ORDER = {
+    "ALCHEMY", "BLACKSMITHING", "ENCHANTING", "ENGINEERING", "LEATHERWORKING", "TAILORING",
+    "MINING", "HERBALISM", "SKINNING",
+    "COOKING", "FIRST_AID", "FISHING"
+}
+
+local PROF_NAMES_LOCALIZED = {
+    ptBR = {
+        ALCHEMY = "Alquimia",
+        BLACKSMITHING = "Ferraria",
+        ENCHANTING = "Encantamento",
+        ENGINEERING = "Engenharia",
+        LEATHERWORKING = "Couraria",
+        TAILORING = "Alfaiataria",
+        MINING = "Mineração",
+        HERBALISM = "Herborismo",
+        SKINNING = "Esfolamento",
+        COOKING = "Culinária",
+        FIRST_AID = "Primeiros Socorros",
+        FISHING = "Pescaria",
+    },
+    enUS = {
+        ALCHEMY = "Alchemy",
+        BLACKSMITHING = "Blacksmithing",
+        ENCHANTING = "Enchanting",
+        ENGINEERING = "Engineering",
+        LEATHERWORKING = "Leatherworking",
+        TAILORING = "Tailoring",
+        MINING = "Mining",
+        HERBALISM = "Herbalism",
+        SKINNING = "Skinning",
+        COOKING = "Cooking",
+        FIRST_AID = "First Aid",
+        FISHING = "Fishing",
+    }
+}
+
 local function getRolePlaceholder()
     if _G.GM and _G.GM.GetLocale then
         if _G.GM.GetLocale() == "enUS" then return "(Select Role)" end
@@ -172,7 +219,7 @@ function MemberView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerMemberFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(370, 568)
+    frame:SetSize(425, 574)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -339,7 +386,7 @@ function MemberView:createUI()
     local inset1 = CreateFrame("Frame", nil, frame, template)
     inset1:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -64)
     inset1:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
-    inset1:SetHeight(232)
+    inset1:SetHeight(244)
     if inset1.SetBackdrop then
         inset1:SetBackdrop(CONTAINER_BACKDROP)
         inset1:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
@@ -360,39 +407,39 @@ function MemberView:createUI()
     -- Coluna Esquerda do Inset 1:
     -- Nível
     local levelLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    levelLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 2, -6)
+    levelLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 8, -6)
     levelLabel:SetText("|cffffd200" .. L["MEMBER_LEVEL"] .. "|r")
     self._levelLabel = levelLabel
     local levelVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    levelVal:SetPoint("LEFT", levelLabel, "RIGHT", 6, 0)
+    levelVal:SetPoint("LEFT", levelLabel, "RIGHT", 5, 0)
     self._levelVal = levelVal
 
     -- Classe
     local classLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    classLabel:SetPoint("TOPLEFT", levelLabel, "BOTTOMLEFT", 0, -4)
+    classLabel:SetPoint("TOPLEFT", levelLabel, "BOTTOMLEFT", 0, -6)
     classLabel:SetText("|cffffd200" .. L["MEMBER_CLASS"] .. "|r")
     self._classLabel = classLabel
     local classVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    classVal:SetPoint("LEFT", classLabel, "RIGHT", 6, 0)
+    classVal:SetPoint("LEFT", classLabel, "RIGHT", 5, 0)
     self._classVal = classVal
 
     -- Cargo
     local rankLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    rankLabel:SetPoint("TOPLEFT", classLabel, "BOTTOMLEFT", 0, -4)
+    rankLabel:SetPoint("TOPLEFT", classLabel, "BOTTOMLEFT", 0, -6)
     rankLabel:SetText("|cffffd200" .. L["MEMBER_RANK"] .. "|r")
     self._rankLabel = rankLabel
     local rankVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    rankVal:SetPoint("LEFT", rankLabel, "RIGHT", 6, 0)
+    rankVal:SetPoint("LEFT", rankLabel, "RIGHT", 5, 0)
     self._rankVal = rankVal
 
     -- Entrada (Data de entrada do personagem - editável ao clicar)
     local dateJoinLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    dateJoinLabel:SetPoint("TOPLEFT", rankLabel, "BOTTOMLEFT", 0, -4)
+    dateJoinLabel:SetPoint("TOPLEFT", rankLabel, "BOTTOMLEFT", 0, -6)
     dateJoinLabel:SetText("|cffffd200" .. L["MEMBER_JOIN_DATE"] .. "|r")
     self._dateJoinLabel = dateJoinLabel
     local dateJoinEB = CreateFrame("EditBox", nil, inset1, template)
-    dateJoinEB:SetPoint("LEFT", dateJoinLabel, "RIGHT", 6, 0)
-    dateJoinEB:SetSize(86, 18)
+    dateJoinEB:SetPoint("LEFT", dateJoinLabel, "RIGHT", 5, 0)
+    dateJoinEB:SetSize(76, 18)
     styleEditBox(dateJoinEB, nil)
     self._dateJoinEB = dateJoinEB
 
@@ -444,24 +491,65 @@ function MemberView:createUI()
     dateJoinHit:SetScript("OnEnter", function() showDateJoinTooltip(dateJoinEB) end)
     dateJoinHit:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
-    -- Coluna Direita do Inset 1:
+    -- Coluna Direita do Inset 1 (posicionada em X=192 para espaçamento generoso e zero sobreposição):
+    local RIGHT_COL_X = 192
+
     -- Status
     local statusLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    statusLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 170, -6)
+    statusLabel:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", RIGHT_COL_X, -6)
     statusLabel:SetText("|cffffd200" .. L["MEMBER_STATUS"] .. "|r")
     self._statusLabel = statusLabel
     local statusVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    statusVal:SetPoint("LEFT", statusLabel, "RIGHT", 6, 0)
+    statusVal:SetPoint("LEFT", statusLabel, "RIGHT", 5, 0)
     self._statusVal = statusVal
 
     -- Zona
     local zoneLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    zoneLabel:SetPoint("TOPLEFT", statusLabel, "BOTTOMLEFT", 0, -4)
+    zoneLabel:SetPoint("TOPLEFT", statusLabel, "BOTTOMLEFT", 0, -6)
     zoneLabel:SetText("|cffffd200" .. L["MEMBER_ZONE"] .. "|r")
     self._zoneLabel = zoneLabel
     local zoneVal = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    zoneVal:SetPoint("LEFT", zoneLabel, "RIGHT", 6, 0)
+    zoneVal:SetPoint("LEFT", zoneLabel, "RIGHT", 5, 0)
+    zoneVal:SetPoint("RIGHT", inset1, "RIGHT", -8, 0)
+    zoneVal:SetJustifyH("LEFT")
+    zoneVal:SetWordWrap(false)
     self._zoneVal = zoneVal
+
+    -- Profissões (Abaixo de Zona)
+    local prof1Label = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    prof1Label:SetPoint("TOPLEFT", zoneLabel, "BOTTOMLEFT", 0, -6)
+    prof1Label:SetText("|cffffd200" .. (L["MEMBER_PROFESSION"] or "Profissão:") .. "|r")
+    self._prof1Label = prof1Label
+
+    local prof1Val = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    prof1Val:SetPoint("LEFT", prof1Label, "RIGHT", 5, 0)
+    prof1Val:SetPoint("RIGHT", inset1, "RIGHT", -8, 0)
+    prof1Val:SetJustifyH("LEFT")
+    prof1Val:SetWordWrap(false)
+    self._prof1Val = prof1Val
+
+    local prof2Label = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    prof2Label:SetPoint("TOPLEFT", prof1Label, "BOTTOMLEFT", 0, -6)
+    prof2Label:SetText("|cffffd200" .. (L["MEMBER_PROF_2"] or "Profissão 2:") .. "|r")
+    self._prof2Label = prof2Label
+
+    local prof2Val = inset1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    prof2Val:SetPoint("LEFT", prof2Label, "RIGHT", 5, 0)
+    prof2Val:SetPoint("RIGHT", inset1, "RIGHT", -8, 0)
+    prof2Val:SetJustifyH("LEFT")
+    prof2Val:SetWordWrap(false)
+    self._prof2Val = prof2Val
+
+    local profHit = CreateFrame("Button", nil, inset1)
+    profHit:SetPoint("TOPLEFT", prof1Label, "TOPLEFT", 0, 0)
+    profHit:SetPoint("BOTTOMRIGHT", prof2Val, "BOTTOMRIGHT", 0, 0)
+    profHit:SetScript("OnEnter", function(btn)
+        self:showProfessionsTooltip(btn)
+    end)
+    profHit:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    self._profHit = profHit
 
     -- Abaixo das colunas:
     -- Nota Pública (Container no estilo Note do padrão clássico Blizzard)
@@ -518,7 +606,7 @@ function MemberView:createUI()
     local inset2 = CreateFrame("Frame", nil, frame, template)
     inset2:SetPoint("TOPLEFT", inset1, "BOTTOMLEFT", 0, -8)
     inset2:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
-    inset2:SetHeight(230)
+    inset2:SetHeight(236)
     if inset2.SetBackdrop then
         inset2:SetBackdrop(CONTAINER_BACKDROP)
         inset2:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
@@ -560,7 +648,7 @@ function MemberView:createUI()
     local customNoteBox = CreateFrame("Frame", nil, inset2, template)
     customNoteBox:SetPoint("TOPLEFT", customNoteLabel, "BOTTOMLEFT", 0, -2)
     customNoteBox:SetPoint("BOTTOMLEFT", inset2, "BOTTOMLEFT", 10, 62)
-    customNoteBox:SetWidth(155)
+    customNoteBox:SetWidth(176)
     if customNoteBox.SetBackdrop then
         customNoteBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
         customNoteBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
@@ -640,7 +728,7 @@ function MemberView:createUI()
     -- Coluna Direita do Inset 2:
     -- Alts Vinculados (alts) - Altura Expandida acompanhando a Nota Interna até próximo ao Recrutador
     local altsLabelBtn = CreateFrame("Button", nil, inset2)
-    altsLabelBtn:SetPoint("TOPLEFT", sep2, "BOTTOMLEFT", 170, -6)
+    altsLabelBtn:SetPoint("TOPLEFT", sep2, "BOTTOMLEFT", 192, -6)
     altsLabelBtn:SetSize(160, 14)
 
     local altsLabel = altsLabelBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -978,6 +1066,7 @@ function MemberView:updateLocale()
     if self._recruiterLabel then self._recruiterLabel:SetText("|cffffd200" .. L["MEMBER_RECRUITER"] .. "|r") end
 
     if self._currentMember and self._frame:IsShown() then
+        self:updateProfessionsVisual(self._currentMember)
         self:showMember(self._currentMember, self._isLocked)
     end
 end
@@ -1009,6 +1098,19 @@ function MemberView:showMember(member, isLocked)
     self._currentMember = member
     if isLocked ~= nil then
         self:setLocked(isLocked)
+    end
+
+    -- Se o membro exibido for o jogador local, garante scan imediato das perícias (coleta e fabricação)
+    if _G.GM and _G.GM.professionService and _G.GM.professionService.scanPlayerSkills then
+        local pName = UnitName and UnitName("player")
+        if pName and member and member.getName then
+            local mName = member:getName() or ""
+            local cleanM = (mName:match("^[^-]+") or mName):lower():gsub("%s+", "")
+            local cleanP = (pName:match("^[^-]+") or pName):lower():gsub("%s+", "")
+            if cleanM == cleanP then
+                pcall(function() _G.GM.professionService:scanPlayerSkills(member) end)
+            end
+        end
     end
 
     local function getFactionTexture(m)
@@ -1116,6 +1218,7 @@ function MemberView:showMember(member, isLocked)
 
     local zone = member:getZone()
     self._zoneVal:SetText(zone ~= "" and zone or (isEn and "Unknown" or "Desconhecida"))
+    self:updateProfessionsVisual(member)
 
     local publicNote = member:getPublicNote()
     self._publicNoteVal:SetText(publicNote ~= "" and publicNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
@@ -2669,3 +2772,159 @@ end
 function memberView()
     return MemberView:new()
 end
+
+
+local function getLocalizedProfName(profKey, fallbackName)
+    if not profKey or profKey == "" then return fallbackName or "" end
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    local uKey = tostring(profKey):upper()
+    local dict = isEn and PROF_NAMES_LOCALIZED.enUS or PROF_NAMES_LOCALIZED.ptBR
+    if dict and dict[uKey] then
+        return dict[uKey]
+    end
+    return fallbackName or profKey
+end
+
+--- Exibe tooltip rica detalhando as profissões e receitas do membro atual.
+---@param anchor table
+function MemberView:showProfessionsTooltip(anchor)
+    if not GameTooltip or not self._currentMember then return end
+    GameTooltip:SetOwner(anchor, "ANCHOR_TOP")
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    GameTooltip:AddLine(isEn and "|cffffd200Character Professions|r" or "|cffffd200Profissões do Personagem|r", 1, 0.82, 0)
+
+    local profs = self._currentMember.getProfessions and self._currentMember:getProfessions()
+    local hasAny = false
+    if type(profs) == "table" then
+        local seen = {}
+        for _, pKey in ipairs(PROF_ORDER) do
+            local pData = profs[pKey] or profs[pKey:lower()] or profs[pKey:sub(1,1):upper() .. pKey:sub(2):lower()]
+            if pData and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
+                hasAny = true
+                seen[pKey:upper()] = true
+                local pName = getLocalizedProfName(pKey, pData.name)
+                local rk = pData.rank or 0
+                local mx = pData.maxRank or 300
+                local recCount = 0
+                if type(pData.recipes) == "table" then
+                    for _ in pairs(pData.recipes) do recCount = recCount + 1 end
+                end
+                if recCount > 0 then
+                    local recLabel = isEn and "recipes" or "receitas"
+                    GameTooltip:AddLine(string.format("• |cffffffff%s:|r |cff00ff00%d/%d|r |cffaaaaaa(%d %s)|r", pName, rk, mx, recCount, recLabel), 0.9, 0.9, 0.9)
+                else
+                    GameTooltip:AddLine(string.format("• |cffffffff%s:|r |cff00ff00%d/%d|r", pName, rk, mx), 0.9, 0.9, 0.9)
+                end
+            end
+        end
+        for pKey, pData in pairs(profs) do
+            local uKey = tostring(pKey):upper()
+            if not seen[uKey] and type(pData) == "table" and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
+                hasAny = true
+                seen[uKey] = true
+                local pName = getLocalizedProfName(pKey, pData.name)
+                local rk = pData.rank or 0
+                local mx = pData.maxRank or 300
+                GameTooltip:AddLine(string.format("• |cffffffff%s:|r |cff00ff00%d/%d|r", pName, rk, mx), 0.9, 0.9, 0.9)
+            end
+        end
+    end
+    if not hasAny then
+        GameTooltip:AddLine(isEn and "|cff888888No professions recorded for this character.|r" or "|cff888888Nenhuma profissão registrada para este personagem.|r", 0.7, 0.7, 0.7)
+    end
+    GameTooltip:Show()
+end
+
+--- Atualiza as informações visuais das profissões do membro exibido.
+---@param member Member
+function MemberView:updateProfessionsVisual(member)
+    if not self._prof1Label or not self._prof1Val then return end
+
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+
+    if not member or not member.getProfessions then
+        self._prof1Label:SetText("|cffffd200" .. (curL["MEMBER_PROFESSION"] or "Profissão:") .. "|r")
+        self._prof1Val:SetText("|cff888888" .. (curL["MEMBER_NO_PROFESSIONS"] or "(Nenhuma)") .. "|r")
+        if self._prof2Label then self._prof2Label:Hide() end
+        if self._prof2Val then self._prof2Val:Hide() end
+        return
+    end
+
+    local profs = member:getProfessions()
+    local primaryList = {}
+    local secondaryList = {}
+    local seen = {}
+
+    if type(profs) == "table" then
+        -- 1. Coleta prioritariamente as 9 Profissões Primárias (Fabricação + Coleta)
+        for _, pKey in ipairs(PRIMARY_PROF_ORDER) do
+            local pData = profs[pKey] or profs[pKey:lower()] or profs[pKey:sub(1,1):upper() .. pKey:sub(2):lower()]
+            if pData and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
+                seen[pKey:upper()] = true
+                local pName = getLocalizedProfName(pKey, pData.name)
+                table.insert(primaryList, { key = pKey, name = pName, rank = pData.rank or 0, maxRank = pData.maxRank or 300 })
+            end
+        end
+
+        -- 2. Coleta as Profissões Secundárias
+        for _, pKey in ipairs(SECONDARY_PROF_ORDER) do
+            local pData = profs[pKey] or profs[pKey:lower()] or profs[pKey:sub(1,1):upper() .. pKey:sub(2):lower()]
+            if pData and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
+                seen[pKey:upper()] = true
+                local pName = getLocalizedProfName(pKey, pData.name)
+                table.insert(secondaryList, { key = pKey, name = pName, rank = pData.rank or 0, maxRank = pData.maxRank or 300 })
+            end
+        end
+
+        -- 3. Qualquer outra profissão não capturada
+        for pKey, pData in pairs(profs) do
+            local uKey = tostring(pKey):upper()
+            if not seen[uKey] and type(pData) == "table" and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
+                seen[uKey] = true
+                local pName = getLocalizedProfName(pKey, pData.name)
+                table.insert(primaryList, { key = pKey, name = pName, rank = pData.rank or 0, maxRank = pData.maxRank or 300 })
+            end
+        end
+    end
+
+    -- Preenche a lista com as profissões primárias (as duas profissões do player, incluindo coleta)
+    local list = {}
+    for _, p in ipairs(primaryList) do
+        table.insert(list, p)
+    end
+    -- Se tiver menos de 2 primárias, completa com secundárias para exibir se houver
+    if #list < 2 then
+        for _, p in ipairs(secondaryList) do
+            table.insert(list, p)
+            if #list == 2 then break end
+        end
+    end
+
+    if #list == 0 then
+        self._prof1Label:SetText("|cffffd200" .. (curL["MEMBER_PROFESSION"] or "Profissão:") .. "|r")
+        self._prof1Val:SetText("|cff888888" .. (curL["MEMBER_NO_PROFESSIONS"] or "(Nenhuma)") .. "|r")
+        if self._prof2Label then self._prof2Label:Hide() end
+        if self._prof2Val then self._prof2Val:Hide() end
+    elseif #list == 1 then
+        local p = list[1]
+        self._prof1Label:SetText("|cffffd200" .. (curL["MEMBER_PROFESSION"] or "Profissão:") .. "|r")
+        self._prof1Val:SetText(string.format("|cffffffff%s|r |cff00ff00(%d/%d)|r", p.name, p.rank, p.maxRank))
+        if self._prof2Label then self._prof2Label:Hide() end
+        if self._prof2Val then self._prof2Val:Hide() end
+    else
+        local p1 = list[1]
+        local p2 = list[2]
+        self._prof1Label:SetText("|cffffd200" .. (curL["MEMBER_PROF_1"] or (isEn and "Prof. 1:" or "Profissão 1:")) .. "|r")
+        self._prof1Val:SetText(string.format("|cffffffff%s|r |cff00ff00(%d/%d)|r", p1.name, p1.rank, p1.maxRank))
+        if self._prof2Label then
+            self._prof2Label:SetText("|cffffd200" .. (curL["MEMBER_PROF_2"] or (isEn and "Prof. 2:" or "Profissão 2:")) .. "|r")
+            self._prof2Label:Show()
+        end
+        if self._prof2Val then
+            self._prof2Val:SetText(string.format("|cffffffff%s|r |cff00ff00(%d/%d)|r", p2.name, p2.rank, p2.maxRank))
+            self._prof2Val:Show()
+        end
+    end
+end
+

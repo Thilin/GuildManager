@@ -3473,7 +3473,7 @@ function AuditView:renderGuildStats()
         return a.name < b.name
     end)
     for _, p in ipairs(profList) do
-        if p.count > 0 or p.key == "ALCHEMY" or p.key == "TAILORING" or p.key == "LEATHERWORKING" or p.key == "ENCHANTING" or p.key == "BLACKSMITHING" or p.key == "ENGINEERING" then
+        if p.count > 0 or p.key == "ALCHEMY" or p.key == "TAILORING" or p.key == "LEATHERWORKING" or p.key == "ENCHANTING" or p.key == "BLACKSMITHING" or p.key == "ENGINEERING" or p.key == "MINING" or p.key == "HERBALISM" or p.key == "SKINNING" then
             local tt = {
                 title = string.format("|cffffffff%s|r (%d)", p.name, p.count),
                 subtitle = string.format("%d artesão(ãos) com esta profissão na guilda", p.count),

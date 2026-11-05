@@ -5,7 +5,9 @@
 ProfessionData = {}
 ProfessionData.__index = ProfessionData
 
---- Definição das 6 profissões primárias
+--- Definição das profissões primárias e secundárias
+--- Definição das profissões primárias e secundárias
+--- Definição das profissões primárias e secundárias
 ProfessionData.PROFESSIONS = {
     ALCHEMY = {
         key = "ALCHEMY",
@@ -14,6 +16,8 @@ ProfessionData.PROFESSIONS = {
         icon = "Interface\\Icons\\Trade_Alchemy",
         spellId = 2259,
         maxSkill = 300,
+        isGathering = false,
+        isPrimary = true,
         description = "Criação de poções, elixires, frascos e transmutações poderosas.",
         descriptionEn = "Crafting potions, elixirs, flasks, and powerful transmutations.",
     },
@@ -24,6 +28,8 @@ ProfessionData.PROFESSIONS = {
         icon = "Interface\\Icons\\Trade_Tailoring",
         spellId = 3908,
         maxSkill = 300,
+        isGathering = false,
+        isPrimary = true,
         description = "Confecção de armaduras de tecido, bolsas e vestimentas arcanas.",
         descriptionEn = "Crafting cloth armor, bags, and arcane garments.",
     },
@@ -34,6 +40,8 @@ ProfessionData.PROFESSIONS = {
         icon = "Interface\\Icons\\Trade_Leatherworking",
         spellId = 2108,
         maxSkill = 300,
+        isGathering = false,
+        isPrimary = true,
         description = "Produção de armaduras de couro, malha de dragão, aljavas e kits de armadura.",
         descriptionEn = "Producing leather and dragonscale armor, quivers, and armor kits.",
     },
@@ -44,6 +52,8 @@ ProfessionData.PROFESSIONS = {
         icon = "Interface\\Icons\\Trade_Engraving",
         spellId = 7411,
         maxSkill = 300,
+        isGathering = false,
+        isPrimary = true,
         description = "Encantamento de armas e armaduras, criação de óleos e varinhas mágicas.",
         descriptionEn = "Enchanting weapons and armor, crafting wizard oils, and wands.",
     },
@@ -54,6 +64,8 @@ ProfessionData.PROFESSIONS = {
         icon = "Interface\\Icons\\Trade_BlackSmithing",
         spellId = 2018,
         maxSkill = 300,
+        isGathering = false,
+        isPrimary = true,
         description = "Forja de armas, armaduras de placas e malha, pedras de amolar e chaves.",
         descriptionEn = "Forging weapons, plate and mail armor, sharpening stones, and skeleton keys.",
     },
@@ -64,12 +76,86 @@ ProfessionData.PROFESSIONS = {
         icon = "Interface\\Icons\\Trade_Engineering",
         spellId = 4036,
         maxSkill = 300,
+        isGathering = false,
+        isPrimary = true,
         description = "Invenção de bombas, engenhocas gnômicas e goblins, óculos e robôs utilitários.",
         descriptionEn = "Inventing explosives, gnomish and goblin gadgets, goggles, and utility bots.",
     },
+    MINING = {
+        key = "MINING",
+        name = "Mineração",
+        nameEn = "Mining",
+        icon = "Interface\\Icons\\Trade_Mining",
+        spellId = 2575,
+        maxSkill = 300,
+        isGathering = true,
+        isPrimary = true,
+        description = "Extração de minérios, pedras preciosas e fundição de barras metálicas.",
+        descriptionEn = "Extracting ores, gems, and smelting metal bars.",
+    },
+    HERBALISM = {
+        key = "HERBALISM",
+        name = "Herborismo",
+        nameEn = "Herbalism",
+        icon = "Interface\\Icons\\Trade_Herbalism",
+        spellId = 2366,
+        maxSkill = 300,
+        isGathering = true,
+        isPrimary = true,
+        description = "Coleta de ervas e plantas por todo o mundo.",
+        descriptionEn = "Gathering herbs and plants across the world.",
+    },
+    SKINNING = {
+        key = "SKINNING",
+        name = "Esfolamento",
+        nameEn = "Skinning",
+        icon = "Interface\\Icons\\INV_Misc_Pelt_Wolf_01",
+        spellId = 8613,
+        maxSkill = 300,
+        isGathering = true,
+        isPrimary = true,
+        description = "Esfolamento de feras abatidas para obtenção de peles e couros.",
+        descriptionEn = "Skinning beasts for leather and hides.",
+    },
+    COOKING = {
+        key = "COOKING",
+        name = "Culinária",
+        nameEn = "Cooking",
+        icon = "Interface\\Icons\\INV_Misc_Food_15",
+        spellId = 2550,
+        maxSkill = 300,
+        isGathering = false,
+        isPrimary = false,
+        description = "Preparo de alimentos e refeições revigorantes.",
+        descriptionEn = "Preparing food and nutritious meals.",
+    },
+    FIRST_AID = {
+        key = "FIRST_AID",
+        name = "Primeiros Socorros",
+        nameEn = "First Aid",
+        icon = "Interface\\Icons\\Spell_Holy_SealOfSacrifice",
+        spellId = 3273,
+        maxSkill = 300,
+        isGathering = false,
+        isPrimary = false,
+        description = "Confecção de ataduras e tratamento de ferimentos.",
+        descriptionEn = "Crafting bandages and treating wounds.",
+    },
+    FISHING = {
+        key = "FISHING",
+        name = "Pescaria",
+        nameEn = "Fishing",
+        icon = "Interface\\Icons\\Trade_Fishing",
+        spellId = 7620,
+        maxSkill = 300,
+        isGathering = false,
+        isPrimary = false,
+        description = "Pesca de peixes e tesouros em rios e oceanos.",
+        descriptionEn = "Catching fish and treasures in waters.",
+    },
 }
 
---- Ordem de exibição das profissões
+--- Ordem de exibição das 6 profissões de fabricação (para o Catálogo de Receitas e Pedidos)
 ProfessionData.ORDER = {
     "ALCHEMY",
     "TAILORING",
@@ -79,18 +165,65 @@ ProfessionData.ORDER = {
     "ENGINEERING",
 }
 
+--- Lista das 9 profissões primárias de World of Warcraft Classic (Fabricação + Coleta)
+ProfessionData.PRIMARY_KEYS = {
+    "ALCHEMY",
+    "BLACKSMITHING",
+    "ENCHANTING",
+    "ENGINEERING",
+    "LEATHERWORKING",
+    "TAILORING",
+    "MINING",
+    "HERBALISM",
+    "SKINNING",
+}
+
+--- Lista das profissões secundárias
+ProfessionData.SECONDARY_KEYS = {
+    "COOKING",
+    "FIRST_AID",
+    "FISHING",
+}
+
 --- Normaliza nomes de profissões (em português ou inglês) para a chave padrão
+--- Suporta profissões de fabricação, coleta (Mineração, Herborismo, Esfolamento) e secundárias
 ---@param name string
 ---@return string|nil
 function ProfessionData.getProfessionKey(name)
     if not name or name == "" then return nil end
-    local lower = name:lower():gsub("%s+", "")
+    local lower = tostring(name):lower():gsub("%s+", "")
+    -- Remove acentos para garantir correspondência exata em qualquer cliente
+    lower = lower:gsub("á", "a"):gsub("à", "a"):gsub("ã", "a"):gsub("â", "a"):gsub("ä", "a")
+    lower = lower:gsub("é", "e"):gsub("è", "e"):gsub("ê", "e"):gsub("ë", "e")
+    lower = lower:gsub("í", "i"):gsub("ì", "i"):gsub("î", "i"):gsub("ï", "i")
+    lower = lower:gsub("ó", "o"):gsub("ò", "o"):gsub("õ", "o"):gsub("ô", "o"):gsub("ö", "o")
+    lower = lower:gsub("ú", "u"):gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
+    lower = lower:gsub("ç", "c")
+
+    -- Profissões de Coleta (Gathering)
+    if lower:find("miner") or lower:find("mining") or lower:find("fund") or lower:find("smelt") or lower:find("bergbau") or (lower:find("min") and (lower:find("localiz") or lower:find("find") or lower:find("rio"))) then
+        return "MINING"
+    end
+    if lower:find("herbor") or lower:find("herbal") or lower:find("erva") or lower:find("kraut") then
+        return "HERBALISM"
+    end
+    if lower:find("esfol") or lower:find("skinn") or lower:find("desuello") or lower:find("kursch") then
+        return "SKINNING"
+    end
+
+    -- Profissões Primárias de Fabricação (Crafting)
     if lower:find("alquim") or lower:find("alchem") then return "ALCHEMY" end
     if lower:find("alfaiat") or lower:find("tailor") or lower:find("sastr") then return "TAILORING" end
     if lower:find("couro") or lower:find("courar") or lower:find("leather") or lower:find("cuir") or lower:find("leder") then return "LEATHERWORKING" end
     if lower:find("encant") or lower:find("enchant") or lower:find("verzaub") then return "ENCHANTING" end
     if lower:find("ferrar") or lower:find("blacksmith") or lower:find("forja") or lower:find("herrer") or lower:find("schmied") then return "BLACKSMITHING" end
     if lower:find("engenhar") or lower:find("engineer") or lower:find("ingeni") then return "ENGINEERING" end
+
+    -- Profissões Secundárias (Secondary)
+    if lower:find("culin") or lower:find("cook") or lower:find("cocina") or lower:find("kochen") then return "COOKING" end
+    if lower:find("socorr") or lower:find("firstaid") or lower:find("primeiros") or lower:find("erstehilfe") then return "FIRST_AID" end
+    if lower:find("pesca") or lower:find("fish") or lower:find("angeln") then return "FISHING" end
+
     return nil
 end
 

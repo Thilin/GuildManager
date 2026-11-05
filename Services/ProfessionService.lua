@@ -215,7 +215,7 @@ function ProfessionService:scanFromProfessionsAPI(member)
     if not member then return 0 end
     if GetProfessions and GetProfessionInfo then
         local profs = { GetProfessions() }
-        for i = 1, 2 do
+        for i = 1, #profs do
             local idx = profs[i]
             if idx then
                 local name, icon, skillLevel, maxSkillLevel = GetProfessionInfo(idx)
@@ -305,6 +305,7 @@ function ProfessionService:scanPlayerSkills(member)
     end
 
     local detectedCount = 0
+    local foundPrimary = {}
 
     if GetNumSkillLines and GetSkillLineInfo then
         local numSkills = GetNumSkillLines()
@@ -316,11 +317,21 @@ function ProfessionService:scanPlayerSkills(member)
             if not isH and skillName and skillName ~= "" then
                 local profKey = ProfessionData.getProfessionKey(skillName)
                 if profKey then
+                    foundPrimary[profKey] = true
                     local existing = member:getProfession(profKey) or {}
                     local currentRecipes = existing.recipes or {}
                     member:setProfession(profKey, tonumber(skillRank) or existing.rank or 1, tonumber(skillMaxRank) or existing.maxRank or 300, currentRecipes)
                     detectedCount = detectedCount + 1
                 end
+            end
+        end
+    end
+
+    -- Limpa profissões primárias que o jogador possa ter desaprendido
+    if detectedCount > 0 and ProfessionData and ProfessionData.PRIMARY_KEYS then
+        for _, pKey in ipairs(ProfessionData.PRIMARY_KEYS) do
+            if not foundPrimary[pKey] and member:hasProfession(pKey) then
+                member:setProfession(pKey, 0, 0, {})
             end
         end
     end
@@ -873,8 +884,9 @@ function ProfessionService:scanAll()
     if self._memberService then
         self._memberService:saveMember(member, true)
     end
-    self:notifyChanged()
+        self:notifyChanged()
 
+    local sync = self._syncService or (_G.GM and _G.GM.syncService)
     if sync then
         if sync.broadcastMemberProfessions then
             sync:broadcastMemberProfessions(member)
@@ -884,7 +896,8 @@ function ProfessionService:scanAll()
     end
 
     local count = 0
-    for _, pKey in ipairs(ProfessionData.ORDER) do
+    local orderKeys = (ProfessionData and ProfessionData.PRIMARY_KEYS) or (ProfessionData and ProfessionData.ORDER) or {}
+    for _, pKey in ipairs(orderKeys) do
         local p = member:getProfession(pKey)
         if p and (p.rank or 0) > 0 then
             count = count + 1
@@ -933,7 +946,7 @@ function ProfessionService:playerHasProfession(profKey)
     -- 3. Fallback via GetProfessions (API moderna se disponível)
     if GetProfessions and GetProfessionInfo then
         local profs = { GetProfessions() }
-        for i = 1, 2 do
+        for i = 1, #profs do
             local idx = profs[i]
             if idx then
                 local name, _, rank = GetProfessionInfo(idx)
