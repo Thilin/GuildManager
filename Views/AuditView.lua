@@ -85,6 +85,65 @@ local COLUMNS = {
 
 local TOTAL_TABLE_WIDTH = 1170
 
+local STATS_PANEL_WIDTH = 224
+
+local ALL_CLASSES_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+
+local CLASS_NAMES_MAP = {
+    ptBR = {
+        WARRIOR = "Guerreiro", PALADIN = "Paladino", HUNTER = "Caçador",
+        ROGUE = "Ladino", PRIEST = "Sacerdote", SHAMAN = "Xamã",
+        MAGE = "Mago", WARLOCK = "Bruxo", DRUID = "Druida",
+    },
+    enUS = {
+        WARRIOR = "Warrior", PALADIN = "Paladin", HUNTER = "Hunter",
+        ROGUE = "Rogue", PRIEST = "Priest", SHAMAN = "Shaman",
+        MAGE = "Mage", WARLOCK = "Warlock", DRUID = "Druid",
+    }
+}
+
+local PROFESSIONS_DEF = {
+    { key = "ALCHEMY",        name = "Alquimia",        nameEn = "Alchemy",        icon = "Interface\\Icons\\Trade_Alchemy" },
+    { key = "TAILORING",      name = "Alfaiataria",     nameEn = "Tailoring",      icon = "Interface\\Icons\\Trade_Tailoring" },
+    { key = "LEATHERWORKING", name = "Couraria",        nameEn = "Leatherworking", icon = "Interface\\Icons\\Trade_Leatherworking" },
+    { key = "ENCHANTING",     name = "Encantamento",    nameEn = "Enchanting",     icon = "Interface\\Icons\\Trade_Engraving" },
+    { key = "BLACKSMITHING",  name = "Ferraria",        nameEn = "Blacksmithing",  icon = "Interface\\Icons\\Trade_BlackSmithing" },
+    { key = "ENGINEERING",    name = "Engenharia",      nameEn = "Engineering",    icon = "Interface\\Icons\\Trade_Engineering" },
+    { key = "MINING",         name = "Mineração",       nameEn = "Mining",         icon = "Interface\\Icons\\Trade_Mining" },
+    { key = "HERBALISM",      name = "Herborismo",      nameEn = "Herbalism",      icon = "Interface\\Icons\\Trade_Herbalism" },
+    { key = "SKINNING",       name = "Esfolamento",     nameEn = "Skinning",       icon = "Interface\\Icons\\INV_Misc_Pelt_Wolf_01" },
+    { key = "COOKING",        name = "Culinária",       nameEn = "Cooking",        icon = "Interface\\Icons\\INV_Misc_Food_15" },
+    { key = "FIRST_AID",      name = "Primeiros Socorros", nameEn = "First Aid",   icon = "Interface\\Icons\\Spell_Holy_SealOfSacrifice" },
+    { key = "FISHING",        name = "Pescaria",        nameEn = "Fishing",        icon = "Interface\\Icons\\Trade_Fishing" },
+}
+
+local function normalizeRace(raceStr, isEn)
+    if not raceStr or raceStr == "" then return isEn and "Unknown" or "Desconhecido" end
+    local clean = raceStr:match("^%s*(.-)%s*$") or raceStr
+    local lower = clean:lower()
+    if lower:find("^an") or lower:find("^dwarf") then
+        return isEn and "Dwarf" or "Anão"
+    elseif lower:find("elf") or lower:find("night") then
+        return isEn and "Night Elf" or "Elfo Noturno"
+    elseif lower:find("^hum") then
+        return isEn and "Human" or "Humano"
+    elseif lower:find("^gnom") then
+        return isEn and "Gnome" or "Gnomo"
+    elseif lower:find("^orc") then
+        return isEn and "Orc" or "Orc"
+    elseif lower:find("^troll") then
+        return isEn and "Troll" or "Troll"
+    elseif lower:find("^taur") then
+        return isEn and "Tauren" or "Tauren"
+    elseif lower:find("^mort") or lower:find("undead") or lower:find("renegad") then
+        return isEn and "Undead" or "Morto-vivo"
+    elseif lower:find("celonat") then
+        return "Celonato da Alta Ordem"
+    else
+        return clean
+    end
+end
+
 --- Retorna a data de hoje no formato AAAA-MM-DD.
 ---@return string
 local function getTodayString()
@@ -149,6 +208,8 @@ function AuditView:new()
     instance._prevPageBtn = nil
     instance._nextPageBtn = nil
     instance._lastPageBtn = nil
+    instance._statsRowPool = {}
+    instance._statsHeaderPool = {}
 
     instance:createUI()
 
@@ -195,7 +256,7 @@ function AuditView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerAuditFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(946, 614)
+    frame:SetSize(1180, 614)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -222,6 +283,7 @@ function AuditView:createUI()
             end
         end
         self:updateScrollDimensions()
+        self:renderGuildStats()
         if self._onRefreshCallback then
             self._onRefreshCallback()
         end
@@ -300,10 +362,86 @@ function AuditView:createUI()
     headerSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
     -- =========================================================================
+    -- PAINEL LATERAL ESQUERDO: ESTATÍSTICAS DA GUILDA
+    -- =========================================================================
+    local statsInset = CreateFrame("Frame", "GM_AuditStatsInset", frame, template)
+    statsInset:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", 0, -8)
+    statsInset:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 40)
+    statsInset:SetWidth(STATS_PANEL_WIDTH)
+    if statsInset.SetBackdrop then
+        statsInset:SetBackdrop(CONTAINER_BACKDROP)
+        statsInset:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        statsInset:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
+    end
+    self._statsInset = statsInset
+
+    -- Cabeçalho do Painel de Estatísticas
+    local statsHeaderBg = statsInset:CreateTexture(nil, "ARTWORK")
+    statsHeaderBg:SetPoint("TOPLEFT", statsInset, "TOPLEFT", 4, -4)
+    statsHeaderBg:SetPoint("TOPRIGHT", statsInset, "TOPRIGHT", -4, -4)
+    statsHeaderBg:SetHeight(24)
+    statsHeaderBg:SetColorTexture(PALETTE.HEADER_ROW_BG[1], PALETTE.HEADER_ROW_BG[2], PALETTE.HEADER_ROW_BG[3], 0.90)
+
+    local statsTitle = statsInset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    statsTitle:SetPoint("LEFT", statsHeaderBg, "LEFT", 8, 0)
+    statsTitle:SetText("|cffffd200" .. (L["STATS_TITLE"] or "ESTATÍSTICAS DA GUILDA") .. "|r")
+    self._statsTitle = statsTitle
+
+    local statsMemberCount = statsInset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    statsMemberCount:SetPoint("RIGHT", statsHeaderBg, "RIGHT", -8, 0)
+    statsMemberCount:SetText("|cffaaaaaa0|r")
+    self._statsMemberCount = statsMemberCount
+
+    local statsHeaderSep = statsInset:CreateTexture(nil, "ARTWORK")
+    statsHeaderSep:SetPoint("TOPLEFT", statsHeaderBg, "BOTTOMLEFT", 0, -1)
+    statsHeaderSep:SetPoint("RIGHT", statsHeaderBg, "RIGHT", 0, -1)
+    statsHeaderSep:SetHeight(1)
+    statsHeaderSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], 0.70)
+
+    -- ScrollFrame do Painel de Estatísticas
+    local statsScrollFrame = CreateFrame("ScrollFrame", "GM_AuditStatsScrollFrame", statsInset)
+    statsScrollFrame:SetPoint("TOPLEFT", statsHeaderSep, "BOTTOMLEFT", 0, -2)
+    statsScrollFrame:SetPoint("BOTTOMRIGHT", statsInset, "BOTTOMRIGHT", -18, 4)
+    statsScrollFrame:EnableMouse(true)
+    self._statsScrollFrame = statsScrollFrame
+
+    local statsContent = CreateFrame("Frame", "GM_AuditStatsContent", statsScrollFrame)
+    statsContent:SetWidth(STATS_PANEL_WIDTH - 24)
+    statsContent:SetHeight(500)
+    statsScrollFrame:SetScrollChild(statsContent)
+    self._statsContent = statsContent
+
+    local statsScrollBar = CreateFrame("Slider", "GM_AuditStatsScrollBar", statsInset, "UIPanelScrollBarTemplate")
+    statsScrollBar:SetPoint("TOPRIGHT", statsInset, "TOPRIGHT", -3, -34)
+    statsScrollBar:SetPoint("BOTTOMRIGHT", statsInset, "BOTTOMRIGHT", -3, 20)
+    statsScrollBar:SetWidth(14)
+    statsScrollBar:SetMinMaxValues(0, 100)
+    statsScrollBar:SetValue(0)
+    statsScrollBar:SetValueStep(20)
+    statsScrollBar:SetScript("OnValueChanged", function(_, val)
+        statsScrollFrame:SetVerticalScroll(val)
+    end)
+    self._statsScrollBar = statsScrollBar
+
+    local function onStatsMouseWheel(delta)
+        if not statsScrollBar or not statsScrollBar:IsShown() then return end
+        local minV, maxV = statsScrollBar:GetMinMaxValues()
+        if maxV <= 0 then return end
+        local cur = statsScrollBar:GetValue() or 0
+        local step = 30
+        local nextV = math.max(minV, math.min(maxV, cur - (delta * step)))
+        statsScrollBar:SetValue(nextV)
+    end
+
+    statsInset:EnableMouseWheel(true)
+    statsInset:SetScript("OnMouseWheel", function(_, delta) onStatsMouseWheel(delta) end)
+    statsScrollFrame:SetScript("OnMouseWheel", function(_, delta) onStatsMouseWheel(delta) end)
+
+    -- =========================================================================
     -- BARRA DE BUSCA E FILTROS RÁPIDOS
     -- =========================================================================
     local searchEB = CreateFrame("EditBox", nil, frame, template)
-    searchEB:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", 0, -8)
+    searchEB:SetPoint("TOPLEFT", headerSep, "BOTTOMLEFT", STATS_PANEL_WIDTH + 10, -8)
     searchEB:SetSize(175, 22)
     searchEB:SetFontObject("GameFontHighlightSmall")
     searchEB:SetAutoFocus(false)
@@ -969,13 +1107,13 @@ function AuditView:createUI()
     -- RODAPÉ
     -- =========================================================================
     local footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 14)
+    footerText:SetPoint("BOTTOMLEFT", tableInset, "BOTTOMLEFT", 0, -26)
     footerText:SetText("|cffaaaaaaTotal de membros na guilda: 0|r")
     self._footerText = footerText
 
     -- Controles de Paginação (40 membros por página, centralizados no rodapé)
     local paginationFrame = CreateFrame("Frame", "GM_AuditPaginationFrame", frame)
-    paginationFrame:SetPoint("BOTTOM", frame, "BOTTOM", 35, 10)
+    paginationFrame:SetPoint("BOTTOM", tableInset, "BOTTOM", 0, -30)
     paginationFrame:SetSize(360, 24)
     paginationFrame:EnableMouseWheel(true)
     paginationFrame:SetScript("OnMouseWheel", function(_, delta)
@@ -2269,6 +2407,7 @@ function AuditView:setMembers(members)
     self._members = activeOnly
     self:rebuildFlatRows()
     self:applyFilters()
+    self:renderGuildStats()
 end
 
 --- Reconstrói a estrutura hierárquica plana de linhas (Mains seguidos de seus respectivos Alts).
@@ -2971,6 +3110,9 @@ function AuditView:updateLocale()
     if self.renderRows then
         self:renderRows()
     end
+    if self.renderGuildStats then
+        self:renderGuildStats()
+    end
 end
 
 --- Retorna o frame principal da janela de auditoria.
@@ -2987,3 +3129,376 @@ end
 
 -- Exportação/Alias de compatibilidade
 auditView = AuditView
+
+
+--- Obtém ou cria um cabeçalho de seção no painel de estatísticas.
+---@param index number
+---@return table
+function AuditView:getStatsHeader(index)
+    self._statsHeaderPool = self._statsHeaderPool or {}
+    local h = self._statsHeaderPool[index]
+    if not h then
+        local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+        h = CreateFrame("Frame", nil, self._statsContent, template)
+        h:SetSize(STATS_PANEL_WIDTH - 24, 20)
+
+        local bg = h:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(h)
+        bg:SetColorTexture(PALETTE.HEADER_ROW_BG[1], PALETTE.HEADER_ROW_BG[2], PALETTE.HEADER_ROW_BG[3], 0.75)
+        h.bg = bg
+
+        local bar = h:CreateTexture(nil, "ARTWORK")
+        bar:SetPoint("LEFT", h, "LEFT", 0, 0)
+        bar:SetSize(3, 16)
+        bar:SetColorTexture(0.95, 0.70, 0.25, 1.0)
+        h.bar = bar
+
+        local txt = h:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        txt:SetPoint("LEFT", bar, "RIGHT", 6, 0)
+        txt:SetJustifyH("LEFT")
+        h.txt = txt
+
+        self._statsHeaderPool[index] = h
+    end
+    h:Show()
+    return h
+end
+
+--- Obtém ou cria uma linha de dado no painel de estatísticas.
+---@param index number
+---@return table
+function AuditView:getStatsRow(index)
+    self._statsRowPool = self._statsRowPool or {}
+    local row = self._statsRowPool[index]
+    if not row then
+        local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+        row = CreateFrame("Button", nil, self._statsContent, template)
+        row:SetSize(STATS_PANEL_WIDTH - 24, 18)
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(row)
+        hl:SetColorTexture(PALETTE.CELL_HOVER_BG[1], PALETTE.CELL_HOVER_BG[2], PALETTE.CELL_HOVER_BG[3], 0.25)
+        row:SetHighlightTexture(hl)
+
+        local dot = row:CreateTexture(nil, "ARTWORK")
+        dot:SetPoint("LEFT", row, "LEFT", 4, 0)
+        dot:SetSize(6, 6)
+        dot:SetColorTexture(0.8, 0.8, 0.8, 1.0)
+        row.dot = dot
+
+        local nameTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        nameTxt:SetPoint("LEFT", dot, "RIGHT", 5, 0)
+        nameTxt:SetPoint("RIGHT", row, "RIGHT", -60, 0)
+        nameTxt:SetJustifyH("LEFT")
+        nameTxt:SetWordWrap(false)
+        row.nameTxt = nameTxt
+
+        local countTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        countTxt:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        countTxt:SetJustifyH("RIGHT")
+        row.countTxt = countTxt
+
+        row:SetScript("OnEnter", function(btn)
+            if btn.tooltipData and GameTooltip then
+                GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(btn.tooltipData.title, 1, 0.82, 0)
+                if btn.tooltipData.subtitle then
+                    GameTooltip:AddLine(btn.tooltipData.subtitle, 0.7, 0.7, 0.7, true)
+                end
+                if btn.tooltipData.members and #btn.tooltipData.members > 0 then
+                    GameTooltip:AddLine(" ")
+                    local header = btn.tooltipData.header or (btn.tooltipData.isEn and "Members:" or "Membros:")
+                    GameTooltip:AddLine(string.format("|cffffd200%s (%d)|r", header, #btn.tooltipData.members))
+                    local maxShow = 25
+                    for i, info in ipairs(btn.tooltipData.members) do
+                        if i > maxShow then
+                            local rem = #btn.tooltipData.members - maxShow
+                            GameTooltip:AddLine(string.format("|cffaaaaaa... e mais %d membros|r", rem), 0.7, 0.7, 0.7)
+                            break
+                        end
+                        local mName = info.name or (info.member and info.member.getName and info.member:getName()) or ""
+                        local mGuid = info.guid or (info.member and info.member.getGuid and info.member:getGuid())
+                        local mClass = info.class or (info.member and info.member.getClass and info.member:getClass())
+                        local colName = self:formatColoredName(mName, mGuid, mClass)
+                        if info.detail and info.detail ~= "" then
+                            GameTooltip:AddLine(string.format("  • %s |cffaaaaaa(%s)|r", colName, info.detail), 0.85, 0.85, 0.85)
+                        else
+                            GameTooltip:AddLine(string.format("  • %s", colName), 0.85, 0.85, 0.85)
+                        end
+                    end
+                else
+                    GameTooltip:AddLine(" ")
+                    GameTooltip:AddLine("|cff888888" .. (btn.tooltipData.isEn and "No members in this category." or "Nenhum membro nesta categoria.") .. "|r", 0.6, 0.6, 0.6)
+                end
+                if btn.filterQuery and btn.filterQuery ~= "" then
+                    GameTooltip:AddLine(" ")
+                    GameTooltip:AddLine("|cff00ff00" .. (btn.tooltipData.isEn and "Click to filter in table" or "Clique para filtrar na tabela") .. "|r", 0.2, 1.0, 0.2)
+                end
+                GameTooltip:Show()
+            end
+        end)
+
+        row:SetScript("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+
+        row:SetScript("OnClick", function(btn)
+            if btn.filterQuery and btn.filterQuery ~= "" and self._searchEB then
+                local cur = self._searchEB:GetText() or ""
+                if cur == btn.filterQuery then
+                    self._searchEB:SetText("")
+                else
+                    self._searchEB:SetText(btn.filterQuery)
+                end
+            end
+        end)
+
+        self._statsRowPool[index] = row
+    end
+    row:Show()
+    return row
+end
+
+--- Renderiza e atualiza todas as seções de estatísticas da guilda na barra lateral esquerda.
+function AuditView:renderGuildStats()
+    if not self._statsContent then return end
+
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+
+    if self._statsTitle then
+        self._statsTitle:SetText("|cffffd200" .. (curL["STATS_TITLE"] or (isEn and "GUILD STATS" or "ESTATÍSTICAS DA GUILDA")) .. "|r")
+    end
+
+    local members = self._members or {}
+    local total = #members
+
+    if self._statsMemberCount then
+        self._statsMemberCount:SetText(string.format("|cffffffff%d|r |cffaaaaaa%s|r", total, isEn and "members" or "membros"))
+    end
+
+    -- Esconde linhas e cabeçalhos anteriores
+    if self._statsHeaderPool then
+        for _, h in pairs(self._statsHeaderPool) do h:Hide() end
+    end
+    if self._statsRowPool then
+        for _, r in pairs(self._statsRowPool) do r:Hide() end
+    end
+
+    local headerIdx = 0
+    local rowIdx = 0
+    local currentY = 2
+
+    local function addHeader(titleText)
+        headerIdx = headerIdx + 1
+        local h = self:getStatsHeader(headerIdx)
+        h:SetPoint("TOPLEFT", self._statsContent, "TOPLEFT", 0, -currentY)
+        h.txt:SetText(titleText)
+        currentY = currentY + 22
+    end
+
+    local function addRow(dotColor, nameText, count, totalCount, tooltipData, filterQuery)
+        rowIdx = rowIdx + 1
+        local row = self:getStatsRow(rowIdx)
+        row:SetPoint("TOPLEFT", self._statsContent, "TOPLEFT", 0, -currentY)
+        if dotColor then
+            row.dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 1.0)
+            row.dot:Show()
+            row.nameTxt:SetPoint("LEFT", row.dot, "RIGHT", 5, 0)
+        else
+            row.dot:Hide()
+            row.nameTxt:SetPoint("LEFT", row, "LEFT", 4, 0)
+        end
+        row.nameTxt:SetText(nameText)
+        local pct = totalCount > 0 and math.floor((count / totalCount) * 100 + 0.5) or 0
+        if count > 0 then
+            row.countTxt:SetText(string.format("|cffffffff%d|r |cff888888(%d%%)|r", count, pct))
+        else
+            row.countTxt:SetText("|cff6666660|r")
+        end
+        tooltipData.isEn = isEn
+        row.tooltipData = tooltipData
+        row.filterQuery = filterQuery
+        currentY = currentY + 18
+    end
+
+    -- =========================================================================
+    -- 1. FUNÇÕES / ROLES
+    -- =========================================================================
+    addHeader("|cffffd200" .. (curL["STATS_SECTION_ROLES"] or (isEn and "ROLES" or "FUNÇÕES")) .. "|r")
+    local rolesDef = {
+        { id = "TANK",   name = "TANK",   color = { 0.29, 0.56, 0.88 }, hex = "4a90e2" },
+        { id = "HEALER", name = "HEALER", color = { 0.18, 0.80, 0.44 }, hex = "2ecc71" },
+        { id = "DPS",    name = "DPS",    color = { 0.91, 0.30, 0.24 }, hex = "e74c3c" },
+        { id = "NONE",   name = curL["STATS_UNASSIGNED"] or (isEn and "Unassigned" or "Sem Função"), color = { 0.55, 0.55, 0.55 }, hex = "888888" },
+    }
+    local roleMap = {
+        TANK = { count = 0, members = {} },
+        HEALER = { count = 0, members = {} },
+        DPS = { count = 0, members = {} },
+        NONE = { count = 0, members = {} },
+    }
+    for _, m in ipairs(members) do
+        local r = (m.getRole and m:getRole() or ""):upper()
+        if roleMap[r] then
+            roleMap[r].count = roleMap[r].count + 1
+            table.insert(roleMap[r].members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = m:getClassDisplayName() })
+        else
+            roleMap.NONE.count = roleMap.NONE.count + 1
+            table.insert(roleMap.NONE.members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = m:getClassDisplayName() })
+        end
+    end
+    for _, rDef in ipairs(rolesDef) do
+        local data = roleMap[rDef.id]
+        local tt = {
+            title = string.format("Função: |cff%s%s|r", rDef.hex, rDef.name),
+            subtitle = string.format("%d de %d membros na guilda", data.count, total),
+            members = data.members,
+            header = isEn and "Members with this role:" or "Membros com esta função:",
+        }
+        local fQuery = (rDef.id ~= "NONE") and rDef.name or ""
+        addRow(rDef.color, string.format("|cff%s%s|r", rDef.hex, rDef.name), data.count, total, tt, fQuery)
+    end
+    currentY = currentY + 6
+
+    -- =========================================================================
+    -- 2. CLASSES
+    -- =========================================================================
+    addHeader("|cffffd200" .. (curL["STATS_SECTION_CLASSES"] or (isEn and "CLASSES" or "CLASSES")) .. "|r")
+    local classNames = isEn and CLASS_NAMES_MAP.enUS or CLASS_NAMES_MAP.ptBR
+    local classMap = {}
+    for _, cKey in ipairs(ALL_CLASSES_ORDER) do
+        classMap[cKey] = { key = cKey, name = classNames[cKey] or cKey, count = 0, members = {} }
+    end
+    for _, m in ipairs(members) do
+        local cKey = (m.getClass and m:getClass() or ""):upper()
+        if classMap[cKey] then
+            classMap[cKey].count = classMap[cKey].count + 1
+            local lvl = m.getLevel and m:getLevel() or 1
+            local rank = m.getRankName and m:getRankName() or ""
+            local dStr = (rank ~= "") and string.format("Lvl %d - %s", lvl, rank) or string.format("Lvl %d", lvl)
+            table.insert(classMap[cKey].members, { name = m:getName(), guid = m:getGuid(), class = cKey, detail = dStr })
+        end
+    end
+    local classList = {}
+    for _, cKey in ipairs(ALL_CLASSES_ORDER) do
+        table.insert(classList, classMap[cKey])
+    end
+    table.sort(classList, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    for _, c in ipairs(classList) do
+        local hex = getClassColorHex(c.key) or "|cffffffff"
+        local colorRgb = { 0.8, 0.8, 0.8 }
+        if RAID_CLASS_COLORS and RAID_CLASS_COLORS[c.key] then
+            local rc = RAID_CLASS_COLORS[c.key]
+            colorRgb = { rc.r or 0.8, rc.g or 0.8, rc.b or 0.8 }
+        end
+        local tt = {
+            title = string.format("%s%s|r (%d)", hex, c.name, c.count),
+            subtitle = string.format("%d de %d membros na guilda", c.count, total),
+            members = c.members,
+            header = isEn and "Guild members of this class:" or "Membros desta classe na guilda:",
+        }
+        addRow(colorRgb, string.format("%s%s|r", hex, c.name), c.count, total, tt, c.name)
+    end
+    currentY = currentY + 6
+
+    -- =========================================================================
+    -- 3. RAÇAS
+    -- =========================================================================
+    addHeader("|cffffd200" .. (curL["STATS_SECTION_RACES"] or (isEn and "RACES" or "RAÇAS")) .. "|r")
+    local raceMap = {}
+    for _, m in ipairs(members) do
+        local rawRace = m.getRace and m:getRace() or ""
+        local rName = normalizeRace(rawRace, isEn)
+        if not raceMap[rName] then
+            raceMap[rName] = { name = rName, count = 0, members = {} }
+        end
+        raceMap[rName].count = raceMap[rName].count + 1
+        local cDisp = m.getClassDisplayName and m:getClassDisplayName() or m:getClass()
+        local lvl = m.getLevel and m:getLevel() or 1
+        table.insert(raceMap[rName].members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = string.format("Lvl %d %s", lvl, cDisp) })
+    end
+    local raceList = {}
+    for _, rData in pairs(raceMap) do
+        table.insert(raceList, rData)
+    end
+    table.sort(raceList, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    for _, r in ipairs(raceList) do
+        local tt = {
+            title = string.format("|cffffffff%s|r (%d)", r.name, r.count),
+            subtitle = string.format("%d de %d membros na guilda", r.count, total),
+            members = r.members,
+            header = isEn and "Guild members of this race:" or "Membros desta raça na guilda:",
+        }
+        addRow({ 0.85, 0.70, 0.40 }, string.format("|cffffffff%s|r", r.name), r.count, total, tt, r.name)
+    end
+    currentY = currentY + 6
+
+    -- =========================================================================
+    -- 4. PROFISSÕES
+    -- =========================================================================
+    addHeader("|cffffd200" .. (curL["STATS_SECTION_PROFESSIONS"] or (isEn and "PROFESSIONS" or "PROFISSÕES")) .. "|r")
+    local profMap = {}
+    for _, pDef in ipairs(PROFESSIONS_DEF) do
+        profMap[pDef.key] = { key = pDef.key, name = isEn and pDef.nameEn or pDef.name, icon = pDef.icon, count = 0, members = {} }
+    end
+    for _, m in ipairs(members) do
+        local mProfs = m.getProfessions and m:getProfessions()
+        if type(mProfs) == "table" then
+            for pKey, pData in pairs(mProfs) do
+                local uKey = tostring(pKey):upper()
+                if not profMap[uKey] then
+                    profMap[uKey] = { key = uKey, name = uKey, icon = nil, count = 0, members = {} }
+                end
+                local rank = (type(pData) == "table" and pData.rank) or 0
+                local maxRank = (type(pData) == "table" and pData.maxRank) or 300
+                profMap[uKey].count = profMap[uKey].count + 1
+                local det = (rank > 0) and string.format("%d/%d", rank, maxRank) or "Aprendiz"
+                table.insert(profMap[uKey].members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = det })
+            end
+        end
+    end
+    local profList = {}
+    for _, pData in pairs(profMap) do
+        table.insert(profList, pData)
+    end
+    table.sort(profList, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.name < b.name
+    end)
+    for _, p in ipairs(profList) do
+        if p.count > 0 or p.key == "ALCHEMY" or p.key == "TAILORING" or p.key == "LEATHERWORKING" or p.key == "ENCHANTING" or p.key == "BLACKSMITHING" or p.key == "ENGINEERING" then
+            local tt = {
+                title = string.format("|cffffffff%s|r (%d)", p.name, p.count),
+                subtitle = string.format("%d artesão(ãos) com esta profissão na guilda", p.count),
+                members = p.members,
+                header = isEn and "Crafters in guild:" or "Artesãos na guilda:",
+            }
+            local color = (p.count > 0) and { 0.3, 0.9, 0.4 } or { 0.4, 0.4, 0.4 }
+            local nameColor = (p.count > 0) and "|cffffffff" or "|cff888888"
+            addRow(color, string.format("%s%s|r", nameColor, p.name), p.count, total, tt, (p.count > 0) and p.name or "")
+        end
+    end
+
+    currentY = currentY + 14
+
+    -- Ajusta altura do container de rolagem e limites do slider
+    local minH = (self._statsScrollFrame and self._statsScrollFrame:GetHeight()) or 450
+    self._statsContent:SetHeight(math.max(currentY, minH))
+    if self._statsScrollBar then
+        local maxScroll = math.max(0, currentY - minH)
+        self._statsScrollBar:SetMinMaxValues(0, maxScroll)
+        if maxScroll <= 0 then
+            self._statsScrollBar:Hide()
+        else
+            self._statsScrollBar:Show()
+        end
+    end
+end
+
