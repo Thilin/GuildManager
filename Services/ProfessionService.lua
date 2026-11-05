@@ -118,14 +118,7 @@ function ProfessionService:initHooks()
     end
 end
 
---- Normaliza o nome do jogador
----@param name string|nil
----@return string
-local function cleanPlayerName(name)
-    if not name or name == "" then return "" end
-    local clean = name:match("^[^-]+") or name
-    return clean:match("^%s*(.-)%s*$") or clean
-end
+
 
 --- Obtém a entidade Member do jogador local
 ---@return Member|nil

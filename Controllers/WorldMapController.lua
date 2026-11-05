@@ -1,4 +1,4 @@
----@class WorldMapController
+﻿---@class WorldMapController
 ---@field private _memberService MemberService
 ---@field private _guildRosterService GuildRosterService
 ---@field private _worldMapView WorldMapView
@@ -360,7 +360,10 @@ function WorldMapController:initHooks()
                 if IsInGuild and not IsInGuild() then
                     self._worldMapView:clearPins()
                 else
-                    self._worldMapView:updateRealtimePins()
+                    if self._locationService and self._locationService.requestPositions then
+            self._locationService:requestPositions()
+        end
+        self._worldMapView:updateRealtimePins()
                 end
             end
         end)
@@ -394,6 +397,9 @@ function WorldMapController:initHooks()
             self._guildRosterService:requestRosterUpdate()
         end
 
+        if self._locationService and self._locationService.requestPositions then
+            self._locationService:requestPositions()
+        end
         self._worldMapView:updateRealtimePins()
 
         local showBtn = true
@@ -423,7 +429,10 @@ function WorldMapController:initHooks()
                 C_Timer.After(0.1, function()
                     if WorldMapFrame and WorldMapFrame:IsShown() then
                         self:scanCurrentZone()
-                        self._worldMapView:updateRealtimePins()
+                        if self._locationService and self._locationService.requestPositions then
+            self._locationService:requestPositions()
+        end
+        self._worldMapView:updateRealtimePins()
                     end
                 end)
             end
@@ -480,7 +489,10 @@ function WorldMapController:initHooks()
                 self._worldMapView:renderNoGuild()
             else
                 self:scanCurrentZone()
-                self._worldMapView:updateRealtimePins()
+                if self._locationService and self._locationService.requestPositions then
+            self._locationService:requestPositions()
+        end
+        self._worldMapView:updateRealtimePins()
             end
         end
     end)
@@ -494,7 +506,10 @@ function WorldMapController:initHooks()
         if IsInGuild and not IsInGuild() then
             self._worldMapView:renderNoGuild()
         else
-            self._worldMapView:updateRealtimePins()
+            if self._locationService and self._locationService.requestPositions then
+            self._locationService:requestPositions()
+        end
+        self._worldMapView:updateRealtimePins()
             self:scanCurrentZone()
         end
     end
@@ -731,6 +746,9 @@ function WorldMapController:scanCurrentZone()
 
                     local match = self:isZoneMatch(gZone, currentMapName, currentMapID)
                     if match then
+                        local peer = self._locationService and self._locationService:getPeer(gClean)
+                        local isAddon = (peer ~= nil)
+                        local finalZone = (peer and peer.zoneName and peer.zoneName ~= "" and peer.zoneName ~= "Azeroth") and peer.zoneName or (gZone or "")
                         local data = {
                             name = gClean,
                             level = tonumber(gLevel) or 1,
@@ -739,9 +757,15 @@ function WorldMapController:scanCurrentZone()
                             rankName = gRankName or "",
                             publicNote = gPublicNote or "",
                             officerNote = gOfficerNote or "",
-                            zone = gZone or "",
+                            zone = finalZone,
                             isOnline = true,
                             isSelf = false,
+                            isAddonUser = isAddon,
+                            peerData = peer,
+                            x = peer and peer.x,
+                            y = peer and peer.y,
+                            facing = peer and peer.facing,
+                            mapID = peer and peer.mapID,
                         }
                         table.insert(regionMembers, data)
                         registerAddedMember(gClean, gGuid)

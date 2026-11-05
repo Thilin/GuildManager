@@ -1,4 +1,4 @@
----@class WorldMapView
+﻿---@class WorldMapView
 ---@field private _frame table|nil
 ---@field private _mapButton table|nil
 ---@field private _realtimeBadge table|nil
@@ -877,7 +877,8 @@ function WorldMapView:updateRealtimePins()
         end
 
         if not (locService and locService.isSelf and locService:isSelf(name, peerFullName)) then
-            local rx, ry = TranslateCoordsToViewMap(peer.mapID, peer.x, peer.y, viewMapID)
+            if peer.x and peer.y and (peer.x > 0 or peer.y > 0) then
+                local rx, ry = TranslateCoordsToViewMap(peer.mapID, peer.x, peer.y, viewMapID)
             local pin = self:getOrCreateNamedPin(name, canvas)
             peer.displayName = peerFullName
             pin.peerData = peer
@@ -903,6 +904,7 @@ function WorldMapView:updateRealtimePins()
                 renderedPins[name] = true
             else
                 pin:Hide()
+            end
             end
         end
     end
@@ -1352,6 +1354,10 @@ function WorldMapView:initWorldMapUI()
                 if data.officerNote and data.officerNote ~= "" then
                     GameTooltip:AddLine(string.format(curL["MAP_ROW_OFF_NOTE"] or "Officer Note: %s", data.officerNote), 0.7, 0.7, 0.7, true)
                 end
+                if data.isAddonUser then
+                    local coordStr = (data.x and data.y and (data.x > 0 or data.y > 0)) and string.format(" (%.1f, %.1f)", data.x * 100, data.y * 100) or ""
+                    GameTooltip:AddLine("|cff00ff00" .. (curL["MAP_PIN_SIGNAL"] or "AddOn Conectado: PosiÃ§Ã£o sincronizada") .. coordStr .. "|r", 0.2, 1.0, 0.2)
+                end
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine(curL["MAP_ROW_WHISPER_HINT"] or "|cff00ff00Click to whisper player.|r", 0.8, 0.8, 0.8)
                 GameTooltip:Show()
@@ -1661,8 +1667,9 @@ function WorldMapView:refreshVisibleRows()
                 row.classIcon:Hide()
             end
 
-            -- Linha 1: Nome do personagem
-            row.nameText:SetText(nameStr)
+            -- Linha 1: Nome do personagem (com indicador de GPS AddOn)
+            local addonTag = data.isAddonUser and " |cff00ff00â€¢ GPS|r" or ""
+            row.nameText:SetText(nameStr .. addonTag)
 
             -- Linha 2: Nível e Cargo (e Zona se estiver em visualização de Continente ou Mundo)
             local rankStr = data.rankName and data.rankName ~= "" and (" • |cffffff00" .. data.rankName .. "|r") or ""

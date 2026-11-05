@@ -1,12 +1,12 @@
 ---@class LocationService
---- Serviço de comunicação peer-to-peer em tempo real para sincronização de
---- coordenadas geográficas, orientação e zona entre membros da guilda com o GuildManager.
+--- ServiÃ§o de comunicaÃ§Ã£o peer-to-peer em tempo real para sincronizaÃ§Ã£o de
+--- coordenadas geogrÃ¡ficas, orientaÃ§Ã£o e zona entre membros da guilda com o GuildManager.
 --- Transmite via Grupo (PARTY/RAID), Guilda (GUILD) e canais globais ("GMShare" e "AJShare").
---- Totalmente nativo, autônomo, seguro e compatível com a arquitetura Zero Taint.
+--- Totalmente nativo, autÃ´nomo, seguro e compatÃ­vel com a arquitetura Zero Taint.
 LocationService = {}
 LocationService.__index = LocationService
 
---- Verifica com segurança se um valor é um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
+--- Verifica com seguranÃ§a se um valor Ã© um "Secret Value" (WoW 11.0+ / 12.0+ / Classic Beta)
 ---@param val any
 ---@return boolean
 local function isSecretValue(val)
@@ -26,19 +26,26 @@ end
 
 local PRIMARY_PREFIX = "GM_POS"
 local FALLBACK_PREFIX = "AJ_POS"
-local MSG_PREFIX = "AJ_POS"
+local SYNC_PREFIX = "GM_SYNC"
 local COMM_CHANNEL_NAME = "AJShare"
 
-local MOVE_THROTTLE = 1.5     -- Intervalo quando o jogador está em movimento (1.5s)
-local IDLE_HEARTBEAT = 6.0    -- Intervalo de heartbeat quando o jogador está parado (6.0s)
-local PEER_TIMEOUT = 30.0      -- Tempo sem sinal para considerar o jogador offline (30s)
+local MOVE_THROTTLE = 1.5     -- Intervalo quando o jogador estÃ¡ em movimento (1.5s)
+local IDLE_HEARTBEAT = 5.0    -- Intervalo de heartbeat quando o jogador estÃ¡ parado (5.0s)
+local PEER_TIMEOUT = 45.0     -- Tempo sem sinal para considerar o jogador offline (45s)
+
+--- Registra com seguranÃ§a todos os prefixos de mensagem utilizados pelo AddOn
+function LocationService:registerPrefixes()
+    local Register = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
+    if Register then
+        pcall(Register, PRIMARY_PREFIX)
+        pcall(Register, FALLBACK_PREFIX)
+        pcall(Register, SYNC_PREFIX)
+        pcall(Register, "GuildManager")
+    end
+end
 
 -- Registra os prefixos de mensagem imediatamente no carregamento do arquivo
-local RegisterPrefix = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
-if RegisterPrefix then
-    pcall(RegisterPrefix, PRIMARY_PREFIX)
-    pcall(RegisterPrefix, FALLBACK_PREFIX)
-end
+LocationService:registerPrefixes()
 
 --- Construtor do LocationService.
 ---@param memberService MemberService|nil
@@ -59,6 +66,7 @@ function LocationService:new(memberService)
     instance._lastSentY = -1
     instance._lastSentFacing = -1
     instance._lastSentMapID = -1
+    instance._lastReqTime = 0
     instance._eventFrame = nil
 
     return instance
@@ -94,44 +102,142 @@ function LocationService:getPeers()
     return self._peers
 end
 
+--- ObtÃ©m os dados de um peer pelo nome (busca flexÃ­vel com/sem sobrenome, case-insensitive)
+---@param name string
+---@return table|nil
+function LocationService:getPeer(name)
+    if not name or name == "" then return nil end
+    local exact = self._peers[name]
+    if exact then return exact end
+
+    local clean = name:match("^[^-]+") or name
+    clean = clean:match("^%s*(.-)%s*$") or clean
+    if self._peers[clean] then return self._peers[clean] end
+
+    local lower = clean:lower()
+    for pName, p in pairs(self._peers) do
+        if pName:lower() == lower or (p.name and p.name:lower() == lower) or (p.fullName and p.fullName:lower() == lower) then
+            return p
+        end
+    end
+
+    -- Se o nome tiver sobrenome ("Killuah Zaviror"), tenta pelo primeiro nome ("Killuah") se nÃ£o houver ambiguidade
+    local first = clean:match("^(%S+)")
+    if first and first ~= clean then
+        local firstLower = first:lower()
+        for pName, p in pairs(self._peers) do
+            local pFirst = pName:match("^(%S+)")
+            if (pFirst and pFirst:lower() == firstLower) or pName:lower() == firstLower then
+                return p
+            end
+        end
+    end
+
+    return nil
+end
+
+--- Registra ou atualiza um peer descoberto (via SyncService, eventos ou mensagem)
+---@param peerName string
+---@param extraData table|nil
+function LocationService:touchPeer(peerName, extraData)
+    if not peerName or peerName == "" or self:isSelf(peerName) then return end
+    local clean = peerName:match("^[^-]+") or peerName
+    clean = clean:match("^%s*(.-)%s*$") or clean
+
+    local now = GetTime and GetTime() or 0
+    local existing = self:getPeer(clean)
+
+    if existing then
+        existing.lastSeen = now
+        if extraData then
+            for k, v in pairs(extraData) do
+                if v ~= nil then existing[k] = v end
+            end
+        end
+    else
+        local resolvedName = clean
+        if self._memberService and self._memberService.resolveFullName then
+            local r = self._memberService:resolveFullName(clean)
+            if r and r ~= "" then resolvedName = r end
+        end
+
+        local peerData = {
+            name = resolvedName,
+            fullName = resolvedName,
+            senderUnit = clean,
+            mapID = (extraData and extraData.mapID) or 0,
+            zoneName = (extraData and extraData.zoneName) or "Azeroth",
+            x = (extraData and extraData.x) or 0,
+            y = (extraData and extraData.y) or 0,
+            facing = (extraData and extraData.facing) or 0,
+            classFile = (extraData and extraData.classFile) or "WARRIOR",
+            level = (extraData and extraData.level) or 1,
+            race = (extraData and extraData.race) or "Desconhecido",
+            guild = (extraData and extraData.guild) or "",
+            channel = "P2P",
+            lastSeen = now,
+            lastSeenClock = time and time() or 0,
+        }
+        self._peers[clean] = peerData
+        self._peers[resolvedName] = peerData
+        self:notifyListeners("PEER_UPDATE", resolvedName, peerData)
+        self:notifyListeners("PEER_LIST_CHANGED")
+    end
+end
+
 --- Retorna a quantidade de outros membros conectados via Addon
 ---@return number
 function LocationService:getPeerCount()
     local count = 0
-    for name in pairs(self._peers) do
-        if not self:isSelf(name) then
+    local seen = {}
+    for name, p in pairs(self._peers) do
+        local pClean = (p.name or name):match("^[^-]+") or (p.name or name)
+        pClean = pClean:match("^%s*(.-)%s*$") or pClean
+        local lower = pClean:lower()
+        if not seen[lower] and not self:isSelf(name) and not p.isTest then
+            seen[lower] = true
             count = count + 1
         end
     end
     return count
 end
 
---- Retorna os membros que estão atualmente em um determinado mapa
+--- Retorna os membros que estÃ£o atualmente em um determinado mapa
 ---@param mapID number
 ---@return table
 function LocationService:getPeersForMap(mapID)
     if not mapID or mapID <= 0 then return {} end
     local list = {}
+    local seen = {}
     for _, p in pairs(self._peers) do
-        if p and p.mapID == mapID then
-            table.insert(list, p)
+        if p and p.mapID == mapID and p.x and p.y and (p.x > 0 or p.y > 0) then
+            local lower = (p.fullName or p.name or ""):lower()
+            if not seen[lower] then
+                seen[lower] = true
+                table.insert(list, p)
+            end
         end
     end
     return list
 end
 
---- Retorna lista amigável de usuários do AddOn para a UI
+--- Retorna lista amigÃ¡vel de usuÃ¡rios do AddOn para a UI
 ---@return table[]
 function LocationService:getGuildAddonUsers()
     local users = {}
     local now = GetTime and GetTime() or 0
+    local seen = {}
 
     -- Adiciona o jogador local com nome completo (nome e sobrenome)
     local myFullName = self:getLocalPlayerFullName()
-    local myName = (myFullName and myFullName ~= "") and myFullName or (self._myPlayerName or (UnitName and UnitName("player")) or "Você")
+    local myName = (myFullName and myFullName ~= "") and myFullName or (self._myPlayerName or (UnitName and UnitName("player")) or "VocÃª")
     local _, myClass = UnitClass and UnitClass("player") or nil
     local myLevel = UnitLevel and UnitLevel("player") or 1
     local myZone = GetRealZoneText and GetRealZoneText() or ""
+
+    local myClean = myName:match("^[^-]+") or myName
+    myClean = myClean:match("^%s*(.-)%s*$") or myClean
+    seen[myClean:lower()] = true
 
     table.insert(users, {
         name = myName,
@@ -144,25 +250,33 @@ function LocationService:getGuildAddonUsers()
 
     -- Adiciona os outros membros conectados
     for _, p in pairs(self._peers) do
-        table.insert(users, {
-            name = p.name,
-            class = p.classFile or "WARRIOR",
-            level = p.level or 1,
-            zone = p.zoneName or "Azeroth",
-            guild = p.guild or "",
-            isSelf = false,
-            lastSeen = p.lastSeen or now,
-            facing = p.facing or 0,
-            x = p.x or 0,
-            y = p.y or 0,
-            mapID = p.mapID,
-        })
+        local pName = p.fullName or p.name
+        local cleanP = (pName or ""):match("^[^-]+") or pName
+        cleanP = cleanP:match("^%s*(.-)%s*$") or cleanP
+        local lower = cleanP:lower()
+
+        if cleanP ~= "" and not seen[lower] and not self:isSelf(cleanP, pName) then
+            seen[lower] = true
+            table.insert(users, {
+                name = p.fullName or p.name,
+                class = p.classFile or "WARRIOR",
+                level = p.level or 1,
+                zone = p.zoneName or "Azeroth",
+                guild = p.guild or "",
+                isSelf = false,
+                lastSeen = p.lastSeen or now,
+                facing = p.facing or 0,
+                x = p.x or 0,
+                y = p.y or 0,
+                mapID = p.mapID,
+            })
+        end
     end
 
     return users
 end
 
---- Garante a conexão ao canal global reservado do AddOn sem poluir janelas de chat nativas
+--- Garante a conexÃ£o ao canal global reservado do AddOn sem poluir janelas de chat nativas
 function LocationService:ensureGlobalChannels()
     if self._channelNumber and self._channelNumber > 0 then
         return
@@ -196,7 +310,7 @@ function LocationService:ensureGlobalChannels()
         self._channelNumber = id
         self._channelNumbers[chName:lower()] = id
 
-        -- Silencia no chat nativo da Blizzard uma única vez (sem resetar as abas ou animações de fade)
+        -- Silencia no chat nativo da Blizzard uma Ãºnica vez (sem resetar as abas ou animaÃ§Ãµes de fade)
         if not self._silencedChannels[chName:lower()] then
             self._silencedChannels[chName:lower()] = true
             if ChatFrame_RemoveChannel and DEFAULT_CHAT_FRAME then
@@ -206,7 +320,7 @@ function LocationService:ensureGlobalChannels()
     end
 end
 
---- Obtém as coordenadas geográficas normalizadas (0.0 a 1.0) e orientação do jogador local
+--- ObtÃ©m as coordenadas geogrÃ¡ficas normalizadas (0.0 a 1.0) e orientaÃ§Ã£o do jogador local
 ---@return number|nil mapID, number|nil x, number|nil y, number facing
 function LocationService:getLocalPosition()
     local mapID = nil
@@ -218,29 +332,27 @@ function LocationService:getLocalPosition()
         local ok, id = pcall(GetCurrentMapAreaID)
         if ok and id and id > 0 then mapID = id end
     end
-    if not mapID or mapID <= 0 then return nil, nil, nil, 0 end
+    mapID = mapID or 0
 
     local x, y = nil, nil
-    if C_Map and C_Map.GetPlayerMapPosition then
-        local ok, pos = pcall(C_Map.GetPlayerMapPosition, mapID, "player")
-        if ok and pos then
-            if pos.GetXY then
-                local okXY, px, py = pcall(pos.GetXY, pos)
-                if okXY and px and py then x, y = px, py end
-            elseif pos.x and pos.y then
-                x, y = pos.x, pos.y
+    if mapID > 0 then
+        if C_Map and C_Map.GetPlayerMapPosition then
+            local ok, pos = pcall(C_Map.GetPlayerMapPosition, mapID, "player")
+            if ok and pos then
+                if pos.GetXY then
+                    local okXY, px, py = pcall(pos.GetXY, pos)
+                    if okXY and px and py then x, y = px, py end
+                elseif pos.x and pos.y then
+                    x, y = pos.x, pos.y
+                end
             end
         end
-    end
-    if not x or not y then
-        if GetPlayerMapPosition then
-            local ok, px, py = pcall(GetPlayerMapPosition, "player")
-            if ok and px and py then x, y = px, py end
+        if not x or not y then
+            if GetPlayerMapPosition then
+                local ok, px, py = pcall(GetPlayerMapPosition, "player")
+                if ok and px and py then x, y = px, py end
+            end
         end
-    end
-
-    if not x or not y or (x == 0 and y == 0) then
-        return nil, nil, nil, 0
     end
 
     local facing = 0
@@ -249,14 +361,15 @@ function LocationService:getLocalPosition()
         if ok and f then facing = f end
     end
 
-    return mapID, x, y, facing
+    return mapID, x or 0, y or 0, facing
 end
 
---- Obtém o nome completo (nome e sobrenome) do jogador local
+--- ObtÃ©m o nome completo (nome e sobrenome) do jogador local
 ---@return string
 function LocationService:getLocalPlayerFullName()
     if self._myFullName and self._myFullName ~= "" and self._myFullName:find("%s") then
-        return self._myFullName
+        local clean = self._myFullName:match("^[^-]+") or self._myFullName
+        return clean:match("^%s*(.-)%s*$") or clean
     end
 
     local myGUID = UnitGUID and UnitGUID("player")
@@ -289,22 +402,52 @@ function LocationService:getLocalPlayerFullName()
     return myName
 end
 
---- Transmite as coordenadas do jogador em tempo real para todos os canais disponíveis
+--- Solicita que todos os outros membros conectados reportem imediatamente suas posiÃ§Ãµes
+function LocationService:requestPositions()
+    local now = GetTime and GetTime() or 0
+    if (now - (self._lastReqTime or 0)) < 2.0 then return end
+    self._lastReqTime = now
+
+    local myName = self:getLocalPlayerFullName()
+    local payload = string.format("POS_REQ:%s", myName)
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    if not Send then return end
+
+    if IsInGuild and IsInGuild() then
+        pcall(Send, PRIMARY_PREFIX, payload, "GUILD")
+        pcall(Send, FALLBACK_PREFIX, payload, "GUILD")
+    end
+    if self._channelNumber and self._channelNumber > 0 then
+        pcall(Send, PRIMARY_PREFIX, payload, "CHANNEL", self._channelNumber)
+    end
+    if IsInRaid and IsInRaid() then
+        pcall(Send, PRIMARY_PREFIX, payload, "RAID")
+    elseif IsInGroup and IsInGroup() then
+        pcall(Send, PRIMARY_PREFIX, payload, "PARTY")
+    end
+end
+
+--- Transmite as coordenadas do jogador em tempo real para todos os canais disponÃ­veis
 ---@param force boolean|nil
 function LocationService:sendPosition(force)
     local now = GetTime and GetTime() or 0
     if not force and (now - self._lastSendTime) < 0.5 then return end
 
     local mapID, x, y, facing = self:getLocalPosition()
-    if not mapID or not x or not y then return end
+    mapID = mapID or 0
+    x = x or 0
+    y = y or 0
+    facing = facing or 0
 
-    -- Detecção de movimento significativo
-    local dx = math.abs(x - self._lastSentX)
-    local dy = math.abs(y - self._lastSentY)
-    local df = math.abs(facing - self._lastSentFacing)
-    local mapChanged = (mapID ~= self._lastSentMapID)
-
-    local isMoving = (dx > 0.0008 or dy > 0.0008 or df > 0.15 or mapChanged)
+    -- DetecÃ§Ã£o de movimento significativo se coordenadas estiverem disponÃ­veis
+    local isMoving = false
+    if x > 0 and y > 0 and self._lastSentX and self._lastSentY then
+        local dx = math.abs(x - self._lastSentX)
+        local dy = math.abs(y - self._lastSentY)
+        local df = math.abs(facing - self._lastSentFacing)
+        local mapChanged = (mapID ~= self._lastSentMapID)
+        isMoving = (dx > 0.0008 or dy > 0.0008 or df > 0.15 or mapChanged)
+    end
     local interval = isMoving and MOVE_THROTTLE or IDLE_HEARTBEAT
 
     if not force and (now - self._lastSendTime) < interval then
@@ -354,30 +497,25 @@ function LocationService:sendPosition(force)
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
     if not Send then return end
 
-    -- 1. Transmite para Raide ou Grupo (se agrupado)
-    if IsInRaid and IsInRaid() then
-        pcall(Send, MSG_PREFIX, payload, "RAID")
-    elseif IsInGroup and IsInGroup() then
-        pcall(Send, MSG_PREFIX, payload, "PARTY")
+    local function sendPacket(pfx)
+        if IsInRaid and IsInRaid() then
+            pcall(Send, pfx, payload, "RAID")
+        elseif IsInGroup and IsInGroup() then
+            pcall(Send, pfx, payload, "PARTY")
+        end
+        if IsInGuild and IsInGuild() then
+            pcall(Send, pfx, payload, "GUILD")
+        end
+        if self._channelNumber and self._channelNumber > 0 then
+            pcall(Send, pfx, payload, "CHANNEL", self._channelNumber)
+        end
     end
 
-    -- 2. Transmite para a Guilda (1 prefixo limpo, sem pacotes duplicados que poluem o chat)
-    if IsInGuild and IsInGuild() then
-        pcall(Send, MSG_PREFIX, payload, "GUILD")
-    end
-
-    -- 3. Transmite para o canal global do AddOn ("AJShare")
-    if not self._channelNumber and self.ensureGlobalChannels then
-        self:ensureGlobalChannels()
-    end
-    if self._channelNumber and self._channelNumber > 0 then
-        pcall(Send, MSG_PREFIX, payload, "CHANNEL", self._channelNumber)
-    end
+    sendPacket(PRIMARY_PREFIX)
+    sendPacket(FALLBACK_PREFIX)
 end
 
---- Verifica com precisão se o remetente é o próprio jogador local (evita ghosting)
---- Valida obrigatoriamente nome e sobrenome para evitar falsos positivos entre membros com mesmo primeiro nome.
---- Verifica com precisão se o remetente é o próprio jogador local (evita ghosting)
+--- Verifica com precisÃ£o se o remetente Ã© o prÃ³prio jogador local (evita ghosting)
 --- Valida obrigatoriamente nome e sobrenome para evitar falsos positivos entre membros com mesmo primeiro nome.
 ---@param sender string
 ---@param rawFullName string|nil
@@ -412,7 +550,7 @@ function LocationService:isSelf(sender, rawFullName)
         end
     end
 
-    -- 2. Se ambos têm nome e sobrenome, valida obrigatoriamente nome e sobrenome
+    -- 2. Se ambos tÃªm nome e sobrenome, valida obrigatoriamente nome e sobrenome
     if mfLower ~= "" and mfLower:find("%s") and sLower:find("%s") then
         return sLower == mfLower
     end
@@ -422,8 +560,9 @@ function LocationService:isSelf(sender, rawFullName)
         return true
     end
 
-    -- 4. Se o remetente não tem sobrenome e confere com o nome do jogador local
-    if mLower ~= "" and sLower == mLower then
+    -- 4. Se o remetente nÃ£o tem sobrenome e confere com o primeiro nome do jogador local
+    -- Importante: sÃ³ considera igual se o jogador local tambÃ©m nÃ£o tiver sobrenome
+    if mLower ~= "" and not sLower:find("%s") and not mfLower:find("%s") and sLower == mLower then
         return true
     end
 
@@ -441,9 +580,8 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
     end
     if type(message) ~= "string" then return end
 
-    -- Aceita mensagens do prefixo primário do GuildManager (GM_POS) e fallback (AJ_POS)
     local pUpper = prefix:upper()
-    if pUpper ~= PRIMARY_PREFIX and pUpper ~= FALLBACK_PREFIX and pUpper ~= "GUILDMANAGER" then
+    if pUpper ~= PRIMARY_PREFIX and pUpper ~= FALLBACK_PREFIX and pUpper ~= "GUILDMANAGER" and pUpper ~= SYNC_PREFIX then
         return
     end
 
@@ -452,30 +590,46 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
     local senderClean = sender:match("^([^-]+)") or sender
     senderClean = senderClean:match("^%s*(.-)%s*$") or senderClean
 
-    -- Parsing do payload formato POS:mapID:x:y:facing:class:level:race:guild:fullName
-    local tag, rawMapID, rawX, rawY, rawFacing, classFile, rawLevel, race, guild, rawFullName = strsplit(":", message)
-
-    -- Ignora rigorosamente o próprio jogador validando nome e sobrenome
-    if self:isSelf(sender, rawFullName) then
+    -- Se for sinal vindo do GM_SYNC, registra a presenÃ§a deste usuÃ¡rio imediatamente
+    if pUpper == SYNC_PREFIX then
+        if not self:isSelf(sender, senderClean) then
+            self:touchPeer(senderClean)
+        end
         return
     end
 
+    local tag, raw1, raw2, raw3, raw4, raw5, raw6, raw7, raw8, raw9 = strsplit(":", message)
+
+    -- RequisiÃ§Ã£o de posiÃ§Ãµes em tempo real
+    if tag == "POS_REQ" then
+        if not self:isSelf(sender, raw1) then
+            self:touchPeer(senderClean)
+            self:sendPosition(true)
+        end
+        return
+    end
+
+    -- Ignora rigorosamente o prÃ³prio jogador validando nome e sobrenome
     if tag == "POS" then
-        local mapID = tonumber(rawMapID)
-        local x = tonumber(rawX)
-        local y = tonumber(rawY)
+        local rawMapID, rawX, rawY, rawFacing, classFile, rawLevel, race, guild, rawFullName = raw1, raw2, raw3, raw4, raw5, raw6, raw7, raw8, raw9
+
+        if self:isSelf(sender, rawFullName) then
+            return
+        end
+
+        local mapID = tonumber(rawMapID) or 0
+        local x = tonumber(rawX) or 0
+        local y = tonumber(rawY) or 0
         local facing = tonumber(rawFacing) or 0
         local level = tonumber(rawLevel) or 1
         classFile = classFile or "WARRIOR"
         race = race or "Desconhecido"
         guild = guild or ""
 
-        if not mapID or not x or not y then return end
-
         local now = GetTime and GetTime() or 0
         local clock = time and time() or 0
 
-        -- Validação rigorosa de Nome e Sobrenome para definir quem é o personagem
+        -- ValidaÃ§Ã£o rigorosa de Nome e Sobrenome para definir quem Ã© o personagem
         local resolvedFullName = nil
         if rawFullName and not isSecretValue(rawFullName) and rawFullName ~= "" then
             local cleanRaw = rawFullName:match("^[^-]+") or rawFullName
@@ -494,9 +648,9 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
 
         local finalName = resolvedFullName or senderClean
 
-        -- Nome amigável da zona
+        -- Nome amigÃ¡vel da zona
         local zoneName = "Azeroth"
-        if C_Map and C_Map.GetMapInfo then
+        if mapID and mapID > 0 and C_Map and C_Map.GetMapInfo then
             local ok, info = pcall(C_Map.GetMapInfo, mapID)
             if ok and info and info.name then zoneName = info.name end
         end
@@ -520,48 +674,50 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
         }
 
         self._peers[senderClean] = peerData
+        self._peers[finalName] = peerData
         self:notifyListeners("PEER_UPDATE", finalName, peerData)
+        self:notifyListeners("PEER_LIST_CHANGED")
 
     -- Parsing do payload formato legado LOC:version:name:x:y:mapID:worldX:worldY:instanceID:class:level:zone
     elseif tag == "LOC" then
         local _, _, _, rawX, rawY, rawMapID, _, _, _, classToken, rawLevel, rawZone = strsplit(":", message)
-        local mapID = tonumber(rawMapID)
-        local x = tonumber(rawX)
-        local y = tonumber(rawY)
-        if mapID and x and y then
-            local now = GetTime and GetTime() or 0
-            local finalName = senderClean
-            if self._memberService and self._memberService.resolveFullName then
-                local resolved = self._memberService:resolveFullName(senderClean)
-                if resolved and resolved ~= "" and resolved:find("%s") then
-                    finalName = resolved
-                end
+        local mapID = tonumber(rawMapID) or 0
+        local x = tonumber(rawX) or 0
+        local y = tonumber(rawY) or 0
+        local now = GetTime and GetTime() or 0
+        local finalName = senderClean
+        if self._memberService and self._memberService.resolveFullName then
+            local resolved = self._memberService:resolveFullName(senderClean)
+            if resolved and resolved ~= "" and resolved:find("%s") then
+                finalName = resolved
             end
-            local peerData = {
-                name = finalName,
-                fullName = finalName,
-                senderUnit = senderClean,
-                mapID = mapID,
-                zoneName = rawZone or "Azeroth",
-                x = x,
-                y = y,
-                facing = 0,
-                classFile = classToken or "WARRIOR",
-                level = tonumber(rawLevel) or 1,
-                race = "Desconhecido",
-                guild = "",
-                channel = channel,
-                lastSeen = now,
-                lastSeenClock = time and time() or 0,
-            }
-
-            self._peers[senderClean] = peerData
-            self:notifyListeners("PEER_UPDATE", finalName, peerData)
         end
+        local peerData = {
+            name = finalName,
+            fullName = finalName,
+            senderUnit = senderClean,
+            mapID = mapID,
+            zoneName = rawZone or "Azeroth",
+            x = x,
+            y = y,
+            facing = 0,
+            classFile = classToken or "WARRIOR",
+            level = tonumber(rawLevel) or 1,
+            race = "Desconhecido",
+            guild = "",
+            channel = channel,
+            lastSeen = now,
+            lastSeenClock = time and time() or 0,
+        }
+
+        self._peers[senderClean] = peerData
+        self._peers[finalName] = peerData
+        self:notifyListeners("PEER_UPDATE", finalName, peerData)
+        self:notifyListeners("PEER_LIST_CHANGED")
     end
 end
 
---- Alterna um jogador de teste simulado para validação imediata no mapa oficial
+--- Alterna um jogador de teste simulado para validaÃ§Ã£o imediata no mapa oficial
 ---@return boolean
 function LocationService:toggleTestPeer()
     local testName = "AventureiroTeste"
@@ -570,13 +726,17 @@ function LocationService:toggleTestPeer()
         self:notifyListeners("PEER_EXPIRED", testName)
         self:notifyListeners("PEER_LIST_CHANGED")
         if DEFAULT_CHAT_FRAME then
-            DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[GuildManager]|r Membro de teste removido.")
+            DEFAULT_CHAT_FRAME:AddMessage("|cffffd200[GuildManager]|r Membro de teste desativado.")
         end
         return false
     end
 
-    local playerMapID, px, py = self:getLocalPosition()
-    local mapID = playerMapID
+    local mapID = GetCurrentMapAreaID and GetCurrentMapAreaID()
+    if not mapID or mapID <= 0 then
+        if C_Map and C_Map.GetBestMapForUnit then
+            mapID = C_Map.GetBestMapForUnit("player")
+        end
+    end
     if not mapID or mapID <= 0 then
         if WorldMapFrame and WorldMapFrame:IsShown() and WorldMapFrame.GetMapID then
             local ok, id = pcall(WorldMapFrame.GetMapID, WorldMapFrame)
@@ -588,7 +748,7 @@ function LocationService:toggleTestPeer()
     mapID = mapID or 1429
 
     local px, py = select(2, self:getLocalPosition()), select(3, self:getLocalPosition())
-    if not px or not py then
+    if not px or not py or (px == 0 and py == 0) then
         px, py = 0.50, 0.50
     else
         px = px + 0.012
@@ -620,14 +780,14 @@ function LocationService:toggleTestPeer()
     self:notifyListeners("PEER_LIST_CHANGED")
     if DEFAULT_CHAT_FRAME then
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
-            "|cffffd200[GuildManager]|r Membro de teste '|cff00ff00%s|r' ativado em (%.1f, %.1f)! Abra o Mapa da Blizzard (M) para vê-lo em tempo real.",
+            "|cffffd200[GuildManager]|r Membro de teste '|cff00ff00%s|r' ativado em (%.1f, %.1f)! Abra o Mapa da Blizzard (M) para vÃª-lo em tempo real.",
             testName, px * 100, py * 100
         ))
     end
     return true
 end
 
---- Remove pares que não enviaram sinal recente
+--- Remove pares que nÃ£o enviaram sinal recente
 function LocationService:purgeExpiredPeers()
     local now = GetTime and GetTime() or 0
     local removedAny = false
@@ -645,15 +805,11 @@ function LocationService:purgeExpiredPeers()
     end
 end
 
---- Inicializa os ganchos de eventos e loop de transmissão em segundo plano
+--- Inicializa os ganchos de eventos e timers do LocationService
 function LocationService:initHooks()
     if self._eventFrame then return end
 
-    -- Garante o registro de todos os prefixos suportados
-    if RegisterPrefix then
-        pcall(RegisterPrefix, PRIMARY_PREFIX)
-        pcall(RegisterPrefix, FALLBACK_PREFIX)
-    end
+    self:registerPrefixes()
 
     local frame = CreateFrame("Frame")
     frame:RegisterEvent("PLAYER_LOGIN")
@@ -665,6 +821,7 @@ function LocationService:initHooks()
     frame:RegisterEvent("CHANNEL_UI_UPDATE")
 
     local function setupSession()
+        self:registerPrefixes()
         if UnitName then
             self._myPlayerName = UnitName("player")
         end
@@ -676,8 +833,14 @@ function LocationService:initHooks()
         end
         self:ensureGlobalChannels()
         if C_Timer and C_Timer.After then
-            C_Timer.After(1.5, function()
+            C_Timer.After(1.0, function()
+                self:registerPrefixes()
                 self:sendPosition(true)
+                self:requestPositions()
+            end)
+            C_Timer.After(3.5, function()
+                self:sendPosition(true)
+                self:requestPositions()
             end)
         end
     end
@@ -710,8 +873,10 @@ function LocationService:initHooks()
             end
 
         elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" or event == "CHANNEL_UI_UPDATE" then
+            self:registerPrefixes()
             self:ensureGlobalChannels()
             self:sendPosition(true)
+            self:requestPositions()
         end
     end)
 
@@ -720,7 +885,7 @@ function LocationService:initHooks()
         setupSession()
     end
 
-    -- Loop de verificação suave (0.25s) e expiração periódica
+    -- Loop de verificaÃ§Ã£o suave (0.75s) e expiraÃ§Ã£o periÃ³dica
     local ticker = 0
     local purgeTicker = 0
     local channelTicker = 0
@@ -735,7 +900,7 @@ function LocationService:initHooks()
             self:sendPosition(false)
         end
 
-        -- Garante conexão ao canal global reservado somente se ainda não conectado (a cada 15s)
+        -- Garante conexÃ£o ao canal global reservado somente se ainda nÃ£o conectado (a cada 15s)
         if channelTicker >= 15.0 then
             channelTicker = 0
             if not self._channelNumber or self._channelNumber <= 0 then
@@ -743,7 +908,7 @@ function LocationService:initHooks()
             end
         end
 
-        -- Animação em tempo real para peer de teste se ativo
+        -- AnimaÃ§Ã£o em tempo real para peer de teste se ativo
         local testPeer = self._peers["AventureiroTeste"]
         if testPeer and testPeer.isTest then
             local now = GetTime and GetTime() or 0
@@ -768,5 +933,5 @@ end
 function LocationService:clearPeers()
     self._peers = {}
     self._cachedGuild = nil
-    self:notifyListeners("PEERS_CLEARED")
+    self:notifyListeners("PEER_LIST_CHANGED")
 end

@@ -1,4 +1,4 @@
----@class SyncService
+﻿---@class SyncService
 --- Serviço de sincronização peer-to-peer em tempo real para os dados customizados de cada membro da guilda
 --- (Entrada, Aniversário, Alts Vinculados e Recrutador).
 --- Transmite via canal de guilda (GUILD) e canais do Addon usando o protocolo de confirmação (ACK).
@@ -41,6 +41,15 @@ local function getCurrentTimestamp()
         return os.time()
     end
     return 0
+end
+
+--- Normaliza o nome do remetente removendo o sufixo de reino e espaços.
+---@param name string|nil
+---@return string
+local function cleanName(name)
+    if not name or name == "" then return "" end
+    local clean = name:match("^[^-]+") or name
+    return clean:match("^%s*(.-)%s*$") or clean
 end
 
 --- Helper de localização seguro para mensagens do SyncService.
@@ -249,14 +258,7 @@ function SyncService:isChatLogEnabled()
     return false
 end
 
---- Normaliza o nome do remetente removendo o sufixo de reino e espaços.
----@param name string|nil
----@return string
-local function cleanName(name)
-    if not name or name == "" then return "" end
-    local clean = name:match("^[^-]+") or name
-    return clean:match("^%s*(.-)%s*$") or clean
-end
+
 
 --- Verifica com precisão se o nome informado pertence ao próprio jogador local.
 ---@param sender string|nil
@@ -346,6 +348,11 @@ function SyncService:touchPeer(peerName)
         lastSeen = now,
         isActive = true,
     }
+
+    -- Notifica o LocationService imediatamente para registrar que este membro Ã© usuÃ¡rio ativo do AddOn!
+    if self._locationService and self._locationService.touchPeer then
+        self._locationService:touchPeer(cName)
+    end
 
     if isNewlyOnline then
         local lastNotice = self._lastLoginDetected[lower] or 0
@@ -1905,6 +1912,15 @@ function SyncService:initHooks()
             end
         end
 
+        -- Garante que todos os prefixos estejam registrados na conexÃ£o do chat
+        local Register = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
+        if Register then
+            pcall(Register, SYNC_PREFIX)
+            pcall(Register, "GM_POS")
+            pcall(Register, "AJ_POS")
+            pcall(Register, "GuildManager")
+        end
+
         -- Ao logar / entrar no mundo, aguarda 2.5s para os canais de chat estarem conectados
         -- e então anuncia a presença e solicita sincronização
         if C_Timer and C_Timer.After then
@@ -1918,6 +1934,9 @@ function SyncService:initHooks()
                 pcall(function() self:broadcastMemberProfessions() end)
                 -- 4. Solicita pedidos de fabricação ativos da guilda
                 pcall(function() self:requestOrdersSync() end)
+                if self._locationService and self._locationService.requestPositions then
+                    self._locationService:requestPositions()
+                end
             end)
         end
     end
