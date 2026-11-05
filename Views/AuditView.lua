@@ -513,7 +513,15 @@ function AuditView:createUI()
         colHeader:SetJustifyH(col.align or "LEFT")
 
         local colKey = "COL_" .. col.id:upper()
-        local colTitle = L[colKey] or col.title
+        local colTitle = L[colKey]
+        if not colTitle or colTitle == colKey then
+            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+            if col.id == "role" then
+                colTitle = isEn and "ROLE" or "FUNÇÃO"
+            else
+                colTitle = col.title
+            end
+        end
         if col.editable then
             colHeader:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", colTitle))
         else
@@ -2900,7 +2908,15 @@ function AuditView:updateLocale()
             local fs = self._colHeaderStrings[col.id]
             if fs then
                 local colKey = "COL_" .. col.id:upper()
-                local title = curL[colKey] or col.title
+                local title = curL[colKey]
+                if not title or title == colKey then
+                    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+                    if col.id == "role" then
+                        title = isEn and "ROLE" or "FUNÇÃO"
+                    else
+                        title = col.title
+                    end
+                end
                 if col.editable then
                     fs:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", title))
                 else
@@ -2937,6 +2953,7 @@ function AuditView:updateLocale()
         if self._editModal.dateJoinLabel then self._editModal.dateJoinLabel:SetText("|cffffd200" .. (curL["EDIT_JOIN_DATE_LABEL"] or "Data de Entrada:") .. "|r") end
         if self._editModal.recruiterLabel then self._editModal.recruiterLabel:SetText("|cffffd200" .. (curL["EDIT_RECRUITER_LABEL"] or "Recrutador:") .. "|r") end
         if self._editModal.birthdayLabel then self._editModal.birthdayLabel:SetText("|cffffd200" .. (curL["EDIT_BIRTHDAY_LABEL"] or "Aniversário:") .. "|r") end
+        if self._editModal.roleLabel then self._editModal.roleLabel:SetText("|cffffd200" .. (curL["EDIT_ROLE_LABEL"] or "Função:") .. "|r") end
         if self._editModal.customNoteLabel then self._editModal.customNoteLabel:SetText("|cffffd200" .. (curL["EDIT_CUSTOM_NOTE_LABEL"] or "Nota Interna:") .. "|r") end
         if self._editModal.saveBtn then self._editModal.saveBtn:SetText(curL["SAVE"] or "Salvar") end
         if self._editModal.cancelBtn then self._editModal.cancelBtn:SetText(curL["CANCEL"] or "Cancelar") end
