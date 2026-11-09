@@ -80,8 +80,12 @@ function SyncConflictView:createUI()
     local closeBtn = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
     closeBtn:SetScript("OnClick", function()
-        -- Ao fechar sem clicar, concatena de acordo com a regra de proteção
-        self:resolveCurrent("CONCAT")
+        if self._currentConflict and self._currentConflict.fieldKey == "role" then
+            self:resolveCurrent("KEEP")
+        else
+            -- Ao fechar sem clicar, concatena de acordo com a regra de proteção
+            self:resolveCurrent("CONCAT")
+        end
     end)
 
     -- Ícone de Alerta / Gestão
@@ -232,6 +236,32 @@ end
 ---@param conflict table @{ memberName, sender, fieldKey, fieldName, oldValue, newValue, timestamp, member }
 function SyncConflictView:enqueueConflict(conflict)
     if not conflict then return end
+
+    local mLower = tostring(conflict.memberName or ""):lower()
+    local fKey = tostring(conflict.fieldKey or "")
+    local newVal = tostring(conflict.newValue or "")
+
+    -- Evita duplicar se o conflito atual em exibição já for idêntico
+    if self._currentConflict then
+        local curMLower = tostring(self._currentConflict.memberName or ""):lower()
+        local curFKey = tostring(self._currentConflict.fieldKey or "")
+        local curNewVal = tostring(self._currentConflict.newValue or "")
+        if curMLower == mLower and curFKey == fKey and curNewVal == newVal then
+            return
+        end
+    end
+
+    -- Se já houver um conflito na fila para o mesmo membro e campo, atualiza o valor proposto
+    for _, queued in ipairs(self._queue) do
+        if tostring(queued.memberName or ""):lower() == mLower and tostring(queued.fieldKey or "") == fKey then
+            queued.newValue = conflict.newValue
+            queued.rawNewValue = conflict.rawNewValue
+            queued.sender = conflict.sender
+            queued.timestamp = conflict.timestamp
+            return
+        end
+    end
+
     table.insert(self._queue, conflict)
 
     if not self._currentConflict then
@@ -247,7 +277,12 @@ function SyncConflictView:updateCountText()
     local total = #self._queue + (self._currentConflict and 1 or 0)
     if total > 1 then
         local curL = (_G.GM and _G.GM.L) or _G.L or L
-        self._countText:SetText(string.format(curL["SYNC_CONFLICT_QUEUE_COUNT"] or "Conflito 1 de %d", total))
+        local fmt = curL["SYNC_CONFLICT_QUEUE_COUNT"] or "Conflito %d de %d"
+        local ok, formatted = pcall(string.format, fmt, 1, total)
+        if not ok then
+            ok, formatted = pcall(string.format, fmt, total)
+        end
+        self._countText:SetText((ok and formatted) or string.format("Conflito 1 de %d", total))
         self._countText:Show()
     else
         self._countText:Hide()
@@ -268,11 +303,47 @@ function SyncConflictView:showNextConflict()
     self._currentConflict = conflict
 
     local curL = (_G.GM and _G.GM.L) or _G.L or L
+    if self._title then self._title:SetText(curL["SYNC_CONFLICT_TITLE"] or "Conflito de Sincronização - Decisão do Líder") end
+    if self._subtitle then self._subtitle:SetText(curL["SYNC_CONFLICT_SUBTITLE"] or "Um membro enviou dados que conflitam com as informações existentes no seu banco de dados.") end
+    if self._memberLabel then self._memberLabel:SetText(curL["SYNC_CONFLICT_MEMBER"] or "Membro:") end
+    if self._senderLabel then self._senderLabel:SetText(curL["SYNC_CONFLICT_SENDER"] or "Recebido de:") end
+    if self._fieldLabel then self._fieldLabel:SetText(curL["SYNC_CONFLICT_FIELD"] or "Dado em Conflito:") end
+    if self._beforeLabel then self._beforeLabel:SetText(curL["SYNC_CONFLICT_BEFORE"] or "Atual no seu Banco (Antes):") end
+    if self._afterLabel then self._afterLabel:SetText(curL["SYNC_CONFLICT_AFTER"] or "Recebido do Colega (Depois):") end
+    if self._question then self._question:SetText(curL["SYNC_CONFLICT_QUESTION"] or "Deseja substituir as informações existentes no seu banco de dados?") end
+
     if self._memberValue then self._memberValue:SetText("|cffffff00" .. (conflict.memberName or "Desconhecido") .. "|r") end
     if self._senderValue then self._senderValue:SetText(conflict.sender or "Membro") end
     if self._fieldValue then self._fieldValue:SetText("|cffff9926" .. (conflict.fieldName or conflict.fieldKey or "") .. "|r") end
     if self._beforeText then self._beforeText:SetText(tostring(conflict.oldValue or "")) end
     if self._afterText then self._afterText:SetText(tostring(conflict.newValue or "")) end
+
+    if conflict.fieldKey == "role" then
+        if self._btnReplace then
+            self._btnReplace:SetText(curL["SYNC_CONFLICT_BTN_CONFIRM"] or "Confirmar")
+        end
+        if self._btnConcat then
+            self._btnConcat:Hide()
+        end
+        if self._btnKeep and self._btnReplace then
+            self._btnKeep:ClearAllPoints()
+            self._btnKeep:SetPoint("LEFT", self._btnReplace, "RIGHT", 8, 0)
+            self._btnKeep:SetText(curL["SYNC_CONFLICT_BTN_KEEP"] or "Manter Atual")
+        end
+    else
+        if self._btnReplace then
+            self._btnReplace:SetText(curL["SYNC_CONFLICT_BTN_REPLACE"] or "Substituir")
+        end
+        if self._btnConcat then
+            self._btnConcat:SetText(curL["SYNC_CONFLICT_BTN_CONCAT"] or "Concatenar")
+            self._btnConcat:Show()
+        end
+        if self._btnKeep and self._btnConcat then
+            self._btnKeep:ClearAllPoints()
+            self._btnKeep:SetPoint("LEFT", self._btnConcat, "RIGHT", 8, 0)
+            self._btnKeep:SetText(curL["SYNC_CONFLICT_BTN_KEEP"] or "Manter Atual")
+        end
+    end
 
     self:updateCountText()
 

@@ -71,6 +71,10 @@ function AuditController:initHooks()
             end
             if fields.role ~= nil and member:getRole() ~= fields.role then
                 member:setRole(fields.role)
+                local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+                if member.setRolePendingLeaderConfirm then
+                    member:setRolePendingLeaderConfirm(not isLeader)
+                end
                 hasChanged = true
             end
             if fields.birthday ~= nil and member:getBirthday() ~= fields.birthday then
@@ -90,7 +94,8 @@ function AuditController:initHooks()
             end
 
             if hasChanged then
-                member:setCustomDataTimestamp(getCurrentTimestamp())
+                local nextTs = math.max(getCurrentTimestamp(), (member:getCustomDataTimestamp() or 0) + 1)
+                member:setCustomDataTimestamp(nextTs)
             end
 
             self._memberService:saveMember(member)

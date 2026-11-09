@@ -121,6 +121,10 @@ function MemberController:initHooks()
             end
             if updatedFields.role ~= nil and member:getRole() ~= updatedFields.role then
                 member:setRole(updatedFields.role)
+                local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+                if member.setRolePendingLeaderConfirm then
+                    member:setRolePendingLeaderConfirm(not isLeader)
+                end
                 hasCustomFieldChanged = true
             end
             if canOfficer and updatedFields.recruiter ~= nil and member:getRecruiter() ~= updatedFields.recruiter then
@@ -132,7 +136,8 @@ function MemberController:initHooks()
             end
 
             if hasCustomFieldChanged then
-                member:setCustomDataTimestamp(getCurrentTimestamp())
+                local nextTs = math.max(getCurrentTimestamp(), (member:getCustomDataTimestamp() or 0) + 1)
+                member:setCustomDataTimestamp(nextTs)
             end
 
             self._memberService:saveMember(member)

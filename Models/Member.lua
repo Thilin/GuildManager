@@ -75,6 +75,11 @@ function Member:new(data)
     end
     instance._recruiter = data.recruiter or ""
     instance._role = data.role or ""
+    if data.rolePendingLeaderConfirm ~= nil then
+        instance._rolePendingLeaderConfirm = (data.rolePendingLeaderConfirm == true)
+    else
+        instance._rolePendingLeaderConfirm = ((instance._role or "") ~= "")
+    end
     instance._customDataTimestamp = tonumber(data.customDataTimestamp) or 0
     instance._professions = data.professions or {}
     instance._professionsTimestamp = tonumber(data.professionsTimestamp) or 0
@@ -382,6 +387,7 @@ function Member:serialize()
         isInGuild = self._isInGuild,
         recruiter = self._recruiter,
         role = self:getRole(),
+        rolePendingLeaderConfirm = (self._rolePendingLeaderConfirm == true),
         customDataTimestamp = self._customDataTimestamp or 0,
         professions = self._professions or {},
         professionsTimestamp = self._professionsTimestamp or 0,
@@ -580,6 +586,18 @@ function Member:setRole(role)
     elseif role == nil then
         self._role = ""
     end
+end
+
+--- Verifica se a função/role deste membro foi atualizada localmente e aguarda confirmação do Líder da Guilda.
+---@return boolean
+function Member:isRolePendingLeaderConfirm()
+    return self._rolePendingLeaderConfirm == true
+end
+
+--- Define se a função/role deste membro aguarda confirmação do Líder da Guilda.
+---@param pending boolean
+function Member:setRolePendingLeaderConfirm(pending)
+    self._rolePendingLeaderConfirm = (pending == true)
 end
 
 function Member:getCustomDataTimestamp()

@@ -1,4 +1,4 @@
-﻿---@class SyncService
+---@class SyncService
 --- Serviço de sincronização peer-to-peer em tempo real para os dados customizados de cada membro da guilda
 --- (Entrada, Aniversário, Alts Vinculados e Recrutador).
 --- Transmite via canal de guilda (GUILD) e canais do Addon usando o protocolo de confirmação (ACK).
@@ -128,6 +128,9 @@ function SyncService:new(memberService, locationService, settingsService, guildR
     -- Assinaturas recentes das profissões de cada membro: [memberNameLower_profKey] = signature
     instance._lastProfSignatures = {}
 
+    -- Registro de conflitos de Role já decididos pelo Líder para evitar reabrir pacotes em trânsito: [key] = timestamp
+    instance._resolvedLeaderRoleConflicts = {}
+
     instance._myPlayerName = nil
     instance._myFullName = nil
     instance._channelNumber = nil
@@ -159,18 +162,37 @@ function SyncService:onLeaderResolveConflict(conflict, action)
     local fName = conflict.fieldName or conflict.fieldKey or "Dado"
     local mName = conflict.memberName or member:getName()
 
+    if conflict.fieldKey == "role" then
+        local roleVal = tostring(conflict.rawNewValue or conflict.newValue or ""):upper()
+        local conflictKey = cleanName(mName):lower() .. "~" .. roleVal
+        self._resolvedLeaderRoleConflicts = self._resolvedLeaderRoleConflicts or {}
+        self._resolvedLeaderRoleConflicts[conflictKey] = math.max(conflict.timestamp or 0, getCurrentTimestamp())
+
+        if action == "CONCAT" then
+            action = "KEEP"
+        end
+    end
+
+    local nowTs = math.max(getCurrentTimestamp(), (member:getCustomDataTimestamp() or 0) + 1, (conflict.timestamp or 0) + 1)
+
     if action == "REPLACE" then
         if conflict.fieldKey == "birthday" then
             member:setBirthday(conflict.newValue or "")
         elseif conflict.fieldKey == "recruiter" then
             member:setRecruiter(conflict.newValue or "")
+        elseif conflict.fieldKey == "role" then
+            member:setRole(conflict.rawNewValue or conflict.newValue or "")
+            if member.setRolePendingLeaderConfirm then
+                member:setRolePendingLeaderConfirm(false)
+            end
         end
-        if conflict.timestamp and member.setCustomDataTimestamp then
-            member:setCustomDataTimestamp(conflict.timestamp)
+        if member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(nowTs)
         end
         if self._memberService then
             self._memberService:saveMember(member, true)
         end
+        self:broadcastMemberCustomData(member, true)
         self:refreshActiveViews(mName)
         print(string.format(curL["SYNC_CONFLICT_CHAT_REPLACED"] or "|cff00ff00[GuildManager]|r %s de %s foi substituído no banco do líder.", fName, mName))
     elseif action == "CONCAT" then
@@ -186,15 +208,27 @@ function SyncService:onLeaderResolveConflict(conflict, action)
         elseif conflict.fieldKey == "recruiter" then
             member:setRecruiter(combined)
         end
-        if conflict.timestamp and member.setCustomDataTimestamp then
-            member:setCustomDataTimestamp(conflict.timestamp)
+        if member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(nowTs)
         end
         if self._memberService then
             self._memberService:saveMember(member, true)
         end
+        self:broadcastMemberCustomData(member, true)
         self:refreshActiveViews(mName)
         print(string.format(curL["SYNC_CONFLICT_CHAT_CONCAT"] or "|cff00ff00[GuildManager]|r %s de %s foi concatenado no banco do líder.", fName, mName))
     elseif action == "KEEP" then
+        if conflict.fieldKey == "role" and member.setRolePendingLeaderConfirm then
+            member:setRolePendingLeaderConfirm(false)
+        end
+        if member.setCustomDataTimestamp then
+            member:setCustomDataTimestamp(nowTs)
+        end
+        if self._memberService then
+            self._memberService:saveMember(member, true)
+        end
+        self:broadcastMemberCustomData(member, true)
+        self:refreshActiveViews(mName)
         print(string.format(curL["SYNC_CONFLICT_CHAT_KEPT"] or "|cffff9900[GuildManager]|r %s de %s mantido inalterado no banco do líder.", fName, mName))
     end
 end
@@ -418,13 +452,16 @@ function SyncService:syncWithPeer(peerName)
 
     local members = self._memberService:getAllMembers()
     local count = 0
+    local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
 
     for _, m in ipairs(members) do
         local dateJoin = m:getDateJoin() or ""
         local bday = m:getBirthday() or ""
         local rec = m:getRecruiter() or ""
         local alts = m:getAlts() or {}
-        if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 then
+        local role = (m.getRole and m:getRole()) or ""
+        local roleShouldSync = isLeader or (m.isRolePendingLeaderConfirm and m:isRolePendingLeaderConfirm())
+        if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or (role ~= "" and roleShouldSync) then
             local mName = cleanName(m:getName())
             local memberLower = mName:lower()
 
@@ -601,14 +638,19 @@ function SyncService:broadcastMemberCustomData(member, force)
     local dateJoin = ""
     local altsCsv = ""
     local isMain = false
+    local role = ""
 
     -- Regra 1: Data de entrada e Lista de Alts só sincronizam a partir do Líder da guilda!
+    -- A Função (Role) é compartilhada para todos a partir do addon do Líder da Guilda,
+    -- e qualquer atualização feita pelos membros é enviada ao Líder para confirmação.
     if isLeader then
         dateJoin = member:getDateJoin() or ""
         local alts = member:getAlts() or {}
-    local role = member:getRole() or ""
         altsCsv = table.concat(alts, ",")
         isMain = member:isMain()
+        role = (member.getRole and member:getRole()) or ""
+    elseif member.isRolePendingLeaderConfirm and member:isRolePendingLeaderConfirm() then
+        role = (member.getRole and member:getRole()) or ""
     end
 
     -- Regra 2: Aniversário e Recrutador continuam sendo syncados entre todos os membros
@@ -616,8 +658,8 @@ function SyncService:broadcastMemberCustomData(member, force)
     local recruiter = member:getRecruiter() or ""
 
     -- Regra 3: Nota interna NUNCA recebe sync (nunca é transmitida)
-    -- Se não é o líder e não possui aniversário nem recrutador, descarta o envio para economizar 100% de CPU/rede
-    if not isLeader and birthday == "" and recruiter == "" then
+    -- Se não é o líder e não possui aniversário, recrutador nem função pendente, descarta o envio
+    if not isLeader and birthday == "" and recruiter == "" and role == "" then
         return false
     end
 
@@ -683,6 +725,9 @@ function SyncService:broadcastMemberCustomData(member, force)
         end
         if recruiter and recruiter ~= "" then
             table.insert(fieldsList, L("SYNC_LOG_FIELD_RECRUITER", recruiter))
+        end
+        if role and role ~= "" then
+            table.insert(fieldsList, L("SYNC_LOG_FIELD_ROLE", role))
         end
         if altsCsv and altsCsv ~= "" then
             table.insert(fieldsList, L("SYNC_LOG_FIELD_ALTS"))
@@ -787,7 +832,7 @@ function SyncService:sendUpdatePacket(updateData, immediate)
         return
     end
 
-    local payload = string.format("DATA~%s~%s~%s~%s~%s~%s~%s~%d",
+    local payload = string.format("DATA~%s~%s~%s~%s~%s~%s~%s~%d~%s",
         updateData.updateId,
         updateData.memberName,
         updateData.dateJoin or "",
@@ -795,7 +840,8 @@ function SyncService:sendUpdatePacket(updateData, immediate)
         updateData.recruiter or "",
         updateData.altsCsv or "",
         updateData.isMain and "1" or "0",
-        updateData.timestamp or 0
+        updateData.timestamp or 0,
+        updateData.role or ""
     )
 
     local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
@@ -919,7 +965,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     local senderClean = cleanName(sender)
     self:touchPeer(senderClean)
 
-    local tag, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 = strsplit("~", message)
+    local tag, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 = strsplit("~", message)
 
     -- =========================================================================
     -- RECEBIMENTO DE ANÚNCIO DE LOGIN / HELLO
@@ -950,9 +996,26 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         local member = self._memberService and self._memberService:getMember(mClean)
         local localTimestamp = (member and member.getCustomDataTimestamp and member:getCustomDataTimestamp()) or 0
 
+        local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+        local senderIsLeader = self:isSenderGuildLeader(senderClean)
+
+        -- Verifica se o pacote traz uma atualização de Role para o Líder da Guilda confirmar
+        local currentLocalRole = (member and member.getRole and member:getRole()) or ""
+        local hasIncomingRoleChangeForLeader = false
+        if isLocalLeader and role ~= "" and role ~= currentLocalRole then
+            local conflictKey = mClean:lower() .. "~" .. role:upper()
+            local lastResolvedTs = self._resolvedLeaderRoleConflicts and self._resolvedLeaderRoleConflicts[conflictKey]
+            if not lastResolvedTs or timestamp > lastResolvedTs then
+                hasIncomingRoleChangeForLeader = true
+            end
+        end
+
         -- Last-Write-Wins: Se o membro já possui dados localmente e a versão local é MAIS RECENTE que o pacote recebido,
         -- rejeita o pacote antigo para proteger as informações novas contra sobrescrita indevida!
-        if member and localTimestamp > 0 and timestamp > 0 and localTimestamp > timestamp then
+        -- Exceções:
+        -- 1. Se o remetente for o Líder da Guilda (senderIsLeader), os dados do Líder são a fonte oficial da guilda.
+        -- 2. Se o receptor for o Líder da Guilda e houver uma alteração de Role pendente de confirmação.
+        if member and localTimestamp > 0 and timestamp > 0 and localTimestamp > timestamp and not senderIsLeader and not hasIncomingRoleChangeForLeader then
             -- Confirma o recebimento para o peer parar de retransmitir o pacote antigo
             self:sendAckPacket(updateId, mClean)
             -- Transmite imediatamente a nossa versão mais recente para atualizar o peer desatualizado
@@ -963,9 +1026,6 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if not member then
             member = Member:new({ name = mClean, isInGuild = true })
         end
-
-        local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
-        local senderIsLeader = self:isSenderGuildLeader(senderClean)
 
         -- Regra 1: Data de entrada e Lista de Alts só sincronizam a partir do Líder da guilda!
         -- Se o remetente NÃO for o Líder da guilda, ignora dateJoin e lista de alts.
@@ -980,7 +1040,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         -- Regra 4: Proteção do Banco de Dados do Líder da Guilda
         -- Em nenhuma hipótese as informações Syncada devem substituir diretamente as informações
         -- registradas no banco de dados do líder da guilda. Se conflitarem, exibe diálogo para decisão.
-        -- Se não for possível perguntar (ex: em combate), concatena a informação.
+        -- No caso de Role/Função: toda vez que for atualizada e tiver alguma alteração, o Guild Líder precisa confirmar!
         if isLocalLeader and member then
             -- Verificação de Conflito em Aniversário
             local currentBday = member:getBirthday() or ""
@@ -1029,6 +1089,37 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
                     recruiter = currentRec .. " | " .. recruiter
                 end
             end
+
+            -- Verificação de Alteração em Função (Role) - Exige confirmação do Líder sempre que houver alteração
+            local currentRole = (member.getRole and member:getRole()) or ""
+            if role ~= "" and role ~= currentRole then
+                local conflictKey = mClean:lower() .. "~" .. role:upper()
+                local lastResolvedTs = self._resolvedLeaderRoleConflicts and self._resolvedLeaderRoleConflicts[conflictKey]
+                if not lastResolvedTs or appliedTimestamp > lastResolvedTs then
+                    if self._syncConflictView then
+                        local curL = (_G.GM and _G.GM.L) or _G.L or L
+                        local emptyRoleLabel = curL["STATS_UNASSIGNED"] or "Sem Função"
+                        self._syncConflictView:enqueueConflict({
+                            memberName = mClean,
+                            sender = senderClean,
+                            fieldKey = "role",
+                            fieldName = curL["SYNC_CONFLICT_FIELD_ROLE"] or "Função",
+                            oldValue = (currentRole ~= "" and currentRole) or emptyRoleLabel,
+                            newValue = role,
+                            rawOldValue = currentRole,
+                            rawNewValue = role,
+                            timestamp = appliedTimestamp,
+                            member = member,
+                        })
+                    end
+                end
+                -- Mantém a função atual do banco do Líder até a confirmação do Líder
+                role = currentRole
+            elseif role ~= "" and role == currentRole then
+                if member.setRolePendingLeaderConfirm then
+                    member:setRolePendingLeaderConfirm(false)
+                end
+            end
         end
 
         -- Aplica os dados permitidos:
@@ -1036,21 +1127,31 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if senderIsLeader and dateJoin and dateJoin ~= "" then
             member:setDateJoin(dateJoin)
         end
-        if role and role ~= "" then
+
+        -- 2. Função / Role (os outros membros salvam a partir do que existe no addon do Guild Líder)
+        if senderIsLeader then
+            member:setRole(role or "")
+            if member.setRolePendingLeaderConfirm then
+                member:setRolePendingLeaderConfirm(false)
+            end
+        elseif isLocalLeader and role and role ~= "" then
             member:setRole(role)
+            if member.setRolePendingLeaderConfirm then
+                member:setRolePendingLeaderConfirm(false)
+            end
         end
 
-        -- 2. Aniversário
+        -- 3. Aniversário
         if birthday and birthday ~= "" then
             member:setBirthday(birthday)
         end
 
-        -- 3. Recrutador
+        -- 4. Recrutador
         if recruiter and recruiter ~= "" then
             member:setRecruiter(recruiter)
         end
 
-        -- 4. Alts Vinculados e Main/Alt (somente se remetente for o Líder)
+        -- 5. Alts Vinculados e Main/Alt (somente se remetente for o Líder)
         local altsList = {}
         if senderIsLeader and altsCsv and altsCsv ~= "" then
             for altName in string.gmatch(altsCsv, "([^,]+)") do
@@ -1069,7 +1170,8 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         -- Atualiza a assinatura local para não retransmitir de volta o que acabou de receber
         local isMainBool = (isMainStr == "1")
-        self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool, role)
+        local effectiveRole = (member.getRole and member:getRole()) or ""
+        self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool, effectiveRole)
 
         -- Persiste no banco de dados local com normalização e sem retransmissão circular
         if self._memberService then
@@ -1103,6 +1205,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             end
             if recruiter and recruiter ~= "" then
                 table.insert(fieldsList, L("SYNC_LOG_FIELD_RECRUITER", recruiter))
+            end
+            if (senderIsLeader or isLocalLeader) and role and role ~= "" then
+                table.insert(fieldsList, L("SYNC_LOG_FIELD_ROLE", role))
             end
             if altsCsv and altsCsv ~= "" then
                 table.insert(fieldsList, L("SYNC_LOG_FIELD_ALTS"))
@@ -1761,14 +1866,17 @@ function SyncService:forceSyncAll()
 
     local members = self._memberService:getAllMembers()
     local count = 0
+    local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
 
-    -- 1. Sincroniza dados customizados (Entrada, Aniversário, Recrutador, Alts)
+    -- 1. Sincroniza dados customizados (Entrada, Aniversário, Recrutador, Alts, Função)
     for _, m in ipairs(members) do
         local dateJoin = m:getDateJoin() or ""
         local bday = m:getBirthday() or ""
         local rec = m:getRecruiter() or ""
         local alts = m:getAlts() or {}
-        if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 then
+        local role = (m.getRole and m:getRole()) or ""
+        local roleShouldSync = isLeader or (m.isRolePendingLeaderConfirm and m:isRolePendingLeaderConfirm())
+        if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or (role ~= "" and roleShouldSync) then
             -- Limpa assinatura em cache para permitir reenvio forçado
             local mLower = cleanName(m:getName()):lower()
             self._lastMemberSignatures[mLower] = nil
@@ -1906,13 +2014,19 @@ function SyncService:initHooks()
         if self._memberService then
             local all = self._memberService:getAllMembers()
             local nowTs = getCurrentTimestamp()
+            local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
             for _, m in ipairs(all) do
                 local d = m:getDateJoin() or ""
                 local b = m:getBirthday() or ""
                 local r = m:getRecruiter() or ""
                 local a = m:getAlts() or {}
+                local rl = (m.getRole and m:getRole()) or ""
                 local ts = m:getCustomDataTimestamp()
-                if (d ~= "" or b ~= "" or r ~= "" or #a > 0) and (not ts or ts == 0) then
+                if isLeader and rl ~= "" and m.isRolePendingLeaderConfirm and m:isRolePendingLeaderConfirm() then
+                    m:setRolePendingLeaderConfirm(false)
+                    self._memberService:saveMember(m, true)
+                end
+                if (d ~= "" or b ~= "" or r ~= "" or #a > 0 or rl ~= "") and (not ts or ts == 0) then
                     m:setCustomDataTimestamp(nowTs)
                     self._memberService:saveMember(m, true)
                 end
