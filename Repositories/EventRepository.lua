@@ -13,6 +13,8 @@ function EventRepository:new(db)
     if type(instance._db.events) ~= "table" then
         instance._db.events = {}
     end
+    instance._cache = {}
+    instance._allListCache = nil
 
     return instance
 end
@@ -24,6 +26,8 @@ function EventRepository:setDatabase(db)
     if type(self._db.events) ~= "table" then
         self._db.events = {}
     end
+    self._cache = {}
+    self._allListCache = nil
 end
 
 --- Persiste ou atualiza uma entidade Event no banco de dados.
@@ -44,6 +48,8 @@ function EventRepository:save(event)
     end
 
     self._db.events[id] = event:serialize()
+    self._cache[id] = event
+    self._allListCache = nil
     return true
 end
 
@@ -57,6 +63,8 @@ function EventRepository:delete(id)
 
     if self._db.events[id] then
         self._db.events[id] = nil
+        self._cache[id] = nil
+        self._allListCache = nil
         return true
     end
     return false
@@ -70,9 +78,15 @@ function EventRepository:findById(id)
         return nil
     end
 
+    if self._cache[id] then
+        return self._cache[id]
+    end
+
     local data = self._db.events[id]
     if type(data) == "table" and Event and Event.new then
-        return Event:new(data)
+        local ev = Event:new(data)
+        self._cache[id] = ev
+        return ev
     end
     return nil
 end
@@ -80,17 +94,28 @@ end
 --- Retorna todos os eventos persistidos.
 ---@return Event[]
 function EventRepository:findAll()
+    if self._allListCache then
+        return self._allListCache
+    end
+
     local list = {}
     if type(self._db.events) ~= "table" then
+        self._allListCache = list
         return list
     end
 
-    for _, data in pairs(self._db.events) do
+    for id, data in pairs(self._db.events) do
         if type(data) == "table" and Event and Event.new then
-            table.insert(list, Event:new(data))
+            local ev = self._cache[id]
+            if not ev then
+                ev = Event:new(data)
+                self._cache[id] = ev
+            end
+            table.insert(list, ev)
         end
     end
 
+    self._allListCache = list
     return list
 end
 

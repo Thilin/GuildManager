@@ -1029,6 +1029,14 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             return
         end
 
+        local wasNewMember = (member == nil)
+        local prevDateJoin = (member and member:getDateJoin()) or ""
+        local prevBday = (member and member:getBirthday()) or ""
+        local prevRec = (member and member:getRecruiter()) or ""
+        local prevRole = (member and member.getRole and member:getRole()) or ""
+        local prevAltsCsv = (member and table.concat(member:getAlts() or {}, ",")) or ""
+        local prevIsMain = (member and member:isMain() ~= false) or true
+
         if not member then
             member = Member:new({ name = mClean, isInGuild = true })
         end
@@ -1179,23 +1187,39 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         local effectiveRole = (member.getRole and member:getRole()) or ""
         self._lastMemberSignatures[mClean:lower()] = makeDataSignature(dateJoin, birthday, recruiter, altsCsv, isMainBool, effectiveRole)
 
-        -- Persiste no banco de dados local com normalização e sem retransmissão circular
-        if self._memberService then
-            self._memberService:saveMember(member, true)
+        local newDateJoin = member:getDateJoin() or ""
+        local newBday = member:getBirthday() or ""
+        local newRec = member:getRecruiter() or ""
+        local newAltsCsv = table.concat(member:getAlts() or {}, ",")
+        local newIsMain = (member:isMain() ~= false)
+        local dataChanged = wasNewMember
+            or (newDateJoin ~= prevDateJoin)
+            or (newBday ~= prevBday)
+            or (newRec ~= prevRec)
+            or (effectiveRole ~= prevRole)
+            or (newAltsCsv ~= prevAltsCsv)
+            or (newIsMain ~= prevIsMain)
+        local agendaDataChanged = wasNewMember or (newDateJoin ~= prevDateJoin) or (newBday ~= prevBday)
 
-            -- Mantém a reciprocidade da família de alts se houver lista (skipSync = true evita flood)
-            if senderIsLeader and #altsList > 0 and self._memberService.syncAltFamily then
-                local familyNames = { mClean }
-                for _, aName in ipairs(altsList) do
-                    table.insert(familyNames, aName)
+        if dataChanged then
+            -- Persiste no banco de dados local com normalização e sem retransmissão circular
+            if self._memberService then
+                self._memberService:saveMember(member, true)
+
+                -- Mantém a reciprocidade da família de alts se houver lista (skipSync = true evita flood)
+                if senderIsLeader and #altsList > 0 and self._memberService.syncAltFamily then
+                    local familyNames = { mClean }
+                    for _, aName in ipairs(altsList) do
+                        table.insert(familyNames, aName)
+                    end
+                    local mainName = isMainBool and mClean or altsList[1]
+                    self._memberService:syncAltFamily(familyNames, mainName, true)
                 end
-                local mainName = isMainBool and mClean or altsList[1]
-                self._memberService:syncAltFamily(familyNames, mainName, true)
             end
-        end
 
-        -- Atualiza telas da interface em tempo real se estiverem visíveis
-        self:refreshActiveViews(mClean)
+            -- Atualiza telas da interface em tempo real se estiverem visíveis
+            self:refreshActiveViews(mClean, agendaDataChanged)
+        end
 
         -- Exibe no chat local a notificação requerida quando alguém envia informação pra sincronizar
         local isNewUpdate = not self._processedUpdateIds[updateId]
@@ -1320,7 +1344,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
             _G.GM.professionService:notifyChanged()
         end
-        self:refreshActiveViews(mClean)
+        self:refreshActiveViews(mClean, false)
 
         -- Se não há blocos de receitas a esperar (totalChunks == 0), finaliza e confirma com ACK
         if totalChunks == 0 then
@@ -1378,7 +1402,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
                 _G.GM.professionService:notifyChanged()
             end
-            self:refreshActiveViews(mClean)
+            self:refreshActiveViews(mClean, false)
             self:sendAckPacket(updateId, mClean)
 
             local isNew = not self._processedUpdateIds[updateId]
@@ -1499,7 +1523,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             end
         end
 
-        self:refreshActiveViews(requester)
+        self:refreshActiveViews(requester, false)
 
     -- =========================================================================
     -- CONFIRMAÇÃO DE RECEBIMENTO DE PEDIDO (ORDER_ACK)
@@ -1533,7 +1557,8 @@ end
 
 --- Executa a atualização das janelas abertas de forma otimizada.
 ---@param memberName string
-function SyncService:executeRefreshViews(memberName)
+---@param refreshAgenda boolean|nil
+function SyncService:executeRefreshViews(memberName, refreshAgenda)
     -- Atualiza tela de auditoria se aberta (sem re-escanear GetGuildRosterInfo)
     if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit then
         local aView = _G.GM.auditView
@@ -1553,10 +1578,10 @@ function SyncService:executeRefreshViews(memberName)
         end
     end
 
-    -- Atualiza lista de aniversariantes da agenda se aberta
-    if _G.GM and _G.GM.agendaView and _G.GM.agendaView.isShown and _G.GM.agendaView:isShown() then
+    -- Atualiza lista de aniversariantes/promoções da agenda se aberta e se houve mudança relevante
+    if refreshAgenda ~= false and _G.GM and _G.GM.agendaView and _G.GM.agendaView.isShown and _G.GM.agendaView:isShown() then
         if _G.GM.agendaController and _G.GM.agendaController.refreshAgenda then
-            _G.GM.agendaController:refreshAgenda()
+            _G.GM.agendaController:refreshAgenda(true)
         end
     end
 
@@ -1572,9 +1597,13 @@ end
 --- Atualiza as janelas abertas para refletir os novos dados com debounce suave (600ms),
 --- eliminando picos de CPU e congelamentos quando múltiplos pacotes chegam em lote.
 ---@param memberName string
-function SyncService:refreshActiveViews(memberName)
+---@param refreshAgenda boolean|nil
+function SyncService:refreshActiveViews(memberName, refreshAgenda)
     if memberName and memberName ~= "" then
         self._lastRefreshMemberName = memberName
+    end
+    if refreshAgenda ~= false then
+        self._pendingRefreshAgenda = true
     end
     if self._refreshDebouncePending then
         return
@@ -1585,11 +1614,15 @@ function SyncService:refreshActiveViews(memberName)
         C_Timer.After(0.6, function()
             self._refreshDebouncePending = false
             local targetName = self._lastRefreshMemberName or memberName or ""
+            local shouldRefreshAgenda = (self._pendingRefreshAgenda == true)
             self._lastRefreshMemberName = nil
-            self:executeRefreshViews(targetName)
+            self._pendingRefreshAgenda = false
+            self:executeRefreshViews(targetName, shouldRefreshAgenda)
         end)
     else
-        self:executeRefreshViews(memberName)
+        local shouldRefreshAgenda = (self._pendingRefreshAgenda == true)
+        self._pendingRefreshAgenda = false
+        self:executeRefreshViews(memberName, shouldRefreshAgenda)
     end
 end
 

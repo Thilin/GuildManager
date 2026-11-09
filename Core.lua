@@ -301,6 +301,9 @@ function GM.switchActiveGuild(guildName, realmName, force)
         if GM.eventRepository and GM.eventRepository.setDatabase then
             GM.eventRepository:setDatabase(targetDb)
         end
+        if GM.eventService and GM.eventService.invalidateCache then
+            GM.eventService:invalidateCache()
+        end
         if GM.craftOrderRepository and GM.craftOrderRepository.setDatabase then
             GM.craftOrderRepository:setDatabase(targetDb)
         end

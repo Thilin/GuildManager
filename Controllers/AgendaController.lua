@@ -57,7 +57,7 @@ function AgendaController:initHooks()
             if not self._eventService then return false, "Serviço de agenda indisponível." end
             local event, err = self._eventService:createEvent(title, eventType, dateStr, timeStr, desc)
             if event then
-                self:refreshAgenda()
+                self:refreshAgenda(true)
                 return true, nil
             end
             return false, err
@@ -83,7 +83,7 @@ function AgendaController:initHooks()
             if not self._eventService then return false, "Serviço de agenda indisponível." end
             local event, err = self._eventService:updateEvent(id, title, eventType, dateStr, timeStr, desc)
             if event then
-                self:refreshAgenda()
+                self:refreshAgenda(true)
                 return true, nil
             end
             return false, err
@@ -110,7 +110,7 @@ function AgendaController:initHooks()
             if not self._eventService then return false end
             local ok = self._eventService:deleteEvent(id)
             if ok then
-                self:refreshAgenda()
+                self:refreshAgenda(true)
             end
             return ok
         end)
@@ -122,7 +122,7 @@ function AgendaController:initHooks()
             if not self._eventService then return false, "Serviço de agenda indisponível." end
             local ok, err = self._eventService:addInvitee(eventId, memberName)
             if ok then
-                self:refreshAgenda()
+                self:refreshAgenda(true)
                 return true, nil
             end
             return false, err
@@ -135,7 +135,7 @@ function AgendaController:initHooks()
             if not self._eventService then return false end
             local ok = self._eventService:removeInvitee(eventId, memberName)
             if ok then
-                self:refreshAgenda()
+                self:refreshAgenda(true)
             end
             return ok
         end)
@@ -178,7 +178,7 @@ function AgendaController:initHooks()
             local event, err = self._eventService:createBirthdayEventForMember(member)
             if event then
                 print(string.format("|cff00ff00[GuildManager]|r Evento de comemoração criado com sucesso para |cffffd200%s|r!", member:getName()))
-                self:refreshAgenda()
+                self:refreshAgenda(true)
             else
                 print(string.format("|cffff4444[GuildManager]|r %s", err or "Falha ao criar evento de aniversário."))
             end
@@ -208,6 +208,9 @@ function AgendaController:initHooks()
                 print(string.format("|cff00ff00[GuildManager]|r Comando de promoção enviado para |cffffd200%s|r (%s).", cleanName, targetRank or ""))
                 if C_Timer and C_Timer.After then
                     C_Timer.After(1.5, function()
+                        if self._eventService and self._eventService.invalidateCache then
+                            self._eventService:invalidateCache()
+                        end
                         self:refreshAgenda()
                     end)
                 end
@@ -278,45 +281,55 @@ function AgendaController:checkLoginNotifications()
 end
 
 --- Atualiza os eventos e a lista de aniversariantes carregados na View.
-function AgendaController:refreshAgenda()
+---@param skipScan boolean|nil @Se true, não re-escaneia o roster da Blizzard
+function AgendaController:refreshAgenda(skipScan)
     if not self._agendaView then return end
 
-    if IsInGuild and IsInGuild() then
+    if not skipScan and IsInGuild and IsInGuild() then
         if self._guildRosterService and self._guildRosterService.scanRoster then
             self._guildRosterService:scanRoster()
         end
     end
 
-    -- 1. Carrega todos os eventos ordenados
+    -- 1. Carrega todos os eventos ordenados (sem disparar renderização intermediária)
     local events = {}
     if self._eventService and self._eventService.getAllEvents then
         events = self._eventService:getAllEvents() or {}
     end
-    self._agendaView:setEvents(events)
+    self._agendaView:setEvents(events, true)
 
-    -- 2. Carrega lista de próximos aniversariantes ordenada
+    -- 2. Carrega lista de próximos aniversariantes ordenada (sem disparar renderização intermediária)
     local birthdays = {}
     if self._eventService and self._eventService.getUpcomingBirthdays then
         birthdays = self._eventService:getUpcomingBirthdays(30) or {}
     end
-    self._agendaView:setUpcomingBirthdays(birthdays)
+    self._agendaView:setUpcomingBirthdays(birthdays, true)
 
-    -- 2b. Carrega promoções elegíveis / futuras com base na data de entrada
+    -- 2b. Carrega promoções elegíveis / futuras com base na data de entrada (sem disparar renderização intermediária)
     local promotions = {}
     if self._eventService and self._eventService.getUpcomingPromotions then
         promotions = self._eventService:getUpcomingPromotions(30) or {}
     end
     if self._agendaView.setUpcomingPromotions then
-        self._agendaView:setUpcomingPromotions(promotions)
+        self._agendaView:setUpcomingPromotions(promotions, true)
     end
 
-    -- 3. Carrega lista de membros ativos da guilda para buscas e convites
-    local guildMembers = {}
-    if self._memberService and self._memberService.getAllMembers then
-        local all = self._memberService:getAllMembers() or {}
-        for _, m in ipairs(all) do
-            if m:isInGuild() then
-                table.insert(guildMembers, m)
+    -- 3. Carrega lista de membros ativos da guilda para buscas e convites, reutilizando o cache ativo
+    local guildMembers = nil
+    if self._guildRosterService and self._guildRosterService.getActiveMemberList then
+        local active = self._guildRosterService:getActiveMemberList()
+        if active and #active > 0 then
+            guildMembers = active
+        end
+    end
+    if not guildMembers then
+        guildMembers = {}
+        if self._memberService and self._memberService.getAllMembers then
+            local all = self._memberService:getAllMembers() or {}
+            for _, m in ipairs(all) do
+                if m:isInGuild() then
+                    table.insert(guildMembers, m)
+                end
             end
         end
     end
@@ -327,6 +340,11 @@ function AgendaController:refreshAgenda()
     if self._agendaView.updatePermissions then
         self._agendaView:updatePermissions()
     end
+
+    -- Renderiza toda a Agenda em uma única passagem consolidada
+    if self._agendaView.renderEvents then
+        self._agendaView:renderEvents()
+    end
 end
 
 --- Abre a janela da agenda da guilda.
@@ -336,9 +354,13 @@ function AgendaController:show()
         return
     end
 
-    self:refreshAgenda()
+    local wasShown = self._agendaView and self._agendaView.isShown and self._agendaView:isShown()
     if self._agendaView then
         self._agendaView:show()
+    end
+    -- Se já estava aberta, atualiza manualmente (se estava fechada, o OnShow da View já dispara refreshAgenda)
+    if wasShown then
+        self:refreshAgenda()
     end
 end
 

@@ -199,40 +199,72 @@ local function getDaysInMonth(year, month)
     return daysPerMonth[month] or 30
 end
 
+local firstWeekdayCache = {}
 local function getFirstWeekdayOfMonth(year, month)
+    local cacheKey = (year or 2026) * 100 + (month or 1)
+    if firstWeekdayCache[cacheKey] then
+        return firstWeekdayCache[cacheKey]
+    end
+
     if time and date then
         local t = time({ year = year, month = month, day = 1, hour = 12, min = 0, sec = 0 })
         local d = date("*t", t)
-        return (d and d.wday) or 1
+        local wday = (d and d.wday) or 1
+        firstWeekdayCache[cacheKey] = wday
+        return wday
     end
     local t = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 }
     local y = year
     if month < 3 then y = y - 1 end
     local w = (y + math.floor(y/4) - math.floor(y/100) + math.floor(y/400) + t[month] + 1) % 7
-    return w + 1
+    local wday = w + 1
+    firstWeekdayCache[cacheKey] = wday
+    return wday
 end
 
+local normalizeDateCache = {}
 local function normalizeDate(dateStr)
     if not dateStr or type(dateStr) ~= "string" then return nil end
+    local cached = normalizeDateCache[dateStr]
+    if cached ~= nil then
+        if cached == false then return nil end
+        return cached.norm, cached.m, cached.d, cached.y
+    end
+
     local clean = dateStr:match("^%s*(.-)%s*$")
-    if clean == "" then return nil end
+    if clean == "" then
+        normalizeDateCache[dateStr] = false
+        return nil
+    end
 
     local y, m, d = clean:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
     if y and m and d then
-        return string.format("%04d-%02d-%02d", tonumber(y), tonumber(m), tonumber(d)), tonumber(m), tonumber(d), tonumber(y)
+        local ny, nm, nd = tonumber(y), tonumber(m), tonumber(d)
+        local norm = string.format("%04d-%02d-%02d", ny, nm, nd)
+        normalizeDateCache[dateStr] = { norm = norm, m = nm, d = nd, y = ny }
+        return norm, nm, nd, ny
     end
 
     d, m, y = clean:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
     if d and m and y then
-        return string.format("%04d-%02d-%02d", tonumber(y), tonumber(m), tonumber(d)), tonumber(m), tonumber(d), tonumber(y)
+        local ny, nm, nd = tonumber(y), tonumber(m), tonumber(d)
+        local norm = string.format("%04d-%02d-%02d", ny, nm, nd)
+        normalizeDateCache[dateStr] = { norm = norm, m = nm, d = nd, y = ny }
+        return norm, nm, nd, ny
     end
 
+    normalizeDateCache[dateStr] = false
     return nil
 end
 
---- Helper para obter o nome colorido pela classe
+--- Helper para obter o nome colorido pela classe (com cache em memória)
+local coloredNameCache = {}
 local function getColoredName(name, classToken)
     if not name or name == "" then return "" end
+    local cacheKey = name .. "\0" .. (classToken or "")
+    local cached = coloredNameCache[cacheKey]
+    if cached then return cached end
+
     local clean = name:match("^[^-]+") or name
     clean = clean:match("^%s*(.-)%s*$") or clean
 
@@ -242,15 +274,20 @@ local function getColoredName(name, classToken)
         tok = CLASS_NAME_TO_TOKEN[raw:upper()] or raw:upper()
     end
 
+    local res = nil
     if tok then
         if RAID_CLASS_COLORS and RAID_CLASS_COLORS[tok] then
             local c = RAID_CLASS_COLORS[tok]
-            return string.format("|cff%02x%02x%02x%s|r", math.floor(c.r * 255), math.floor(c.g * 255), math.floor(c.b * 255), clean)
+            res = string.format("|cff%02x%02x%02x%s|r", math.floor(c.r * 255), math.floor(c.g * 255), math.floor(c.b * 255), clean)
         elseif CLASS_COLORS and CLASS_COLORS[tok] then
-            return CLASS_COLORS[tok].hex .. clean .. "|r"
+            res = CLASS_COLORS[tok].hex .. clean .. "|r"
         end
     end
-    return string.format("|cffffffff%s|r", clean)
+    if not res then
+        res = string.format("|cffffffff%s|r", clean)
+    end
+    coloredNameCache[cacheKey] = res
+    return res
 end
 
 --- Helper para estilizar caixas EditBox
@@ -347,9 +384,11 @@ function AgendaView:setOnInviteAllOnlineCallback(cb) self._onInviteAllOnlineCall
 function AgendaView:setOnCreateBirthdayEventCallback(cb) self._onCreateBirthdayEventCallback = cb end
 function AgendaView:setOnPromoteMemberCallback(cb) self._onPromoteMemberCallback = cb end
 
-function AgendaView:setUpcomingPromotions(promotions)
+function AgendaView:setUpcomingPromotions(promotions, skipRender)
     self._upcomingPromotions = promotions or {}
-    self:renderEvents()
+    if not skipRender then
+        self:renderEvents()
+    end
 end
 
 function AgendaView:setGuildMembers(members)
@@ -385,7 +424,8 @@ function AgendaView:isShown()
 end
 
 --- Atualiza dinamicamente todos os textos da interface de agenda.
-function AgendaView:updateLocale()
+---@param skipRender boolean|nil
+function AgendaView:updateLocale(skipRender)
     local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not self._frame then return end
 
@@ -400,8 +440,9 @@ function AgendaView:updateLocale()
     self:updateEventModalLocale()
     self:updateInviteeModalLocale()
 
-    self:renderEvents()
-    self:renderBirthdays()
+    if not skipRender and self._frame:IsShown() then
+        self:renderEvents()
+    end
 end
 
 --- Atualiza textos da modal de criação/edição de evento.
@@ -451,7 +492,7 @@ end
 
 function AgendaView:show()
     if self._frame then
-        self:updateLocale()
+        self:updateLocale(true)
         self:updatePermissions()
         self._frame:Show()
     end
@@ -998,9 +1039,11 @@ function AgendaView:createLeftPanel()
         btn.bText = bText
 
         btn:SetScript("OnClick", function()
+            if self._currentFilterType == fDef.id then return end
             self._currentFilterType = fDef.id
             self:updateFilterButtonsUI(filterButtons)
-            self:renderEvents()
+            self:renderCalendar()
+            self:renderSelectedDayEvents()
         end)
 
         filterButtons[fDef.id] = btn
@@ -1025,8 +1068,12 @@ function AgendaView:createLeftPanel()
         else
             searchPlaceholder:Hide()
         end
+        if txt == (self._currentSearchText or "") then
+            return
+        end
         self._currentSearchText = txt
-        self:renderEvents()
+        self:renderCalendar()
+        self:renderSelectedDayEvents()
     end)
     searchEB:SetScript("OnEscapePressed", function(box)
         box:SetText("")
@@ -1433,14 +1480,18 @@ end
 
 --- Atualiza a lista de eventos na View.
 ---@param events Event[]
-function AgendaView:setEvents(events)
+---@param skipRender boolean|nil
+function AgendaView:setEvents(events, skipRender)
     self._events = events or {}
-    self:renderEvents()
+    if not skipRender then
+        self:renderEvents()
+    end
 end
 
 --- Atualiza a lista de próximos aniversariantes na View.
 ---@param birthdays table[]
-function AgendaView:setUpcomingBirthdays(birthdays)
+---@param skipRender boolean|nil
+function AgendaView:setUpcomingBirthdays(birthdays, skipRender)
     local filtered = {}
     for _, item in ipairs(birthdays or {}) do
         local m = item.member
@@ -1453,7 +1504,9 @@ function AgendaView:setUpcomingBirthdays(birthdays)
         end
     end
     self._upcomingBirthdays = filtered
-    self:renderUpcomingFeed()
+    if not skipRender then
+        self:renderUpcomingFeed()
+    end
 end
 
 --- Alterna o mês exibido no calendário.
