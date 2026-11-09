@@ -2829,7 +2829,7 @@ function AgendaView:createEventModal()
         end
         local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        bText:SetText(tDef.labelKey)
+        bText:SetText(L[tDef.labelKey] or tDef.labelKey)
         btn.bText = bText
 
         btn:SetScript("OnClick", function()

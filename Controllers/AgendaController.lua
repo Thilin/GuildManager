@@ -370,8 +370,12 @@ end
 --- Abre a janela da agenda da guilda.
 function AgendaController:show()
     if not IsInGuild or not IsInGuild() then
-        local L = (_G.GM and _G.GM.L) or _G.L or {}
-        print("|cffff0000[GuildManager]|r " .. (L["NOT_IN_GUILD"] or "You are not in a guild."))
+        if _G.GM and _G.GM.introView and _G.GM.introView.showNoGuildDialog then
+            _G.GM.introView:showNoGuildDialog()
+        else
+            local L = (_G.GM and _G.GM.L) or _G.L or {}
+            print("|cffff0000[GuildManager]|r " .. (L["NOT_IN_GUILD"] or "You are not in a guild."))
+        end
         return
     end
 

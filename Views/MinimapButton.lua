@@ -122,13 +122,15 @@ function MinimapButton:createUI()
 
     -- Controle de arrastar (orbitar a borda do minimapa) e clique
     button:RegisterForDrag("LeftButton")
-    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:RegisterForClicks("AnyUp")
 
     local isDragging = false
     local wasDragged = false
+    local downX, downY = 0, 0
 
     button:SetScript("OnMouseDown", function(_, btn)
         if btn == "LeftButton" then
+            downX, downY = GetCursorPosition()
             wasDragged = false
             label:SetPoint("CENTER", bg, "CENTER", 1, -1)
         end
@@ -139,10 +141,20 @@ function MinimapButton:createUI()
     end)
 
     button:SetScript("OnDragStart", function(f)
+        local curX, curY = GetCursorPosition()
+        local dist = math.abs(curX - downX) + math.abs(curY - downY)
+        if dist > 4 then
+            wasDragged = true
+        end
         isDragging = true
-        wasDragged = true
         GameTooltip:Hide()
         f:SetScript("OnUpdate", function()
+            local curX2, curY2 = GetCursorPosition()
+            local dist2 = math.abs(curX2 - downX) + math.abs(curY2 - downY)
+            if dist2 > 6 then
+                wasDragged = true
+            end
+
             local mx, my = Minimap:GetCenter()
             local cx, cy = GetCursorPosition()
             local scale = Minimap:GetEffectiveScale()
@@ -174,13 +186,26 @@ function MinimapButton:createUI()
 
     -- Ao clicar no balão, abre a aba padrão (ou configurações com botão direito)
     button:SetScript("OnClick", function(_, btn)
-        if wasDragged then
+        local upX, upY = GetCursorPosition()
+        local dist = math.abs(upX - downX) + math.abs(upY - downY)
+        if wasDragged and dist > 8 then
             wasDragged = false
             return
         end
+        wasDragged = false
 
         if btn == "LeftButton" then
             local defTab = (_G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.defaultTab) or "audit"
+            local inGuild = IsInGuild and IsInGuild()
+            if not inGuild and defTab ~= "settings" then
+                if _G.GM and _G.GM.introView and _G.GM.introView.showNoGuildDialog then
+                    _G.GM.introView:showNoGuildDialog()
+                elseif _G.GM and _G.GM.settingsController then
+                    _G.GM.settingsController:toggle()
+                end
+                return
+            end
+
             if defTab == "logs" and _G.GM and _G.GM.logController then
                 _G.GM.logController:toggle()
             elseif defTab == "groups" and _G.GM and _G.GM.groupController then

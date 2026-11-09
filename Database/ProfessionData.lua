@@ -1027,11 +1027,14 @@ function ProfessionData.getQualityName(quality)
     return isPt and "Comum" or "Common"
 end
 
+ProfessionData.Professions = ProfessionData.PROFESSIONS
+
 --- Retorna o nome localizado da profissão conforme o idioma configurado no AddOn
 ---@param profKey string
 ---@return string
 function ProfessionData.getProfessionName(profKey)
-    local prof = ProfessionData.Professions[profKey]
+    local profList = ProfessionData.PROFESSIONS or ProfessionData.Professions
+    local prof = profList and profList[profKey]
     if not prof then return profKey or "" end
     local isPt = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "ptBR")
     if isPt then
@@ -1045,7 +1048,8 @@ end
 ---@param profKey string
 ---@return string
 function ProfessionData.getProfessionDescription(profKey)
-    local prof = ProfessionData.Professions[profKey]
+    local profList = ProfessionData.PROFESSIONS or ProfessionData.Professions
+    local prof = profList and profList[profKey]
     if not prof then return "" end
     local isPt = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "ptBR")
     if isPt then
