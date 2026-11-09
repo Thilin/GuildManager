@@ -1,4 +1,4 @@
-﻿---@class WorldMapView
+---@class WorldMapView
 ---@field private _frame table|nil
 ---@field private _mapButton table|nil
 ---@field private _realtimeBadge table|nil
@@ -488,6 +488,10 @@ function WorldMapView:new()
     instance._isWorldView = false
     instance._realtimeBadge = nil
     instance._updateFrame = nil
+    instance._pinScale = nil
+    instance._pinScaleControl = nil
+    instance._pinScaleSlider = nil
+    instance._pinScaleText = nil
 
     return instance
 end
@@ -540,6 +544,7 @@ function WorldMapView:reanchorHeaderButtons()
     if IsInGuild and not IsInGuild() then
         if self._realtimeBadge then self._realtimeBadge:Hide() end
         if self._mapButton then self._mapButton:Hide() end
+        if self._pinScaleControl then self._pinScaleControl:Hide() end
         return
     end
 
@@ -588,9 +593,269 @@ function WorldMapView:reanchorHeaderButtons()
             self._mapButton:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -75, -5)
         end
     end
+
+    -- 3. Ancoragem do Controle de Tamanho dos Marcadores (no canto superior direito da tela do mapa)
+    if self._pinScaleControl then
+        self._pinScaleControl:ClearAllPoints()
+        self._pinScaleControl:SetFrameStrata("HIGH")
+        self._pinScaleControl:SetFrameLevel(2900)
+
+        local mapViewport = WorldMapFrame.ScrollContainer or WorldMapDetailFrame
+        if mapViewport then
+            self._pinScaleControl:SetPoint("TOPRIGHT", mapViewport, "TOPRIGHT", -10, -8)
+        else
+            self._pinScaleControl:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -20, -65)
+        end
+
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        if self._pinScaleControl.title then
+            self._pinScaleControl.title:SetText(curL["MAP_SLIDER_LABEL"] or "|cffffd200Pins:|r")
+        end
+        self._pinScaleControl:Show()
+    end
 end
 
 function WorldMapView:reanchorMapButton()
+    self:reanchorHeaderButtons()
+end
+
+--- Retorna a escala configurada pelo jogador para os marcadores no mapa (0.50 a 1.00)
+---@return number scale
+function WorldMapView:getPinScale()
+    if self._pinScale then return self._pinScale end
+    if _G.GM and _G.GM.settingsService then
+        local saved = tonumber(_G.GM.settingsService:get("mapPinScale"))
+        if saved and saved >= 0.50 and saved <= 1.00 then
+            self._pinScale = saved
+            return saved
+        end
+    end
+    self._pinScale = 1.00
+    return 1.00
+end
+
+--- Aplica a escala gráfica em um pino (entre 50% e 100%) redimensionando seus elementos em torno do centro
+--- sem alterar o SetScale do frame pai, preservando 100% da precisão das coordenadas no mapa.
+---@param pin table
+---@param scale number
+function WorldMapView:applyPinScale(pin, scale)
+    if not pin then return end
+    local s = math.max(0.50, math.min(1.00, tonumber(scale) or 1.00))
+    pin._gmPinScale = s
+
+    local pinSize = math.max(13, math.floor(26 * s + 0.5))
+    pin:SetSize(pinSize, pinSize)
+
+    if pin.glow then
+        local gSize = math.max(17, math.floor(34 * s + 0.5))
+        pin.glow:SetSize(gSize, gSize)
+    end
+
+    if pin.arrow then
+        local aSize = math.max(15, math.floor(30 * s + 0.5))
+        pin.arrow:SetSize(aSize, aSize)
+    end
+
+    if pin.classIcon then
+        local cSize = math.max(11, math.floor(22 * s + 0.5))
+        pin.classIcon:SetSize(cSize, cSize)
+    end
+
+    if pin.border then
+        local bSize = math.max(23, math.floor(46 * s + 0.5))
+        pin.border:SetSize(bSize, bSize)
+        pin.border:SetPoint("CENTER", pin, "CENTER", 10 * s, -10 * s)
+    end
+
+    if pin.label then
+        pin.label:SetPoint("BOTTOM", pin, "TOP", 0, math.max(2, math.floor(5 * s + 0.5)))
+        if pin.label.GetFont and pin.label.SetFont then
+            local fontPath, _, fontFlags = pin.label:GetFont()
+            if fontPath then
+                local fontSize = math.max(7, math.floor(10 * s + 0.5))
+                pcall(pin.label.SetFont, pin.label, fontPath, fontSize, fontFlags)
+            end
+        end
+    end
+end
+
+--- Atualiza a escala de todos os marcadores (50% a 100%), persiste nas configurações e sincroniza o controle
+---@param scale number
+function WorldMapView:setPinScale(scale)
+    local s = math.max(0.50, math.min(1.00, tonumber(scale) or 1.00))
+    -- Arredonda para múltiplos de 1% para exibição limpa
+    s = math.floor(s * 100 + 0.5) / 100
+    self._pinScale = s
+
+    if _G.GM and _G.GM.settingsService then
+        _G.GM.settingsService:set("mapPinScale", s)
+    end
+
+    if self._pinScaleSlider then
+        local cur = self._pinScaleSlider:GetValue() or 1.00
+        if math.abs(cur - s) > 0.005 then
+            self._pinScaleSlider:SetValue(s)
+        end
+    end
+
+    if self._pinScaleText then
+        self._pinScaleText:SetText(string.format("|cff00ff00%d%%|r", math.floor(s * 100 + 0.5)))
+    end
+
+    if self._pins then
+        for _, pin in pairs(self._pins) do
+            self:applyPinScale(pin, s)
+        end
+    end
+end
+
+--- Cria e garante a exibição da barra de ajuste de tamanho dos marcadores (50% a 100%) na tela do mapa
+function WorldMapView:ensurePinScaleControl()
+    if not WorldMapFrame then return end
+    if IsInGuild and not IsInGuild() then
+        if self._pinScaleControl then self._pinScaleControl:Hide() end
+        return
+    end
+    if self._pinScaleControl then
+        self:reanchorHeaderButtons()
+        return
+    end
+
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local control = CreateFrame("Frame", "GM_WorldMapPinScaleControl", WorldMapFrame, template)
+    control:SetSize(192, 24)
+    control:SetFrameStrata("HIGH")
+    control:SetFrameLevel(2900)
+
+    if control.SetBackdrop then
+        control:SetBackdrop(MAP_BUTTON_BACKDROP)
+        control:SetBackdropColor(0.10, 0.08, 0.04, 0.94)
+        control:SetBackdropBorderColor(1.0, 0.82, 0.0, 0.95)
+    end
+
+    -- Ícone de marcador à esquerda
+    local icon = control:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(14, 14)
+    icon:SetPoint("LEFT", control, "LEFT", 6, 0)
+    icon:SetTexture("Interface\\Minimap\\MinimapArrow")
+    control.icon = icon
+
+    -- Rótulo "Pins:"
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local title = control:CreateFontString(nil, "OVERLAY")
+    title:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    title:SetPoint("LEFT", icon, "RIGHT", 3, 0)
+    title:SetText(curL["MAP_SLIDER_LABEL"] or "|cffffd200Pins:|r")
+    control.title = title
+
+    -- Botão [-] para reduzir em 5%
+    local minusBtn = CreateFrame("Button", nil, control)
+    minusBtn:SetSize(14, 14)
+    minusBtn:SetPoint("LEFT", title, "RIGHT", 4, 0)
+    local minusTxt = minusBtn:CreateFontString(nil, "OVERLAY")
+    minusTxt:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    minusTxt:SetPoint("CENTER", minusBtn, "CENTER", 0, 1)
+    minusTxt:SetText("|cffffd200-|r")
+    minusBtn:SetScript("OnEnter", function() minusTxt:SetText("|cffffffff-|r") end)
+    minusBtn:SetScript("OnLeave", function() minusTxt:SetText("|cffffd200-|r") end)
+
+    -- Texto da porcentagem à direita (50% a 100%)
+    local valText = control:CreateFontString(nil, "OVERLAY")
+    valText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    valText:SetPoint("RIGHT", control, "RIGHT", -6, 0)
+    valText:SetWidth(34)
+    valText:SetJustifyH("RIGHT")
+    local curScale = self:getPinScale()
+    valText:SetText(string.format("|cff00ff00%d%%|r", math.floor(curScale * 100 + 0.5)))
+    self._pinScaleText = valText
+
+    -- Botão [+] para aumentar em 5%
+    local plusBtn = CreateFrame("Button", nil, control)
+    plusBtn:SetSize(14, 14)
+    plusBtn:SetPoint("RIGHT", valText, "LEFT", -2, 0)
+    local plusTxt = plusBtn:CreateFontString(nil, "OVERLAY")
+    plusTxt:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    plusTxt:SetPoint("CENTER", plusBtn, "CENTER", 0, 0)
+    plusTxt:SetText("|cffffd200+|r")
+    plusBtn:SetScript("OnEnter", function() plusTxt:SetText("|cffffffff+|r") end)
+    plusBtn:SetScript("OnLeave", function() plusTxt:SetText("|cffffd200+|r") end)
+
+    -- Slider horizontal entre [-] e [+] (de 50% a 100%)
+    local slider = CreateFrame("Slider", "GM_WorldMapPinScaleSlider", control)
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetPoint("LEFT", minusBtn, "RIGHT", 3, 0)
+    slider:SetPoint("RIGHT", plusBtn, "LEFT", -3, 0)
+    slider:SetHeight(14)
+    slider:SetMinMaxValues(0.50, 1.00)
+    slider:SetValueStep(0.05)
+    slider:SetObeyStepOnDrag(true)
+    slider:EnableMouse(true)
+    slider:EnableMouseWheel(true)
+
+    -- Trilho visual do slider
+    local track = slider:CreateTexture(nil, "BACKGROUND")
+    track:SetPoint("LEFT", slider, "LEFT", 0, 0)
+    track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
+    track:SetHeight(4)
+    track:SetColorTexture(0.28, 0.22, 0.08, 0.95)
+
+    -- Botão deslizante (Thumb)
+    local thumb = slider:CreateTexture(nil, "OVERLAY")
+    thumb:SetSize(12, 16)
+    thumb:SetTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    thumb:SetVertexColor(1.0, 0.85, 0.15, 1.0)
+    slider:SetThumbTexture(thumb)
+
+    slider:SetValue(curScale)
+
+    local isUpdating = false
+    slider:SetScript("OnValueChanged", function(_, val)
+        if isUpdating then return end
+        isUpdating = true
+        val = math.max(0.50, math.min(1.00, tonumber(val) or 1.00))
+        self:setPinScale(val)
+        isUpdating = false
+    end)
+
+    local function stepScale(deltaSteps)
+        local cur = self:getPinScale()
+        local nextVal = math.max(0.50, math.min(1.00, cur + (deltaSteps * 0.05)))
+        self:setPinScale(nextVal)
+    end
+
+    minusBtn:SetScript("OnClick", function() stepScale(-1) end)
+    plusBtn:SetScript("OnClick", function() stepScale(1) end)
+
+    slider:SetScript("OnMouseWheel", function(_, delta)
+        stepScale(delta > 0 and 1 or -1)
+    end)
+
+    control:EnableMouse(true)
+    control:EnableMouseWheel(true)
+    control:SetScript("OnMouseWheel", function(_, delta)
+        stepScale(delta > 0 and 1 or -1)
+    end)
+
+    -- Tooltip explicativa
+    local function showTooltip(owner)
+        GameTooltip:SetOwner(owner, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:ClearLines()
+        local cL = (_G.GM and _G.GM.L) or _G.L or L
+        GameTooltip:AddLine(cL["MAP_SLIDER_TITLE"] or "|cffffd200Tamanho dos Marcadores da Guilda|r", 1, 1, 1)
+        GameTooltip:AddLine(cL["MAP_SLIDER_DESC"] or "Ajuste o tamanho dos marcadores entre 50% e 100% do tamanho atual.", 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(cL["MAP_SLIDER_TIP_SCROLL"] or "|cff00ff00Roda do Mouse / Botões:|r Role ou clique em +/- para redimensionar.", 0.2, 0.9, 0.2)
+        GameTooltip:AddLine(cL["MAP_SLIDER_TIP_CTRL"] or "|cff00e5ffAtalho:|r Segure |cffffffffCtrl|r + Scroll no mapa para ajustar.", 0.4, 0.8, 1.0)
+        GameTooltip:Show()
+    end
+
+    control:SetScript("OnEnter", function() showTooltip(control) end)
+    control:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    slider:SetScript("OnEnter", function() showTooltip(control) end)
+    slider:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    self._pinScaleControl = control
+    self._pinScaleSlider = slider
     self:reanchorHeaderButtons()
 end
 
@@ -650,6 +915,8 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
     label:SetShadowOffset(1, -1)
     label:SetShadowColor(0, 0, 0, 1)
     pin.label = label
+
+    self:applyPinScale(pin, self:getPinScale())
 
     pin:SetScript("OnEnter", function(p)
         if not p.peerData then return end
@@ -837,6 +1104,7 @@ function WorldMapView:updateRealtimePins()
         self:clearPins()
         if self._realtimeBadge then self._realtimeBadge:Hide() end
         if self._mapButton then self._mapButton:Hide() end
+        if self._pinScaleControl then self._pinScaleControl:Hide() end
         return
     end
 
@@ -859,9 +1127,13 @@ function WorldMapView:updateRealtimePins()
 
     if not showPins then
         self:clearPins()
+        if self._pinScaleControl then self._pinScaleControl:Hide() end
         self:updateRealtimeBadge()
         return
     end
+
+    self:ensurePinScaleControl()
+    local currentScale = self:getPinScale()
 
     local peers = locService:getPeers() or {}
     local renderedPins = {}
@@ -882,6 +1154,9 @@ function WorldMapView:updateRealtimePins()
             local pin = self:getOrCreateNamedPin(name, canvas)
             peer.displayName = peerFullName
             pin.peerData = peer
+            if pin._gmPinScale ~= currentScale then
+                self:applyPinScale(pin, currentScale)
+            end
 
             if rx and ry then
                 pin:ClearAllPoints()
@@ -922,6 +1197,9 @@ function WorldMapView:updateRealtimePins()
             local rx, ry = TranslateCoordsToViewMap(myMapID, myX, myY, viewMapID)
             if rx and ry then
                 local selfPin = self:getOrCreateNamedPin(selfPinName, canvas)
+                if selfPin._gmPinScale ~= currentScale then
+                    self:applyPinScale(selfPin, currentScale)
+                end
                 local _, myClass = UnitClass("player")
                 local cls = (myClass or "WARRIOR"):upper()
 
@@ -1014,6 +1292,16 @@ function WorldMapView:initUpdateFrame()
         end
     end)
 
+    if WorldMapFrame.ScrollContainer and WorldMapFrame.ScrollContainer.HookScript then
+        pcall(WorldMapFrame.ScrollContainer.HookScript, WorldMapFrame.ScrollContainer, "OnMouseWheel", function(_, delta)
+            if IsControlKeyDown and IsControlKeyDown() then
+                local cur = self:getPinScale()
+                local nextVal = math.max(0.50, math.min(1.00, cur + ((delta > 0 and 1 or -1) * 0.05)))
+                self:setPinScale(nextVal)
+            end
+        end)
+    end
+
     self._updateFrame = updateFrame
 end
 
@@ -1023,6 +1311,7 @@ function WorldMapView:initWorldMapUI()
 
     self:initUpdateFrame()
     self:ensureRealtimeBadge()
+    self:ensurePinScaleControl()
 
     if self._mapButton then
         return
@@ -1531,6 +1820,9 @@ function WorldMapView:renderNoGuild()
     end
     if self._realtimeBadge then
         self._realtimeBadge:Hide()
+    end
+    if self._pinScaleControl then
+        self._pinScaleControl:Hide()
     end
 
     -- 2. Limpa e remove quaisquer pinos no mapa
