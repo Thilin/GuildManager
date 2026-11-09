@@ -256,15 +256,16 @@ function MemberController:initHooks()
                 if _G.GM and _G.GM.switchActiveGuild then
                     _G.GM.switchActiveGuild()
                 end
-                if not self._debounceTimer then
+                if not self._rosterDebouncePending then
                     if C_Timer and C_Timer.After then
-                        self._debounceTimer = C_Timer.After(0.3, function()
-                            self._debounceTimer = nil
+                        self._rosterDebouncePending = true
+                        C_Timer.After(0.5, function()
+                            self._rosterDebouncePending = false
                             if IsInGuild and IsInGuild() then
                                 self._guildRosterService:scanRoster()
                                 self:requestGuildEventLog()
                                 if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit and _G.GM.auditView and _G.GM.auditView.isShown and _G.GM.auditView:isShown() then
-                                    _G.GM.auditController:refreshAudit()
+                                    _G.GM.auditController:refreshAudit(true)
                                 end
                             end
                         end)
@@ -273,7 +274,7 @@ function MemberController:initHooks()
                             self._guildRosterService:scanRoster()
                             self:requestGuildEventLog()
                             if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit and _G.GM.auditView and _G.GM.auditView.isShown and _G.GM.auditView:isShown() then
-                                _G.GM.auditController:refreshAudit()
+                                _G.GM.auditController:refreshAudit(true)
                             end
                         end
                     end

@@ -99,18 +99,27 @@ function AuditController:initHooks()
             end
 
             self._memberService:saveMember(member)
-            self:refreshAudit()
+            self:refreshAudit(true)
         end)
     end
 
-    -- Ouvinte de eventos de atualização do roster para manter a tela sincronizada quando visível
+    -- Ouvinte de eventos de atualização de guilda para manter a tela sincronizada quando visível
     if not self._eventFrame then
         local eventFrame = CreateFrame("Frame")
-        eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
         eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
-        eventFrame:SetScript("OnEvent", function(_, event)
+        eventFrame:SetScript("OnEvent", function()
             if self._auditView and self._auditView.isShown and self._auditView:isShown() then
-                self:refreshAudit()
+                if not self._refreshDebouncePending and C_Timer and C_Timer.After then
+                    self._refreshDebouncePending = true
+                    C_Timer.After(0.5, function()
+                        self._refreshDebouncePending = false
+                        if self._auditView and self._auditView.isShown and self._auditView:isShown() then
+                            self:refreshAudit()
+                        end
+                    end)
+                elseif not (C_Timer and C_Timer.After) then
+                    self:refreshAudit()
+                end
             end
         end)
         self._eventFrame = eventFrame
@@ -160,12 +169,13 @@ end
 
 --- Atualiza os dados exibidos na View buscando apenas os membros ativos pertencentes à guilda.
 --- Ex-membros (jogadores que saíram ou foram expulsos) são rigorosamente excluídos da visualização.
-function AuditController:refreshAudit()
+---@param skipScan boolean|nil @Se verdadeiro, reutiliza a lista ativa do último scanRoster sem consultar GetGuildRosterInfo novamente
+function AuditController:refreshAudit(skipScan)
     if not self._memberService or not self._auditView then
         return
     end
 
-    if IsInGuild and IsInGuild() then
+    if not skipScan and IsInGuild and IsInGuild() then
         if self._guildRosterService and self._guildRosterService.scanRoster then
             self._guildRosterService:scanRoster()
         end
@@ -246,9 +256,12 @@ function AuditController:show()
         self._guildRosterService:requestRosterUpdate()
     end
 
-    self:refreshAudit()
+    local wasShown = self._auditView and self._auditView.isShown and self._auditView:isShown()
     if self._auditView then
         self._auditView:show()
+    end
+    if wasShown then
+        self:refreshAudit()
     end
 end
 

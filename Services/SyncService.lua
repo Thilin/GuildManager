@@ -377,11 +377,17 @@ function SyncService:touchPeer(peerName)
         isNewlyOnline = true
     end
 
-    self._peers[lower] = {
-        name = cName,
-        lastSeen = now,
-        isActive = true,
-    }
+    if existing then
+        existing.name = cName
+        existing.lastSeen = now
+        existing.isActive = true
+    else
+        self._peers[lower] = {
+            name = cName,
+            lastSeen = now,
+            isActive = true,
+        }
+    end
 
     -- Notifica o LocationService imediatamente para registrar que este membro Ã© usuÃ¡rio ativo do AddOn!
     if self._locationService and self._locationService.touchPeer then
@@ -1291,6 +1297,11 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             return
         end
 
+        if member and existingProf and localProfTimestamp == timestamp and existingProf.rank == rank and existingProf.maxRank == maxRank and totalChunks == 0 then
+            self:sendAckPacket(updateId, mClean)
+            return
+        end
+
         if not member then
             member = Member:new({ name = mClean, isInGuild = true })
         end
@@ -1523,16 +1534,16 @@ end
 --- Executa a atualização das janelas abertas de forma otimizada.
 ---@param memberName string
 function SyncService:executeRefreshViews(memberName)
-    -- Atualiza tela de auditoria se aberta
+    -- Atualiza tela de auditoria se aberta (sem re-escanear GetGuildRosterInfo)
     if _G.GM and _G.GM.auditController and _G.GM.auditController.refreshAudit then
         local aView = _G.GM.auditView
         if aView and aView.isShown and aView:isShown() then
-            _G.GM.auditController:refreshAudit()
+            _G.GM.auditController:refreshAudit(true)
         end
     end
 
     -- Atualiza card do membro se aberto
-    if _G.GM and _G.GM.memberView and _G.GM.memberView.isShown and _G.GM.memberView:isShown() then
+    if memberName and memberName ~= "" and _G.GM and _G.GM.memberView and _G.GM.memberView.isShown and _G.GM.memberView:isShown() then
         local cur = _G.GM.memberView._currentMember
         if cur and cur:getName() and cur:getName():lower() == memberName:lower() then
             local refreshed = self._memberService and self._memberService:getMember(memberName)
@@ -1558,18 +1569,24 @@ function SyncService:executeRefreshViews(memberName)
     end
 end
 
---- Atualiza as janelas abertas para refletir os novos dados com debounce suave (350ms),
+--- Atualiza as janelas abertas para refletir os novos dados com debounce suave (600ms),
 --- eliminando picos de CPU e congelamentos quando múltiplos pacotes chegam em lote.
 ---@param memberName string
 function SyncService:refreshActiveViews(memberName)
-    if self._refreshDebounceTimer then
+    if memberName and memberName ~= "" then
+        self._lastRefreshMemberName = memberName
+    end
+    if self._refreshDebouncePending then
         return
     end
 
     if C_Timer and C_Timer.After then
-        self._refreshDebounceTimer = C_Timer.After(0.35, function()
-            self._refreshDebounceTimer = nil
-            self:executeRefreshViews(memberName)
+        self._refreshDebouncePending = true
+        C_Timer.After(0.6, function()
+            self._refreshDebouncePending = false
+            local targetName = self._lastRefreshMemberName or memberName or ""
+            self._lastRefreshMemberName = nil
+            self:executeRefreshViews(targetName)
         end)
     else
         self:executeRefreshViews(memberName)

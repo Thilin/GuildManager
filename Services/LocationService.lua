@@ -655,28 +655,50 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
             if ok and info and info.name then zoneName = info.name end
         end
 
-        local peerData = {
-            name = finalName,
-            fullName = finalName,
-            senderUnit = senderClean,
-            mapID = mapID,
-            zoneName = zoneName,
-            x = x,
-            y = y,
-            facing = facing,
-            classFile = classFile,
-            level = level,
-            race = race,
-            guild = guild,
-            channel = channel,
-            lastSeen = now,
-            lastSeenClock = clock,
-        }
+        local isNewPeer = (self._peers[finalName] == nil and self._peers[senderClean] == nil)
+        local peerData = self._peers[finalName] or self._peers[senderClean]
+        if peerData then
+            peerData.name = finalName
+            peerData.fullName = finalName
+            peerData.senderUnit = senderClean
+            peerData.mapID = mapID
+            peerData.zoneName = zoneName
+            peerData.x = x
+            peerData.y = y
+            peerData.facing = facing
+            peerData.classFile = classFile
+            peerData.level = level
+            peerData.race = race
+            peerData.guild = guild
+            peerData.channel = channel
+            peerData.lastSeen = now
+            peerData.lastSeenClock = clock
+        else
+            peerData = {
+                name = finalName,
+                fullName = finalName,
+                senderUnit = senderClean,
+                mapID = mapID,
+                zoneName = zoneName,
+                x = x,
+                y = y,
+                facing = facing,
+                classFile = classFile,
+                level = level,
+                race = race,
+                guild = guild,
+                channel = channel,
+                lastSeen = now,
+                lastSeenClock = clock,
+            }
+        end
 
         self._peers[senderClean] = peerData
         self._peers[finalName] = peerData
         self:notifyListeners("PEER_UPDATE", finalName, peerData)
-        self:notifyListeners("PEER_LIST_CHANGED")
+        if isNewPeer then
+            self:notifyListeners("PEER_LIST_CHANGED")
+        end
 
     -- Parsing do payload formato legado LOC:version:name:x:y:mapID:worldX:worldY:instanceID:class:level:zone
     elseif tag == "LOC" then
@@ -692,28 +714,50 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
                 finalName = resolved
             end
         end
-        local peerData = {
-            name = finalName,
-            fullName = finalName,
-            senderUnit = senderClean,
-            mapID = mapID,
-            zoneName = rawZone or "Azeroth",
-            x = x,
-            y = y,
-            facing = 0,
-            classFile = classToken or "WARRIOR",
-            level = tonumber(rawLevel) or 1,
-            race = "Desconhecido",
-            guild = "",
-            channel = channel,
-            lastSeen = now,
-            lastSeenClock = time and time() or 0,
-        }
+        local isNewPeer = (self._peers[finalName] == nil and self._peers[senderClean] == nil)
+        local peerData = self._peers[finalName] or self._peers[senderClean]
+        if peerData then
+            peerData.name = finalName
+            peerData.fullName = finalName
+            peerData.senderUnit = senderClean
+            peerData.mapID = mapID
+            peerData.zoneName = rawZone or "Azeroth"
+            peerData.x = x
+            peerData.y = y
+            peerData.facing = 0
+            peerData.classFile = classToken or "WARRIOR"
+            peerData.level = tonumber(rawLevel) or 1
+            peerData.race = "Desconhecido"
+            peerData.guild = ""
+            peerData.channel = channel
+            peerData.lastSeen = now
+            peerData.lastSeenClock = time and time() or 0
+        else
+            peerData = {
+                name = finalName,
+                fullName = finalName,
+                senderUnit = senderClean,
+                mapID = mapID,
+                zoneName = rawZone or "Azeroth",
+                x = x,
+                y = y,
+                facing = 0,
+                classFile = classToken or "WARRIOR",
+                level = tonumber(rawLevel) or 1,
+                race = "Desconhecido",
+                guild = "",
+                channel = channel,
+                lastSeen = now,
+                lastSeenClock = time and time() or 0,
+            }
+        end
 
         self._peers[senderClean] = peerData
         self._peers[finalName] = peerData
         self:notifyListeners("PEER_UPDATE", finalName, peerData)
-        self:notifyListeners("PEER_LIST_CHANGED")
+        if isNewPeer then
+            self:notifyListeners("PEER_LIST_CHANGED")
+        end
     end
 end
 

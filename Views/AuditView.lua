@@ -161,20 +161,28 @@ local function getPlayerName()
     return UnitName and UnitName("player") or ""
 end
 
+local NORMALIZE_SORT_CACHE = {}
+
 --- Normaliza texto removendo caracteres especiais e acentuações para ordenação e busca natural.
 ---@param txt string|nil
 ---@return string
 local function normalizeForSort(txt)
-    if not txt or type(txt) ~= "string" then return "" end
+    if not txt or type(txt) ~= "string" or txt == "" then return "" end
+    local cached = NORMALIZE_SORT_CACHE[txt]
+    if cached then return cached end
+
     local s = txt:lower()
-    s = s:gsub("đ", "d"):gsub("ð", "d")
-    s = s:gsub("ø", "o"):gsub("œ", "oe"):gsub("æ", "ae")
-    s = s:gsub("á", "a"):gsub("à", "a"):gsub("ã", "a"):gsub("â", "a"):gsub("ä", "a"):gsub("å", "a")
-    s = s:gsub("é", "e"):gsub("è", "e"):gsub("ê", "e"):gsub("ë", "e")
-    s = s:gsub("í", "i"):gsub("ì", "i"):gsub("î", "i"):gsub("ï", "i")
-    s = s:gsub("ó", "o"):gsub("ò", "o"):gsub("õ", "o"):gsub("ô", "o"):gsub("ö", "o")
-    s = s:gsub("ú", "u"):gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
-    s = s:gsub("ç", "c"):gsub("ñ", "n"):gsub("ß", "ss")
+    if s:find("[\128-\255]") then
+        s = s:gsub("đ", "d"):gsub("ð", "d")
+        s = s:gsub("ø", "o"):gsub("œ", "oe"):gsub("æ", "ae")
+        s = s:gsub("á", "a"):gsub("à", "a"):gsub("ã", "a"):gsub("â", "a"):gsub("ä", "a"):gsub("å", "a")
+        s = s:gsub("é", "e"):gsub("è", "e"):gsub("ê", "e"):gsub("ë", "e")
+        s = s:gsub("í", "i"):gsub("ì", "i"):gsub("î", "i"):gsub("ï", "i")
+        s = s:gsub("ó", "o"):gsub("ò", "o"):gsub("õ", "o"):gsub("ô", "o"):gsub("ö", "o")
+        s = s:gsub("ú", "u"):gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
+        s = s:gsub("ç", "c"):gsub("ñ", "n"):gsub("ß", "ss")
+    end
+    NORMALIZE_SORT_CACHE[txt] = s
     return s
 end
 
@@ -285,13 +293,15 @@ function AuditView:createUI()
             end
         end
         self:resetFiltersToAll()
+        self:updateLocale(true)
         self:updateFilterButtonsVisual()
         self:updateScrollDimensions()
-        self:rebuildFlatRows()
-        self:applyFilters()
-        self:renderGuildStats()
         if self._onRefreshCallback then
             self._onRefreshCallback()
+        else
+            self:rebuildFlatRows()
+            self:applyFilters()
+            self:renderGuildStats()
         end
     end)
 
@@ -389,15 +399,20 @@ function AuditView:createUI()
     statsHeaderBg:SetHeight(24)
     statsHeaderBg:SetColorTexture(PALETTE.HEADER_ROW_BG[1], PALETTE.HEADER_ROW_BG[2], PALETTE.HEADER_ROW_BG[3], 0.90)
 
-    local statsTitle = statsInset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    statsTitle:SetPoint("LEFT", statsHeaderBg, "LEFT", 8, 0)
-    statsTitle:SetText("|cffffd200" .. (L["STATS_TITLE"] or "ESTATÍSTICAS DA GUILDA") .. "|r")
-    self._statsTitle = statsTitle
-
     local statsMemberCount = statsInset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    statsMemberCount:SetPoint("RIGHT", statsHeaderBg, "RIGHT", -8, 0)
+    statsMemberCount:SetPoint("RIGHT", statsHeaderBg, "RIGHT", -6, 0)
+    statsMemberCount:SetJustifyH("RIGHT")
+    statsMemberCount:SetWordWrap(false)
     statsMemberCount:SetText("|cffaaaaaa0|r")
     self._statsMemberCount = statsMemberCount
+
+    local statsTitle = statsInset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    statsTitle:SetPoint("LEFT", statsHeaderBg, "LEFT", 6, 0)
+    statsTitle:SetPoint("RIGHT", statsMemberCount, "LEFT", -4, 0)
+    statsTitle:SetJustifyH("LEFT")
+    statsTitle:SetWordWrap(false)
+    statsTitle:SetText("|cffffd200" .. (L["STATS_TITLE"] or "ESTATÍSTICAS DA GUILDA") .. "|r")
+    self._statsTitle = statsTitle
 
     local statsHeaderSep = statsInset:CreateTexture(nil, "ARTWORK")
     statsHeaderSep:SetPoint("TOPLEFT", statsHeaderBg, "BOTTOMLEFT", 0, -1)
@@ -2408,19 +2423,35 @@ end
 function AuditView:formatColoredName(name, guid, fallbackClass)
     if not name or name == "" then return "" end
 
+    self._coloredNameCache = self._coloredNameCache or {}
+    local cacheKey = fallbackClass and fallbackClass ~= "" and (name .. "|" .. fallbackClass) or name
+    local cached = self._coloredNameCache[cacheKey]
+    if cached then
+        return cached
+    end
+
     local clean = name:match("^[^-]+") or name
     clean = clean:match("^%s*(.-)%s*$") or clean
 
     if fallbackClass and fallbackClass ~= "" then
         local hex = getClassColorHex(fallbackClass)
-        if hex then return hex .. clean .. "|r" end
+        if hex then
+            local res = hex .. clean .. "|r"
+            self._coloredNameCache[cacheKey] = res
+            self._coloredNameCache[name] = res
+            return res
+        end
     end
 
     if guid and guid ~= "" and GetPlayerInfoByGUID then
         local _, classToken = GetPlayerInfoByGUID(guid)
         if classToken and classToken ~= "" then
             local hex = getClassColorHex(classToken)
-            if hex then return hex .. clean .. "|r" end
+            if hex then
+                local res = hex .. clean .. "|r"
+                self._coloredNameCache[cacheKey] = res
+                return res
+            end
         end
     end
 
@@ -2428,17 +2459,24 @@ function AuditView:formatColoredName(name, guid, fallbackClass)
         local member = _G.GM.memberService:getMember(clean)
         if member and member.getClass then
             local hex = getClassColorHex(member:getClass())
-            if hex then return hex .. clean .. "|r" end
+            if hex then
+                local res = hex .. clean .. "|r"
+                self._coloredNameCache[cacheKey] = res
+                return res
+            end
         end
     end
 
-    return "|cffffffff" .. clean .. "|r"
+    local res = "|cffffffff" .. clean .. "|r"
+    self._coloredNameCache[cacheKey] = res
+    return res
 end
 
 --- Define a lista de membros ativos na guilda e reconstrói a árvore de Mains e Alts.
 --- Ex-membros (isInGuild == false) ou sem cargo válido são rigorosamente ignorados.
 ---@param members Member[]
 function AuditView:setMembers(members)
+    self._coloredNameCache = {}
     local activeOnly = {}
     for _, m in ipairs(members or {}) do
         local rName = m and m:getRankName() or ""
@@ -2452,47 +2490,49 @@ function AuditView:setMembers(members)
     self:renderGuildStats()
 end
 
+local EMPTY_TABLE = {}
+
 --- Reconstrói a estrutura hierárquica plana de linhas (Mains seguidos de seus respectivos Alts).
 --- Garante que cada membro pertença a exatamente um grupo e elimina qualquer duplicação.
 function AuditView:rebuildFlatRows()
     -- 1. Indexa membros ativos únicos da guilda
     local memberByName = {}
+    local firstNameMap = {}
     local uniqueMembers = {}
     for _, m in ipairs(self._members or {}) do
-        local nLower = (m:getName() or ""):lower()
+        local mName = m:getName() or ""
+        local nLower = mName:lower()
         if nLower ~= "" and not memberByName[nLower] then
             memberByName[nLower] = m
             table.insert(uniqueMembers, m)
+            local first = mName:match("^(%S+)")
+            if first then
+                local fLower = first:lower()
+                if firstNameMap[fLower] == nil then
+                    firstNameMap[fLower] = nLower
+                elseif firstNameMap[fLower] ~= nLower then
+                    firstNameMap[fLower] = false
+                end
+            end
         end
     end
 
-    -- 2. Constrói grafo de conexões de alts (bidirecional e simétrico)
+    -- 2. Constrói grafo de conexões de alts (bidirecional e simétrico) sem chamadas externas O(N^2)
     local adj = {}
     for _, m in ipairs(uniqueMembers) do
         local mLower = (m:getName() or ""):lower()
-        adj[mLower] = adj[mLower] or {}
-
-        -- Conexões diretas da entidade Member
-        for _, altName in ipairs(m:getAlts() or {}) do
-            local aLower = (altName or ""):lower()
-            if aLower ~= "" and aLower ~= mLower and memberByName[aLower] then
-                adj[mLower][aLower] = true
-                adj[aLower] = adj[aLower] or {}
-                adj[aLower][mLower] = true
-            end
-        end
-
-        -- Conexões de família registradas no serviço
-        if _G.GM and _G.GM.memberService and _G.GM.memberService.getAltFamily then
-            local fam = _G.GM.memberService:getAltFamily(m)
-            if fam then
-                for _, famM in ipairs(fam) do
-                    local fLower = (famM:getName() or ""):lower()
-                    if fLower ~= "" and fLower ~= mLower and memberByName[fLower] then
-                        adj[mLower][fLower] = true
-                        adj[fLower] = adj[fLower] or {}
-                        adj[fLower][mLower] = true
-                    end
+        local alts = m:getAlts()
+        if alts and #alts > 0 then
+            for _, altName in ipairs(alts) do
+                local aClean = (altName or ""):match("^[^-]+") or altName or ""
+                aClean = aClean:match("^%s*(.-)%s*$") or aClean
+                local aLower = aClean:lower()
+                local targetLower = memberByName[aLower] and aLower or (firstNameMap[aLower] or nil)
+                if targetLower and targetLower ~= mLower and memberByName[targetLower] then
+                    adj[mLower] = adj[mLower] or {}
+                    adj[mLower][targetLower] = true
+                    adj[targetLower] = adj[targetLower] or {}
+                    adj[targetLower][mLower] = true
                 end
             end
         end
@@ -2505,77 +2545,82 @@ function AuditView:rebuildFlatRows()
     for _, m in ipairs(uniqueMembers) do
         local mLower = (m:getName() or ""):lower()
         if not visited[mLower] then
-            local component = {}
-            local queue = { mLower }
             visited[mLower] = true
+            if not adj[mLower] then
+                -- Membro solo sem alts: caminho rápido com zero alocações extras
+                table.insert(mainGroups, {
+                    main = m,
+                    alts = EMPTY_TABLE,
+                })
+            else
+                local component = {}
+                local queue = { mLower }
 
-            while #queue > 0 do
-                local curr = table.remove(queue, 1)
-                local mem = memberByName[curr]
-                if mem then
-                    table.insert(component, mem)
-                end
+                while #queue > 0 do
+                    local curr = table.remove(queue, 1)
+                    local mem = memberByName[curr]
+                    if mem then
+                        table.insert(component, mem)
+                    end
 
-                if adj[curr] then
-                    for neighbor, _ in pairs(adj[curr]) do
-                        if not visited[neighbor] then
-                            visited[neighbor] = true
-                            table.insert(queue, neighbor)
+                    if adj[curr] then
+                        for neighbor, _ in pairs(adj[curr]) do
+                            if not visited[neighbor] then
+                                visited[neighbor] = true
+                                table.insert(queue, neighbor)
+                            end
                         end
                     end
                 end
-            end
 
-            -- Determina quem é o Main da família e separa os Alts
-            local mainMember = nil
-            local altMembers = {}
+                -- Determina quem é o Main da família e separa os Alts
+                local mainMember = nil
+                local altMembers = {}
 
-            for _, mem in ipairs(component) do
-                if mem:isMain() then
-                    if not mainMember then
-                        mainMember = mem
-                    else
-                        -- Se mais de um estiver com flag isMain, desempata pelo cargo de maior prestígio ou nível
-                        local curRank = mem:getRankIndex() or 99
-                        local mainRank = mainMember:getRankIndex() or 99
-                        if curRank < mainRank or (curRank == mainRank and (mem:getLevel() or 0) > (mainMember:getLevel() or 0)) then
-                            table.insert(altMembers, mainMember)
+                for _, mem in ipairs(component) do
+                    if mem:isMain() then
+                        if not mainMember then
                             mainMember = mem
                         else
-                            table.insert(altMembers, mem)
+                            local curRank = mem:getRankIndex() or 99
+                            local mainRank = mainMember:getRankIndex() or 99
+                            if curRank < mainRank or (curRank == mainRank and (mem:getLevel() or 0) > (mainMember:getLevel() or 0)) then
+                                table.insert(altMembers, mainMember)
+                                mainMember = mem
+                            else
+                                table.insert(altMembers, mem)
+                            end
                         end
+                    else
+                        table.insert(altMembers, mem)
                     end
-                else
-                    table.insert(altMembers, mem)
                 end
-            end
 
-            -- Se nenhum estiver explicitamente marcado como isMain, elege o de maior nível / rank
-            if not mainMember then
+                if not mainMember then
+                    table.sort(altMembers, function(a, b)
+                        local lvlA = a:getLevel() or 0
+                        local lvlB = b:getLevel() or 0
+                        if lvlA ~= lvlB then return lvlA > lvlB end
+                        local rA = a:getRankIndex() or 99
+                        local rB = b:getRankIndex() or 99
+                        if rA ~= rB then return rA < rB end
+                        return normalizeForSort(a:getName()) < normalizeForSort(b:getName())
+                    end)
+                    mainMember = table.remove(altMembers, 1)
+                end
+
                 table.sort(altMembers, function(a, b)
                     local lvlA = a:getLevel() or 0
                     local lvlB = b:getLevel() or 0
                     if lvlA ~= lvlB then return lvlA > lvlB end
-                    local rA = a:getRankIndex() or 99
-                    local rB = b:getRankIndex() or 99
-                    if rA ~= rB then return rA < rB end
                     return normalizeForSort(a:getName()) < normalizeForSort(b:getName())
                 end)
-                mainMember = table.remove(altMembers, 1)
+
+                table.insert(mainGroups, {
+                    main = mainMember,
+                    alts = altMembers,
+                })
             end
-
-            -- Ordena os alts do grupo por nível decrescente e nome
-            table.sort(altMembers, function(a, b)
-                local lvlA = a:getLevel() or 0
-                local lvlB = b:getLevel() or 0
-                if lvlA ~= lvlB then return lvlA > lvlB end
-                return normalizeForSort(a:getName()) < normalizeForSort(b:getName())
-            end)
-
-            table.insert(mainGroups, {
-                main = mainMember,
-                alts = altMembers,
-            })
         end
     end
 
@@ -2597,10 +2642,14 @@ function AuditView:rebuildFlatRows()
     for _, group in ipairs(mainGroups) do
         totalMains = totalMains + 1
         local mainName = group.main:getName()
-        local isCollapsed = (self._collapsedMains[mainName] == true) and (self._activeStatsFilter == nil)
-        local altNames = {}
-        for _, alt in ipairs(group.alts) do
-            table.insert(altNames, alt:getName())
+        local hasAlts = (#group.alts > 0)
+        local isCollapsed = hasAlts and (self._collapsedMains[mainName] == true) and (self._activeStatsFilter == nil)
+        local altNames = EMPTY_TABLE
+        if hasAlts then
+            altNames = {}
+            for _, alt in ipairs(group.alts) do
+                table.insert(altNames, alt:getName())
+            end
         end
 
         table.insert(self._flatRows, {
@@ -2608,26 +2657,28 @@ function AuditView:rebuildFlatRows()
             isMain = true,
             isAlt = false,
             mainName = mainName,
-            hasAlts = (#group.alts > 0),
+            hasAlts = hasAlts,
             isCollapsed = isCollapsed,
             altCount = #group.alts,
             altList = altNames,
         })
 
-        if not isCollapsed then
-            for idx, alt in ipairs(group.alts) do
-                totalAlts = totalAlts + 1
-                table.insert(self._flatRows, {
-                    member = alt,
-                    isMain = false,
-                    isAlt = true,
-                    mainName = mainName,
-                    isLastAlt = (idx == #group.alts),
-                    altList = altNames,
-                })
+        if hasAlts then
+            if not isCollapsed then
+                for idx, alt in ipairs(group.alts) do
+                    totalAlts = totalAlts + 1
+                    table.insert(self._flatRows, {
+                        member = alt,
+                        isMain = false,
+                        isAlt = true,
+                        mainName = mainName,
+                        isLastAlt = (idx == #group.alts),
+                        altList = altNames,
+                    })
+                end
+            else
+                totalAlts = totalAlts + #group.alts
             end
-        else
-            totalAlts = totalAlts + #group.alts
         end
     end
 
@@ -3082,13 +3133,20 @@ end
 function AuditView:show()
     self:createUI()
     if self._frame then
-        self:resetFiltersToAll()
-        self:updateLocale()
-        self:updateFilterButtonsVisual()
-        self:rebuildFlatRows()
-        self:applyFilters()
-        self:renderGuildStats()
-        self._frame:Show()
+        if self._frame:IsShown() then
+            self:resetFiltersToAll()
+            self:updateLocale(true)
+            self:updateFilterButtonsVisual()
+            if self._onRefreshCallback then
+                self._onRefreshCallback()
+            else
+                self:rebuildFlatRows()
+                self:applyFilters()
+                self:renderGuildStats()
+            end
+        else
+            self._frame:Show()
+        end
     end
 end
 
@@ -3111,7 +3169,8 @@ function AuditView:toggle()
 end
 
 --- Atualiza dinamicamente os textos da interface após mudança de idioma.
-function AuditView:updateLocale()
+---@param skipRender boolean|nil @Se verdadeiro, atualiza apenas os textos fixos sem re-renderizar linhas e estatísticas
+function AuditView:updateLocale(skipRender)
     local curL = (_G.GM and _G.GM.L) or _G.L or L
     if not self._frame then return end
 
@@ -3199,12 +3258,13 @@ function AuditView:updateLocale()
         ))
     end
 
-    -- Re-renderiza linhas visíveis
-    if self.renderRows then
-        self:renderRows()
-    end
-    if self.renderGuildStats then
-        self:renderGuildStats()
+    if not skipRender then
+        if self.renderRows then
+            self:renderRows()
+        end
+        if self.renderGuildStats then
+            self:renderGuildStats()
+        end
     end
 end
 
@@ -3255,6 +3315,82 @@ function AuditView:getStatsHeader(index)
     end
     h:Show()
     return h
+end
+
+--- Constrói sob demanda a lista de até 25 membros para o tooltip de uma linha de estatística.
+---@param statsFilter table
+---@param isEn boolean
+---@return table[]
+---@return number
+function AuditView:buildStatsTooltipMembers(statsFilter, isEn)
+    local result = {}
+    local totalMatched = 0
+    if not statsFilter then return result, 0 end
+
+    local cat = statsFilter.category
+    local key = statsFilter.key
+    local maxShow = 25
+
+    for _, m in ipairs(self._members or {}) do
+        local matched = false
+        local detail = ""
+
+        if cat == "ROLE" then
+            local r = (m.getRole and m:getRole() or ""):upper()
+            if key == "NONE" then
+                matched = (r ~= "TANK" and r ~= "HEALER" and r ~= "DPS")
+            else
+                matched = (r == key)
+            end
+            if matched and totalMatched < maxShow then
+                detail = m:getClassDisplayName() or ""
+            end
+        elseif cat == "CLASS" then
+            local cKey = (m.getClass and m:getClass() or ""):upper()
+            matched = (cKey == key)
+            if matched and totalMatched < maxShow then
+                local lvl = m.getLevel and m:getLevel() or 1
+                local rank = m.getRankName and m:getRankName() or ""
+                detail = (rank ~= "") and string.format("Lvl %d - %s", lvl, rank) or string.format("Lvl %d", lvl)
+            end
+        elseif cat == "RACE" then
+            local rawRace = m.getRace and m:getRace() or ""
+            local rName = normalizeRace(rawRace, isEn)
+            matched = (rName == key)
+            if matched and totalMatched < maxShow then
+                local cDisp = m.getClassDisplayName and m:getClassDisplayName() or m:getClass()
+                local lvl = m.getLevel and m:getLevel() or 1
+                detail = string.format("Lvl %d %s", lvl, cDisp)
+            end
+        elseif cat == "PROFESSION" then
+            local mProfs = m.getProfessions and m:getProfessions()
+            if type(mProfs) == "table" then
+                for pKey, pData in pairs(mProfs) do
+                    if tostring(pKey):upper() == key then
+                        matched = true
+                        if totalMatched < maxShow then
+                            local rank = (type(pData) == "table" and pData.rank) or 0
+                            local maxRank = (type(pData) == "table" and pData.maxRank) or 300
+                            detail = (rank > 0) and string.format("%d/%d", rank, maxRank) or "Aprendiz"
+                        end
+                        break
+                    end
+                end
+            end
+        end
+
+        if matched then
+            totalMatched = totalMatched + 1
+            if totalMatched <= maxShow then
+                table.insert(result, {
+                    member = m,
+                    detail = detail,
+                })
+            end
+        end
+    end
+
+    return result, totalMatched
 end
 
 --- Obtém ou cria uma linha de dado no painel de estatísticas.
@@ -3311,26 +3447,27 @@ function AuditView:getStatsRow(index)
                 if btn.tooltipData.subtitle then
                     GameTooltip:AddLine(btn.tooltipData.subtitle, 0.7, 0.7, 0.7, true)
                 end
-                if btn.tooltipData.members and #btn.tooltipData.members > 0 then
+                local ttMembers, totalMatched = self:buildStatsTooltipMembers(btn.statsFilter, btn.tooltipData.isEn)
+                if totalMatched > 0 then
                     GameTooltip:AddLine(" ")
                     local header = btn.tooltipData.header or (btn.tooltipData.isEn and "Members:" or "Membros:")
-                    GameTooltip:AddLine(string.format("|cffffd200%s (%d)|r", header, #btn.tooltipData.members))
+                    GameTooltip:AddLine(string.format("|cffffd200%s (%d)|r", header, totalMatched))
                     local maxShow = 25
-                    for i, info in ipairs(btn.tooltipData.members) do
-                        if i > maxShow then
-                            local rem = #btn.tooltipData.members - maxShow
-                            GameTooltip:AddLine(string.format("|cffaaaaaa... e mais %d membros|r", rem), 0.7, 0.7, 0.7)
-                            break
-                        end
-                        local mName = info.name or (info.member and info.member.getName and info.member:getName()) or ""
-                        local mGuid = info.guid or (info.member and info.member.getGuid and info.member:getGuid())
-                        local mClass = info.class or (info.member and info.member.getClass and info.member:getClass())
+                    for _, info in ipairs(ttMembers) do
+                        local m = info.member
+                        local mName = m and m.getName and m:getName() or ""
+                        local mGuid = m and m.getGuid and m:getGuid()
+                        local mClass = m and m.getClass and m:getClass()
                         local colName = self:formatColoredName(mName, mGuid, mClass)
                         if info.detail and info.detail ~= "" then
                             GameTooltip:AddLine(string.format("  • %s |cffaaaaaa(%s)|r", colName, info.detail), 0.85, 0.85, 0.85)
                         else
                             GameTooltip:AddLine(string.format("  • %s", colName), 0.85, 0.85, 0.85)
                         end
+                    end
+                    if totalMatched > maxShow then
+                        local rem = totalMatched - maxShow
+                        GameTooltip:AddLine(string.format("|cffaaaaaa... e mais %d membros|r", rem), 0.7, 0.7, 0.7)
                     end
                 else
                     GameTooltip:AddLine(" ")
@@ -3470,32 +3607,29 @@ function AuditView:renderGuildStats()
         { id = "DPS",    name = "DPS",    color = { 0.91, 0.30, 0.24 }, hex = "e74c3c" },
         { id = "NONE",   name = curL["STATS_UNASSIGNED"] or (isEn and "Unassigned" or "Sem Função"), color = { 0.55, 0.55, 0.55 }, hex = "888888" },
     }
-    local roleMap = {
-        TANK = { count = 0, members = {} },
-        HEALER = { count = 0, members = {} },
-        DPS = { count = 0, members = {} },
-        NONE = { count = 0, members = {} },
+    local roleCounts = {
+        TANK = 0,
+        HEALER = 0,
+        DPS = 0,
+        NONE = 0,
     }
     for _, m in ipairs(members) do
         local r = (m.getRole and m:getRole() or ""):upper()
-        if roleMap[r] then
-            roleMap[r].count = roleMap[r].count + 1
-            table.insert(roleMap[r].members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = m:getClassDisplayName() })
+        if roleCounts[r] ~= nil then
+            roleCounts[r] = roleCounts[r] + 1
         else
-            roleMap.NONE.count = roleMap.NONE.count + 1
-            table.insert(roleMap.NONE.members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = m:getClassDisplayName() })
+            roleCounts.NONE = roleCounts.NONE + 1
         end
     end
     for _, rDef in ipairs(rolesDef) do
-        local data = roleMap[rDef.id]
+        local count = roleCounts[rDef.id] or 0
         local tt = {
             title = string.format("Função: |cff%s%s|r", rDef.hex, rDef.name),
-            subtitle = string.format("%d de %d membros na guilda", data.count, total),
-            members = data.members,
+            subtitle = string.format("%d de %d membros na guilda", count, total),
             header = isEn and "Members with this role:" or "Membros com esta função:",
         }
         local sf = { category = "ROLE", key = rDef.id, label = rDef.name }
-        addRow(rDef.color, string.format("|cff%s%s|r", rDef.hex, rDef.name), data.count, total, tt, sf)
+        addRow(rDef.color, string.format("|cff%s%s|r", rDef.hex, rDef.name), count, total, tt, sf)
     end
     currentY = currentY + 6
 
@@ -3506,16 +3640,12 @@ function AuditView:renderGuildStats()
     local classNames = isEn and CLASS_NAMES_MAP.enUS or CLASS_NAMES_MAP.ptBR
     local classMap = {}
     for _, cKey in ipairs(ALL_CLASSES_ORDER) do
-        classMap[cKey] = { key = cKey, name = classNames[cKey] or cKey, count = 0, members = {} }
+        classMap[cKey] = { key = cKey, name = classNames[cKey] or cKey, count = 0 }
     end
     for _, m in ipairs(members) do
         local cKey = (m.getClass and m:getClass() or ""):upper()
         if classMap[cKey] then
             classMap[cKey].count = classMap[cKey].count + 1
-            local lvl = m.getLevel and m:getLevel() or 1
-            local rank = m.getRankName and m:getRankName() or ""
-            local dStr = (rank ~= "") and string.format("Lvl %d - %s", lvl, rank) or string.format("Lvl %d", lvl)
-            table.insert(classMap[cKey].members, { name = m:getName(), guid = m:getGuid(), class = cKey, detail = dStr })
         end
     end
     local classList = {}
@@ -3536,7 +3666,6 @@ function AuditView:renderGuildStats()
         local tt = {
             title = string.format("%s%s|r (%d)", hex, c.name, c.count),
             subtitle = string.format("%d de %d membros na guilda", c.count, total),
-            members = c.members,
             header = isEn and "Guild members of this class:" or "Membros desta classe na guilda:",
         }
         local sf = { category = "CLASS", key = c.key, label = c.name }
@@ -3553,12 +3682,9 @@ function AuditView:renderGuildStats()
         local rawRace = m.getRace and m:getRace() or ""
         local rName = normalizeRace(rawRace, isEn)
         if not raceMap[rName] then
-            raceMap[rName] = { name = rName, count = 0, members = {} }
+            raceMap[rName] = { name = rName, count = 0 }
         end
         raceMap[rName].count = raceMap[rName].count + 1
-        local cDisp = m.getClassDisplayName and m:getClassDisplayName() or m:getClass()
-        local lvl = m.getLevel and m:getLevel() or 1
-        table.insert(raceMap[rName].members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = string.format("Lvl %d %s", lvl, cDisp) })
     end
     local raceList = {}
     for _, rData in pairs(raceMap) do
@@ -3572,7 +3698,6 @@ function AuditView:renderGuildStats()
         local tt = {
             title = string.format("|cffffffff%s|r (%d)", r.name, r.count),
             subtitle = string.format("%d de %d membros na guilda", r.count, total),
-            members = r.members,
             header = isEn and "Guild members of this race:" or "Membros desta raça na guilda:",
         }
         local sf = { category = "RACE", key = r.name, label = r.name }
@@ -3586,21 +3711,17 @@ function AuditView:renderGuildStats()
     addHeader("|cffffd200" .. (curL["STATS_SECTION_PROFESSIONS"] or (isEn and "PROFESSIONS" or "PROFISSÕES")) .. "|r")
     local profMap = {}
     for _, pDef in ipairs(PROFESSIONS_DEF) do
-        profMap[pDef.key] = { key = pDef.key, name = isEn and pDef.nameEn or pDef.name, icon = pDef.icon, count = 0, members = {} }
+        profMap[pDef.key] = { key = pDef.key, name = isEn and pDef.nameEn or pDef.name, icon = pDef.icon, count = 0 }
     end
     for _, m in ipairs(members) do
         local mProfs = m.getProfessions and m:getProfessions()
         if type(mProfs) == "table" then
-            for pKey, pData in pairs(mProfs) do
+            for pKey, _ in pairs(mProfs) do
                 local uKey = tostring(pKey):upper()
                 if not profMap[uKey] then
-                    profMap[uKey] = { key = uKey, name = uKey, icon = nil, count = 0, members = {} }
+                    profMap[uKey] = { key = uKey, name = uKey, icon = nil, count = 0 }
                 end
-                local rank = (type(pData) == "table" and pData.rank) or 0
-                local maxRank = (type(pData) == "table" and pData.maxRank) or 300
                 profMap[uKey].count = profMap[uKey].count + 1
-                local det = (rank > 0) and string.format("%d/%d", rank, maxRank) or "Aprendiz"
-                table.insert(profMap[uKey].members, { name = m:getName(), guid = m:getGuid(), class = m:getClass(), detail = det })
             end
         end
     end
@@ -3617,7 +3738,6 @@ function AuditView:renderGuildStats()
             local tt = {
                 title = string.format("|cffffffff%s|r (%d)", p.name, p.count),
                 subtitle = string.format("%d artesão(ãos) com esta profissão na guilda", p.count),
-                members = p.members,
                 header = isEn and "Crafters in guild:" or "Artesãos na guilda:",
             }
             local color = (p.count > 0) and { 0.3, 0.9, 0.4 } or { 0.4, 0.4, 0.4 }

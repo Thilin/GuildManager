@@ -33,10 +33,16 @@ end
 
 --- Varre todos os membros do roster da guilda através da API da Blizzard,
 --- transformando os dados recebidos em entidades Member persistidas pelo MemberService.
+---@param force boolean|nil @Se verdadeiro, ignora o intervalo mínimo de throttle entre varreduras
 ---@return number @Quantidade de membros processados com sucesso
-function GuildRosterService:scanRoster()
+function GuildRosterService:scanRoster(force)
     if not IsInGuild or not IsInGuild() then
         return 0
+    end
+
+    local now = GetTime and GetTime() or 0
+    if not force and self._activeMemberList and #self._activeMemberList > 0 and (now - (self._lastScanTime or 0)) < 1.5 then
+        return #self._activeMemberList
     end
 
     -- Garante que membros offline também sejam listados pela API
@@ -49,10 +55,15 @@ function GuildRosterService:scanRoster()
         return 0
     end
 
+    self._lastScanTime = now
+    self._officerCacheValue = nil
+    self._officerCacheTime = nil
+
     local activeMemberList = {}
     local activeRosterNames = {}
     local activeRosterGuids = {}
     local processedCount = 0
+    local guildLeaderName = nil
 
     for i = 1, numMembers do
         local member, rawCleanName, rawGuid = self:getAndProcessMember(i)
@@ -60,6 +71,9 @@ function GuildRosterService:scanRoster()
             table.insert(activeMemberList, member)
             local cleanName = member:getName() or rawCleanName or ""
             local guid = member:getGuid() or rawGuid or ""
+            if tonumber(member:getRankIndex()) == 0 and cleanName ~= "" then
+                guildLeaderName = cleanName
+            end
 
             if cleanName ~= "" then
                 activeRosterNames[cleanName] = true
@@ -96,14 +110,20 @@ function GuildRosterService:scanRoster()
         self._activeMemberList = activeMemberList
         self._activeRosterNames = activeRosterNames
         self._activeRosterGuids = activeRosterGuids
+        if guildLeaderName then
+            self._guildLeaderName = guildLeaderName
+        end
         self._memberService:reconcileGuildMembers(activeRosterNames, activeRosterGuids)
         if _G.GM_DB then
             _G.GM_DB.rosterInitialized = true
         end
         if _G.GM and _G.GM.database and _G.GM.database.migrateLegacyCustomData and self._memberService and self._memberService._repository then
-            pcall(_G.GM.database.migrateLegacyCustomData, _G.GM.database, self._memberService._repository._db, activeRosterNames)
+            local db = self._memberService._repository._db
+            if db and not db._legacyMigratedSession then
+                db._legacyMigratedSession = true
+                pcall(_G.GM.database.migrateLegacyCustomData, _G.GM.database, db, activeRosterNames)
+            end
         end
-        local now = GetTime and GetTime() or 0
         if (now - (self._lastLogCleanTime or 0)) >= 300 then
             self._lastLogCleanTime = now
             if _G.GM and _G.GM.logService then
@@ -268,6 +288,27 @@ function GuildRosterService:clearActiveRoster()
     self._activeMemberList = nil
     self._activeRosterNames = nil
     self._activeRosterGuids = nil
+    self._guildLeaderName = nil
+    self._lastScanTime = nil
+    self._officerCacheValue = nil
+    self._officerCacheTime = nil
+end
+
+--- Retorna o nome do Mestre da Guilda (rankIndex == 0) identificado no roster.
+---@return string|nil
+function GuildRosterService:getGuildLeaderName()
+    if self._guildLeaderName and self._guildLeaderName ~= "" then
+        return self._guildLeaderName
+    end
+    if self._activeMemberList then
+        for _, m in ipairs(self._activeMemberList) do
+            if tonumber(m:getRankIndex()) == 0 then
+                self._guildLeaderName = m:getName()
+                return self._guildLeaderName
+            end
+        end
+    end
+    return nil
 end
 
 --- Verifica se o jogador local possui cargo de Oficial ou Líder da Guilda.
@@ -281,16 +322,27 @@ function GuildRosterService:isPlayerOfficerOrLeader()
         return false
     end
 
+    local now = GetTime and GetTime() or 0
+    if self._officerCacheValue ~= nil and self._officerCacheTime and (now - self._officerCacheTime) < 5 then
+        return self._officerCacheValue
+    end
+
     -- 1. Líder da guilda nativo (Guild Master)
     if IsGuildLeader and IsGuildLeader() then
+        self._officerCacheValue = true
+        self._officerCacheTime = now
         return true
     end
 
     -- 2. Permissão nativa para notas de oficiais (benchmark de cargos de oficial no WoW)
     if CanEditOfficerNote and CanEditOfficerNote() then
+        self._officerCacheValue = true
+        self._officerCacheTime = now
         return true
     end
     if C_GuildInfo and C_GuildInfo.CanEditOfficerNote and C_GuildInfo.CanEditOfficerNote() then
+        self._officerCacheValue = true
+        self._officerCacheTime = now
         return true
     end
 
@@ -306,11 +358,21 @@ function GuildRosterService:isPlayerOfficerOrLeader()
             if me then
                 local rIdx = me:getRankIndex()
                 if rIdx and rIdx <= 1 then
+                    self._officerCacheValue = true
+                    self._officerCacheTime = now
                     return true
                 end
                 local rName = (me:getRankName() or ""):lower()
                 if rName:find("oficial") or rName:find("officer") or rName:find("lider") or rName:find("líder") or rName:find("mestre") then
+                    self._officerCacheValue = true
+                    self._officerCacheTime = now
                     return true
+                end
+                -- Se já encontrou o jogador no MemberService e não é oficial, evita varrer GetGuildRosterInfo
+                if self._activeMemberList then
+                    self._officerCacheValue = false
+                    self._officerCacheTime = now
+                    return false
                 end
             end
         end
@@ -323,10 +385,14 @@ function GuildRosterService:isPlayerOfficerOrLeader()
                 cName = cName:match("^%s*(.-)%s*$") or cName
                 if cName:lower() == myLower then
                     if rankIndex and rankIndex <= 1 then
+                        self._officerCacheValue = true
+                        self._officerCacheTime = now
                         return true
                     end
                     local rLower = (rankName or ""):lower()
                     if rLower:find("oficial") or rLower:find("officer") or rLower:find("lider") or rLower:find("líder") or rLower:find("mestre") then
+                        self._officerCacheValue = true
+                        self._officerCacheTime = now
                         return true
                     end
                     break
@@ -335,6 +401,8 @@ function GuildRosterService:isPlayerOfficerOrLeader()
         end
     end
 
+    self._officerCacheValue = false
+    self._officerCacheTime = now
     return false
 end
 

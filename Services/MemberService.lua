@@ -228,42 +228,40 @@ function MemberService:resolveFullName(name)
     clean = clean:match("^%s*(.-)%s*$") or clean
     if clean == "" then return "" end
 
+    if self._repository and not self._repository._allListCache and self._repository.findAll then
+        self._repository:findAll()
+    end
+
     -- 1. Se já possui nome e sobrenome (espaço)
     if clean:find("%s") then
-        local exact = self._repository:findByName(clean)
+        local exact = self._repository and self._repository:findByName(clean)
         if exact and exact:getName() and exact:getName() ~= "" then
             return exact:getName()
-        end
-        local cleanLower = clean:lower()
-        for _, m in ipairs(self._repository:findAll()) do
-            local mName = m:getName() or ""
-            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
-            if mClean:lower() == cleanLower then
-                return mName
-            end
         end
         return clean
     end
 
-    -- 2. Se possui apenas o primeiro nome, busca correspondência única no repositório de membros
+    -- 2. Se possui apenas o primeiro nome, busca correspondência única O(1) no índice de primeiro nome
     local cleanLower = clean:lower()
-    local matchName = nil
-    local matchCount = 0
-    for _, m in ipairs(self._repository:findAll()) do
-        local mName = m:getName() or ""
-        if mName:find("%s") then
-            local first = mName:match("^(%S+)") or mName
-            if first:lower() == cleanLower then
-                matchName = mName
-                matchCount = matchCount + 1
+    if self._repository and self._repository._firstNameCache then
+        local byFirst = self._repository._firstNameCache[cleanLower]
+        if type(byFirst) == "table" and byFirst.getName then
+            local fName = byFirst:getName()
+            if fName and fName ~= "" then
+                return fName
             end
+        elseif byFirst == false then
+            -- Primeiro nome ambíguo no repositório
+            return clean
         end
     end
-    if matchCount == 1 and matchName then
-        return matchName
+
+    -- Se o roster ativo já foi varrido nesta sessão, evita varredura O(N) repetitiva na API da Blizzard
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService._activeMemberList then
+        return clean
     end
 
-    -- 3. Busca no Roster nativo da Blizzard
+    -- 3. Fallback inicial no Roster nativo da Blizzard (apenas antes do primeiro scanRoster)
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
         local rMatchName = nil
@@ -293,6 +291,10 @@ end
 --- Resolve o nome completo (nome e sobrenome) do jogador local utilizando GUID prioritariamente.
 ---@return string
 function MemberService:resolvePlayerFullName()
+    if self._cachedPlayerFullName and self._cachedPlayerFullName:find("%s") then
+        return self._cachedPlayerFullName
+    end
+
     local myGUID = UnitGUID and UnitGUID("player")
     local myName = UnitName and UnitName("player") or ""
     local myNameLower = myName:lower()
@@ -300,27 +302,27 @@ function MemberService:resolvePlayerFullName()
     if myGUID and myGUID ~= "" then
         local m = self:getMemberByGuid(myGUID)
         if m and m:getName() and m:getName() ~= "" and m:getName():find("%s") then
+            self._cachedPlayerFullName = m:getName()
             return m:getName()
         end
-        for _, member in ipairs(self:getAllMembers()) do
-            if member:getGuid() == myGUID and member:getName() and member:getName():find("%s") then
-                return member:getName()
-            end
-        end
-        if GetNumGuildMembers and GetGuildRosterInfo then
-            local num = GetNumGuildMembers() or 0
-            for i = 1, num do
-                local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
-                if gName then
-                    local clean = gName:match("^[^-]+") or gName
-                    clean = clean:match("^%s*(.-)%s*$") or clean
-                    if clean ~= "" and clean:find("%s") then
-                        if guid and guid == myGUID then
-                            return clean
-                        end
-                        local first = clean:match("^(%S+)") or clean
-                        if myNameLower ~= "" and first:lower() == myNameLower then
-                            return clean
+        if not (_G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService._activeMemberList) then
+            if GetNumGuildMembers and GetGuildRosterInfo then
+                local num = GetNumGuildMembers() or 0
+                for i = 1, num do
+                    local gName, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
+                    if gName then
+                        local clean = gName:match("^[^-]+") or gName
+                        clean = clean:match("^%s*(.-)%s*$") or clean
+                        if clean ~= "" and clean:find("%s") then
+                            if guid and guid == myGUID then
+                                self._cachedPlayerFullName = clean
+                                return clean
+                            end
+                            local first = clean:match("^(%S+)") or clean
+                            if myNameLower ~= "" and first:lower() == myNameLower then
+                                self._cachedPlayerFullName = clean
+                                return clean
+                            end
                         end
                     end
                 end
@@ -328,7 +330,11 @@ function MemberService:resolvePlayerFullName()
         end
     end
 
-    return self:resolveFullName(myName)
+    local resolved = self:resolveFullName(myName)
+    if resolved and resolved:find("%s") then
+        self._cachedPlayerFullName = resolved
+    end
+    return resolved
 end
 
 --- Resolve o nome completo (nome e sobrenome) de um recrutador buscando no repositório.
