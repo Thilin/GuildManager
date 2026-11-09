@@ -195,6 +195,8 @@ function AuditView:new()
     instance._rows = {}
     instance._filterText = ""
     instance._activeFilter = "ALL"
+    instance._activeStatsFilter = nil
+    instance._suppressFilterUpdate = false
     instance._collapsedMains = {}
     instance._numVisibleRows = 18
     instance._rowHeight = 24
@@ -282,7 +284,11 @@ function AuditView:createUI()
                 pcall(PlaySound, 839)
             end
         end
+        self:resetFiltersToAll()
+        self:updateFilterButtonsVisual()
         self:updateScrollDimensions()
+        self:rebuildFlatRows()
+        self:applyFilters()
         self:renderGuildStats()
         if self._onRefreshCallback then
             self._onRefreshCallback()
@@ -297,6 +303,7 @@ function AuditView:createUI()
                 pcall(PlaySound, 840)
             end
         end
+        self:resetFiltersToAll()
         if self._editModal and self._editModal:IsShown() then
             self._editModal:Hide()
         end
@@ -483,7 +490,9 @@ function AuditView:createUI()
         self._filterText = txt or ""
         self._currentPage = 1
         self._offset = 0
-        self:applyFilters()
+        if not self._suppressFilterUpdate then
+            self:applyFilters()
+        end
     end)
     searchEB:SetScript("OnEscapePressed", function(box)
         box:SetText("")
@@ -521,6 +530,14 @@ function AuditView:createUI()
         tabBtn:SetScript("OnClick", function()
             if tabData.id == "NO_OFFICER_NOTE" and not self:isPlayerOfficerOrLeader() then
                 print("|cffff8800[GuildManager]|r O filtro de Nota de Oficial é exclusivo para Oficiais e o Líder da Guilda.")
+                return
+            end
+            if tabData.id == "ALL" then
+                self:resetFiltersToAll()
+                self:rebuildFlatRows()
+                self:updateFilterButtonsVisual()
+                self:applyFilters()
+                self:renderGuildStats()
                 return
             end
             self._activeFilter = tabData.id
@@ -2311,11 +2328,36 @@ function AuditView:onTableMouseWheel(delta)
     end
 end
 
+--- Reseta todos os filtros (busca, abas rápidas e estatísticas) para exibir todos os membros da guilda.
+function AuditView:resetFiltersToAll()
+    self._activeFilter = "ALL"
+    self._activeStatsFilter = nil
+    self._filterText = ""
+    self._collapsedMains = {}
+    self._currentPage = 1
+    self._offset = 0
+    if self._searchEB then
+        self._suppressFilterUpdate = true
+        self._searchEB:SetText("")
+        self._searchEB:ClearFocus()
+        if self._searchEB.hint then
+            self._searchEB.hint:Show()
+        end
+        self._suppressFilterUpdate = false
+    end
+    if self._scrollBar then
+        self._scrollBar:SetValue(0)
+    end
+end
+
 --- Atualiza a aparência visual dos botões de filtro.
 function AuditView:updateFilterButtonsVisual()
     local isOfficer = self:isPlayerOfficerOrLeader()
     for tabId, btn in pairs(self._filterButtons) do
         local isActive = (tabId == self._activeFilter)
+        if tabId == "ALL" and self._activeStatsFilter ~= nil then
+            isActive = false
+        end
         local isRestricted = (tabId == "NO_OFFICER_NOTE" and not isOfficer)
         local bg = isActive and PALETTE.ACTIVE_TAB_BG or PALETTE.INACTIVE_TAB_BG
         local border = isActive and PALETTE.ACTIVE_TAB_BORDER or PALETTE.INACTIVE_TAB_BORDER
@@ -2555,7 +2597,7 @@ function AuditView:rebuildFlatRows()
     for _, group in ipairs(mainGroups) do
         totalMains = totalMains + 1
         local mainName = group.main:getName()
-        local isCollapsed = (self._collapsedMains[mainName] == true)
+        local isCollapsed = (self._collapsedMains[mainName] == true) and (self._activeStatsFilter == nil)
         local altNames = {}
         for _, alt in ipairs(group.alts) do
             table.insert(altNames, alt:getName())
@@ -2593,11 +2635,13 @@ function AuditView:rebuildFlatRows()
     self._totalAltsCount = totalAlts
 end
 
---- Aplica filtros de texto de busca e abas rápidas à lista de auditoria.
+--- Aplica filtros de texto de busca, abas rápidas e filtro de estatística à lista de auditoria.
 function AuditView:applyFilters()
     local search = (self._filterText or ""):lower():match("^%s*(.-)%s*$")
     local filter = self._activeFilter or "ALL"
+    local statsFilter = self._activeStatsFilter
     local isOfficer = self:isPlayerOfficerOrLeader()
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
 
     self._filteredRows = {}
 
@@ -2626,7 +2670,51 @@ function AuditView:applyFilters()
             matchFilter = (cn == "")
         end
 
-        if matchFilter and _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.showOfflineMembers == false then
+        if matchFilter and statsFilter then
+            local cat = statsFilter.category
+            local key = statsFilter.key
+            if cat == "ROLE" then
+                local r = (m.getRole and m:getRole() or ""):upper()
+                if key == "NONE" then
+                    if r == "TANK" or r == "HEALER" or r == "DPS" then
+                        matchFilter = false
+                    end
+                else
+                    if r ~= key then
+                        matchFilter = false
+                    end
+                end
+            elseif cat == "CLASS" then
+                local cKey = (m.getClass and m:getClass() or ""):upper()
+                if cKey ~= key then
+                    matchFilter = false
+                end
+            elseif cat == "RACE" then
+                local rawRace = m.getRace and m:getRace() or ""
+                local rName = normalizeRace(rawRace, isEn)
+                local rNamePt = normalizeRace(rawRace, false)
+                local rNameEn = normalizeRace(rawRace, true)
+                if rName ~= key and rNamePt ~= key and rNameEn ~= key then
+                    matchFilter = false
+                end
+            elseif cat == "PROFESSION" then
+                local mProfs = m.getProfessions and m:getProfessions()
+                local hasProf = false
+                if type(mProfs) == "table" then
+                    for pKey, _ in pairs(mProfs) do
+                        if tostring(pKey):upper() == key then
+                            hasProf = true
+                            break
+                        end
+                    end
+                end
+                if not hasProf then
+                    matchFilter = false
+                end
+            end
+        end
+
+        if matchFilter and not statsFilter and filter ~= "ALL" and _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.showOfflineMembers == false then
             if not m:isOnline() then
                 matchFilter = false
             end
@@ -2994,14 +3082,19 @@ end
 function AuditView:show()
     self:createUI()
     if self._frame then
+        self:resetFiltersToAll()
         self:updateLocale()
         self:updateFilterButtonsVisual()
+        self:rebuildFlatRows()
+        self:applyFilters()
+        self:renderGuildStats()
         self._frame:Show()
     end
 end
 
 --- Oculta a janela de auditoria.
 function AuditView:hide()
+    self:resetFiltersToAll()
     if self._frame then
         self._frame:Hide()
     end
@@ -3175,6 +3268,19 @@ function AuditView:getStatsRow(index)
         row = CreateFrame("Button", nil, self._statsContent, template)
         row:SetSize(STATS_PANEL_WIDTH - 24, 18)
 
+        local selBg = row:CreateTexture(nil, "BACKGROUND")
+        selBg:SetAllPoints(row)
+        selBg:SetColorTexture(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.90)
+        selBg:Hide()
+        row.selBg = selBg
+
+        local selBorder = row:CreateTexture(nil, "ARTWORK")
+        selBorder:SetPoint("LEFT", row, "LEFT", 0, 0)
+        selBorder:SetSize(2, 16)
+        selBorder:SetColorTexture(1.0, 0.82, 0.0, 1.0)
+        selBorder:Hide()
+        row.selBorder = selBorder
+
         local hl = row:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints(row)
         hl:SetColorTexture(PALETTE.CELL_HOVER_BG[1], PALETTE.CELL_HOVER_BG[2], PALETTE.CELL_HOVER_BG[3], 0.25)
@@ -3230,7 +3336,7 @@ function AuditView:getStatsRow(index)
                     GameTooltip:AddLine(" ")
                     GameTooltip:AddLine("|cff888888" .. (btn.tooltipData.isEn and "No members in this category." or "Nenhum membro nesta categoria.") .. "|r", 0.6, 0.6, 0.6)
                 end
-                if btn.filterQuery and btn.filterQuery ~= "" then
+                if btn.statsFilter then
                     GameTooltip:AddLine(" ")
                     GameTooltip:AddLine("|cff00ff00" .. (btn.tooltipData.isEn and "Click to filter in table" or "Clique para filtrar na tabela") .. "|r", 0.2, 1.0, 0.2)
                 end
@@ -3243,13 +3349,33 @@ function AuditView:getStatsRow(index)
         end)
 
         row:SetScript("OnClick", function(btn)
-            if btn.filterQuery and btn.filterQuery ~= "" and self._searchEB then
-                local cur = self._searchEB:GetText() or ""
-                if cur == btn.filterQuery then
+            if btn.statsFilter then
+                self._activeFilter = "ALL"
+                self._activeStatsFilter = {
+                    category = btn.statsFilter.category,
+                    key = btn.statsFilter.key,
+                    label = btn.statsFilter.label,
+                }
+                self._filterText = ""
+                self._collapsedMains = {}
+                self._currentPage = 1
+                self._offset = 0
+                if self._searchEB then
+                    self._suppressFilterUpdate = true
                     self._searchEB:SetText("")
-                else
-                    self._searchEB:SetText(btn.filterQuery)
+                    self._searchEB:ClearFocus()
+                    if self._searchEB.hint then
+                        self._searchEB.hint:Show()
+                    end
+                    self._suppressFilterUpdate = false
                 end
+                if self._scrollBar then
+                    self._scrollBar:SetValue(0)
+                end
+                self:rebuildFlatRows()
+                self:updateFilterButtonsVisual()
+                self:applyFilters()
+                self:renderGuildStats()
             end
         end)
 
@@ -3297,7 +3423,7 @@ function AuditView:renderGuildStats()
         currentY = currentY + 22
     end
 
-    local function addRow(dotColor, nameText, count, totalCount, tooltipData, filterQuery)
+    local function addRow(dotColor, nameText, count, totalCount, tooltipData, statsFilter)
         rowIdx = rowIdx + 1
         local row = self:getStatsRow(rowIdx)
         row:SetPoint("TOPLEFT", self._statsContent, "TOPLEFT", 0, -currentY)
@@ -3316,9 +3442,21 @@ function AuditView:renderGuildStats()
         else
             row.countTxt:SetText("|cff6666660|r")
         end
+        local isSelected = false
+        if self._activeStatsFilter and statsFilter then
+            if self._activeStatsFilter.category == statsFilter.category and self._activeStatsFilter.key == statsFilter.key then
+                isSelected = true
+            end
+        end
+        if row.selBg then
+            if isSelected then row.selBg:Show() else row.selBg:Hide() end
+        end
+        if row.selBorder then
+            if isSelected then row.selBorder:Show() else row.selBorder:Hide() end
+        end
         tooltipData.isEn = isEn
         row.tooltipData = tooltipData
-        row.filterQuery = filterQuery
+        row.statsFilter = statsFilter
         currentY = currentY + 18
     end
 
@@ -3356,8 +3494,8 @@ function AuditView:renderGuildStats()
             members = data.members,
             header = isEn and "Members with this role:" or "Membros com esta função:",
         }
-        local fQuery = (rDef.id ~= "NONE") and rDef.name or ""
-        addRow(rDef.color, string.format("|cff%s%s|r", rDef.hex, rDef.name), data.count, total, tt, fQuery)
+        local sf = { category = "ROLE", key = rDef.id, label = rDef.name }
+        addRow(rDef.color, string.format("|cff%s%s|r", rDef.hex, rDef.name), data.count, total, tt, sf)
     end
     currentY = currentY + 6
 
@@ -3401,7 +3539,8 @@ function AuditView:renderGuildStats()
             members = c.members,
             header = isEn and "Guild members of this class:" or "Membros desta classe na guilda:",
         }
-        addRow(colorRgb, string.format("%s%s|r", hex, c.name), c.count, total, tt, c.name)
+        local sf = { category = "CLASS", key = c.key, label = c.name }
+        addRow(colorRgb, string.format("%s%s|r", hex, c.name), c.count, total, tt, sf)
     end
     currentY = currentY + 6
 
@@ -3436,7 +3575,8 @@ function AuditView:renderGuildStats()
             members = r.members,
             header = isEn and "Guild members of this race:" or "Membros desta raça na guilda:",
         }
-        addRow({ 0.85, 0.70, 0.40 }, string.format("|cffffffff%s|r", r.name), r.count, total, tt, r.name)
+        local sf = { category = "RACE", key = r.name, label = r.name }
+        addRow({ 0.85, 0.70, 0.40 }, string.format("|cffffffff%s|r", r.name), r.count, total, tt, sf)
     end
     currentY = currentY + 6
 
@@ -3482,7 +3622,8 @@ function AuditView:renderGuildStats()
             }
             local color = (p.count > 0) and { 0.3, 0.9, 0.4 } or { 0.4, 0.4, 0.4 }
             local nameColor = (p.count > 0) and "|cffffffff" or "|cff888888"
-            addRow(color, string.format("%s%s|r", nameColor, p.name), p.count, total, tt, (p.count > 0) and p.name or "")
+            local sf = { category = "PROFESSION", key = p.key, label = p.name }
+            addRow(color, string.format("%s%s|r", nameColor, p.name), p.count, total, tt, sf)
         end
     end
 

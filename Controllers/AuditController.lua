@@ -238,6 +238,10 @@ function AuditController:show()
         return
     end
 
+    if self._auditView and self._auditView.resetFiltersToAll then
+        self._auditView:resetFiltersToAll()
+    end
+
     if self._guildRosterService and self._guildRosterService.requestRosterUpdate then
         self._guildRosterService:requestRosterUpdate()
     end
