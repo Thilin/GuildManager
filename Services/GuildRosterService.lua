@@ -252,6 +252,21 @@ function GuildRosterService:formatLastOnline(years, months, days, hours)
     days = tonumber(days) or 0
     hours = tonumber(hours) or 0
 
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+    if isEn then
+        if years > 0 then
+            return string.format(years == 1 and "%d yr ago" or "%d yrs ago", years)
+        elseif months > 0 then
+            return string.format(months == 1 and "%d mo ago" or "%d mos ago", months)
+        elseif days > 0 then
+            return string.format("%d d ago", days)
+        elseif hours > 0 then
+            return string.format("%d h ago", hours)
+        else
+            return "< 1 hr"
+        end
+    end
+
     if years > 0 then
         return string.format(years == 1 and "%d ano atrás" or "%d anos atrás", years)
     elseif months > 0 then

@@ -654,6 +654,10 @@ function LogService:formatLeveledMessage(memberName, newLevel, memberClass)
     end
 
     local coloredName = self:formatColoredMemberName(name, classToken)
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+    if isEn then
+        return string.format("%s |cffffd91aREACHED|r |cffffe899level|r |cffffffff%d|r", coloredName, tonumber(newLevel) or 1)
+    end
     return string.format("%s |cffffd91aSUBIU|r |cffffe899para o nível|r |cffffffff%d|r", coloredName, tonumber(newLevel) or 1)
 end
 
@@ -1072,7 +1076,8 @@ function LogService:cleanInvalidInviteJoinedLogs(memberService)
 
     local count = self._repository:removeInvalidJoinedLogs(mService)
     if count > 0 then
-        print(string.format("|cff00ff00[GuildManager]|r %d log(s) de convites não aceitos foram removidos do registro.", count))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        print(string.format(curL["LOG_CLEAN_INVITE_FMT"] or "|cff00ff00[GuildManager]|r %d unaccepted invite log(s) removed from history.", count))
     end
     return count
 end
@@ -1096,7 +1101,8 @@ function LogService:cleanInvalidLeftLogs(memberService, activeRosterNames)
 
     local count = self._repository:removeInvalidLeftLogs(mService, activeRosterNames)
     if count > 0 then
-        print(string.format("|cff00ff00[GuildManager]|r %d log(s) de saída indevidos (falso positivo pós-entrada) foram removidos do registro.", count))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        print(string.format(curL["LOG_CLEAN_FALSE_LEFT_FMT"] or "|cff00ff00[GuildManager]|r %d false leave log(s) removed from history.", count))
     end
     return count
 end
@@ -1112,7 +1118,8 @@ function LogService:cleanInvertedKickLogs(memberService)
 
     local count = self._repository:cleanInvertedKickLogs(mService)
     if count > 0 then
-        print(string.format("|cff00ff00[GuildManager]|r %d log(s) de expulsão invertidos foram corrigidos.", count))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        print(string.format(curL["LOG_CLEAN_INVERTED_KICK_FMT"] or "|cff00ff00[GuildManager]|r %d inverted kick log(s) corrected.", count))
     end
     return count
 end
@@ -1128,7 +1135,8 @@ function LogService:cleanDuplicateKickAndLeaveLogs(memberService)
 
     local count = self._repository:cleanDuplicateKickAndLeaveLogs(mService)
     if count > 0 then
-        print(string.format("|cff00ff00[GuildManager]|r %d log(s) duplicados de saída/expulsão foram corrigidos e removidos.", count))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        print(string.format(curL["LOG_CLEAN_DUP_KICK_LEFT_FMT"] or "|cff00ff00[GuildManager]|r %d duplicate leave/kick log(s) corrected and removed.", count))
     end
     return count
 end
@@ -1145,7 +1153,8 @@ function LogService:cleanDuplicateAndSpuriousLogs(memberService)
 
     local count = self._repository:cleanDuplicateAndSpuriousLogs(mService)
     if count > 0 then
-        print(string.format("|cff00ff00[GuildManager]|r %d log(s) duplicados/espúrios de retorno e saída foram removidos.", count))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        print(string.format(curL["LOG_CLEAN_DUP_SPURIOUS_FMT"] or "|cff00ff00[GuildManager]|r %d duplicate/spurious rejoin and leave log(s) removed.", count))
     end
     return count
 end

@@ -136,7 +136,7 @@ function IntroController:onBirthdaySubmitted(bdayStr, isValid)
     end
 
     local curL = (_G.GM and _G.GM.L) or _G.L or L
-    local msg = string.format(curL["INTRO_STEP5_BDAY_SAVED"] or "Aniversário configurado: %s", bdayStr)
+    local msg = string.format(curL["INTRO_STEP8_BDAY_SAVED"] or curL["INTRO_STEP5_BDAY_SAVED"] or "Birthday saved: %s", bdayStr)
     print("|cff00ff00[GuildManager]|r " .. msg)
 end
 
@@ -148,7 +148,7 @@ function IntroController:onTutorialFinished()
     end
 
     local curL = (_G.GM and _G.GM.L) or _G.L or L
-    local msg = curL["INTRO_TUTORIAL_COMPLETED_MSG"] or "Introdução concluída com sucesso! Digite /gm para começar."
+    local msg = curL["INTRO_TUTORIAL_COMPLETED_MSG"] or "Tutorial completed successfully! Type /gm to begin."
     print("|cff00ff00[GuildManager]|r " .. msg)
 end
 
@@ -160,7 +160,7 @@ function IntroController:onTutorialSkipped()
     end
 
     local curL = (_G.GM and _G.GM.L) or _G.L or L
-    local hint = curL["INTRO_REOPEN_HINT"] or "Você pode rever este tutorial a qualquer momento digitando |cffffff00/gmtutorial|r ou na tela de Configurações."
+    local hint = curL["INTRO_REOPEN_HINT"] or "You can revisit this tutorial anytime by typing |cffffff00/gmtutorial|r or in Addon Settings."
     print("|cff00ff00[GuildManager]|r " .. hint)
 end
 
@@ -229,7 +229,7 @@ function IntroController:showTutorial(isReset)
     end
 
     local curL = (_G.GM and _G.GM.L) or _G.L or L
-    local msg = curL["INTRO_REOPENED_MSG"] or "Apresentação da guilda reaberta! Você pode rever a qualquer momento com /gmtutorial."
+    local msg = curL["INTRO_REOPENED_MSG"] or "Guild Presentation reopened! You can view it anytime with /gmtutorial."
     print("|cff00ff00[GuildManager]|r " .. msg)
 end
 

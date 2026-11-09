@@ -456,7 +456,8 @@ function IntroView:createStep1UI(parent)
 
     local cardHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cardHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
-    cardHeader:SetText("|cffffd200Exemplo ao Vivo da Tela de Auditoria:|r")
+    cardHeader:SetText(curL["INTRO_STEP1_MOCK_HEADER"] or "|cffffd200Live Example of Guild Member Audit:|r")
+    p.cardHeader = cardHeader
 
     local mockRows = {
         { name = "|cffc79c6eThorgrimm|r", rank = "Líder da Guilda", lvl = "60", pubNote = "Tanque Principal", offNote = "|cffff4040[SOMENTE OFICIAIS]|r", status = "|cff40ff40Online|r" },
@@ -464,6 +465,7 @@ function IntroView:createStep1UI(parent)
         { name = "|cfffff569Shadowalker|r", rank = "Membro", lvl = "54", pubNote = "Dungeon leveling", offNote = "|cffff4040[SOMENTE OFICIAIS]|r", status = "|cff888888Offline|r" },
     }
 
+    p.mockRows = {}
     local lastRow = nil
     for i, data in ipairs(mockRows) do
         local row = CreateFrame("Frame", nil, card, template)
@@ -505,6 +507,7 @@ function IntroView:createStep1UI(parent)
         tSt:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         tSt:SetText(data.status)
 
+        p.mockRows[i] = { row = row, tName = tName, tLvl = tLvl, tRank = tRank, tNote = tNote, tOff = tOff, tSt = tSt }
         lastRow = row
     end
 
@@ -562,7 +565,8 @@ function IntroView:createStep2UI(parent)
 
     local cardHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cardHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
-    cardHeader:SetText("|cffffd200Exemplo de Histórico & Badges de Eventos:|r")
+    cardHeader:SetText(curL["INTRO_STEP2_MOCK_HEADER"] or "|cffffd200History & Event Badges Example:|r")
+    p.cardHeader = cardHeader
 
     local mockLogs = {
         { date = "Hoje 14:20", text = "|cffc79c6eThorgrimm|r |cff40ff40RECRUTOU|r |cfffff569Shadowalker|r para a guilda." },
@@ -570,6 +574,7 @@ function IntroView:createStep2UI(parent)
         { date = "Ontem 19:40", text = "|cffc79c6eThorgrimm|r |cff00e5ffPROMOVEU|r |cff69ccf0Sylphira|r para o cargo |cffffd200Oficial|r." },
     }
 
+    p.mockRows = {}
     local lastRow = nil
     for i, log in ipairs(mockLogs) do
         local row = CreateFrame("Frame", nil, card, template)
@@ -597,6 +602,7 @@ function IntroView:createStep2UI(parent)
         tMsg:SetJustifyH("LEFT")
         tMsg:SetText(log.text)
 
+        p.mockRows[i] = { row = row, tDate = tDate, tMsg = tMsg }
         lastRow = row
     end
 
@@ -658,7 +664,8 @@ function IntroView:createStep3UI(parent)
 
     local cardHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cardHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
-    cardHeader:SetText("|cffffd200Exemplo de Eventos no Calendário Mensal:|r")
+    cardHeader:SetText(curL["INTRO_STEP3_MOCK_HEADER"] or "|cffffd200Monthly Calendar Events Example:|r")
+    p.cardHeader = cardHeader
 
     local mockEvents = {
         { tag = "|cffff6060[RAIDE]|r", title = "Núcleo Ígneo (Molten Core) - 20:00", leader = "Org: Thorgrimm" },
@@ -666,6 +673,7 @@ function IntroView:createStep3UI(parent)
         { tag = "|cffff80df[ANIVERSÁRIO]|r", title = "Aniversário de Sylphira - Parabéns!", leader = "Comemoração" },
     }
 
+    p.mockRows = {}
     local lastRow = nil
     for i, evt in ipairs(mockEvents) do
         local row = CreateFrame("Frame", nil, card, template)
@@ -695,6 +703,7 @@ function IntroView:createStep3UI(parent)
         tLdr:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         tLdr:SetText(evt.leader)
 
+        p.mockRows[i] = { row = row, tTag = tTag, tTitle = tTitle, tLdr = tLdr }
         lastRow = row
     end
 
@@ -752,7 +761,8 @@ function IntroView:createStep4UI(parent)
 
     local cardHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cardHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
-    cardHeader:SetText("|cffffd200Equipe Escalada para Masmorra & Convite com 1 Clique:|r")
+    cardHeader:SetText(curL["INTRO_STEP4_MOCK_HEADER"] or "|cffffd200Dungeon Squad & 1-Click Mass Invite:|r")
+    p.cardHeader = cardHeader
 
     local mockRoles = {
         { role = "|cff4aa0e0[TANQUE]|r", name = "|cffc79c6eThorgrimm|r", class = "Guerreiro (Nv 60)" },
@@ -761,6 +771,7 @@ function IntroView:createStep4UI(parent)
         { role = "|cffff4040[DANO 2]|r", name = "|cfffff569Shadowalker|r", class = "Ladino (Nv 58)" },
     }
 
+    p.mockRows = {}
     local lastRow = nil
     for i, rData in ipairs(mockRoles) do
         local row = CreateFrame("Frame", nil, card, template)
@@ -790,6 +801,7 @@ function IntroView:createStep4UI(parent)
         tCls:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         tCls:SetText(rData.class)
 
+        p.mockRows[i] = { row = row, tRole = tRole, tName = tName, tCls = tCls }
         lastRow = row
     end
 
@@ -847,7 +859,8 @@ function IntroView:createStep5UI(parent)
 
     local cardHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     cardHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
-    cardHeader:SetText("|cffffd200Exemplo de Pedido de Fabricação no Quadro da Guilda:|r")
+    cardHeader:SetText(curL["INTRO_STEP5_MOCK_HEADER"] or "|cffffd200Crafting Work Order on Guild Board Example:|r")
+    p.cardHeader = cardHeader
 
     local mockOrders = {
         { item = "|cffa335ee[Frasco de Poder Titânico]|r", crafter = "Artesão: Sylphira", tip = "Comissão: |cffffd70015 Ouro|r", status = "|cff40ff40Pendente|r" },
@@ -855,6 +868,7 @@ function IntroView:createStep5UI(parent)
         { item = "|cffa335ee[Manto de Feitiçaria]|r", crafter = "Qualquer Artesão", tip = "Comissão: |cffffd70010 Ouro|r", status = "|cff40ff40Aberto à Guilda|r" },
     }
 
+    p.mockRows = {}
     local lastRow = nil
     for i, oData in ipairs(mockOrders) do
         local row = CreateFrame("Frame", nil, card, template)
@@ -888,6 +902,7 @@ function IntroView:createStep5UI(parent)
         tStatus:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         tStatus:SetText(oData.status)
 
+        p.mockRows[i] = { row = row, tItem = tItem, tCrafter = tCrafter, tTip = tTip, tStatus = tStatus }
         lastRow = row
     end
 
@@ -1024,7 +1039,8 @@ function IntroView:createStep7UI(parent)
 
     local mapHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     mapHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -12)
-    mapHeader:SetText("|cffffd200Visualização no Mapa Mundial (M):|r")
+    mapHeader:SetText(curL["INTRO_STEP7_MOCK_HEADER"] or "|cffffd200World Map (M) Live Tracking View:|r")
+    p.cardHeader = mapHeader
 
     local mockZones = {
         { zone = "Ventobravo / Stormwind", count = "4 membros online", names = "Thorgrimm, Sylphira, Aluneth, Durgar" },
@@ -1032,6 +1048,7 @@ function IntroView:createStep7UI(parent)
         { zone = "Cavernas das Lamentações", count = "3 membros em grupo", names = "Brakkar, Kaelen, Moira" },
     }
 
+    p.mockRows = {}
     local lastRow = nil
     for i, zData in ipairs(mockZones) do
         local row = CreateFrame("Frame", nil, card, template)
@@ -1062,6 +1079,7 @@ function IntroView:createStep7UI(parent)
         tNames:SetPoint("RIGHT", row, "RIGHT", -8, 0)
         tNames:SetText("|cff888888" .. zData.names .. "|r")
 
+        p.mockRows[i] = { row = row, tZone = tZone, tNames = tNames }
         lastRow = row
     end
 
@@ -1183,7 +1201,7 @@ function IntroView:createStep8UI(parent)
     local saveBdayBtn = CreateFrame("Button", nil, card, "UIPanelButtonTemplate")
     saveBdayBtn:SetSize(130, 24)
     saveBdayBtn:SetPoint("TOPLEFT", statusTxt, "BOTTOMLEFT", 0, -10)
-    saveBdayBtn:SetText("Salvar Aniversário")
+    saveBdayBtn:SetText(curL["INTRO_SAVE_BDAY_BTN"] or "Save Birthday")
     saveBdayBtn:SetScript("OnClick", function()
         self:saveBirthdayField()
     end)
@@ -1470,8 +1488,8 @@ function IntroView:updateLocale()
         end
         if p6.soundBtn then p6.soundBtn:SetText(curL["INTRO_STEP6_TEST_SOUND"] or "Ouvir Som da Notificação") end
         if p6.chatMsg then
-            local myName = UnitName("player") or "Você"
-            p6.chatMsg:SetText(string.format("|cff3ce73c[Guilda]|r |cffc79c6e[Thorgrimm]|r: Ei |cff00ffff@%s|r, vamos fechar o grupo da masmorra agora!", myName))
+            local myName = UnitName("player") or (curL["YOU_PLAIN"] or "You")
+            p6.chatMsg:SetText(string.format(curL["INTRO_STEP6_CHAT_PREVIEW"] or "[Guild] [Leader]: Hey @%s, join our dungeon group now!", myName))
         end
     end
 
@@ -1495,9 +1513,168 @@ function IntroView:updateLocale()
         if p8.bdayTitle then p8.bdayTitle:SetText(curL["INTRO_STEP8_BDAY_TITLE"] or "Comemore seu Aniversário com a Guilda!") end
         if p8.bdayDesc then p8.bdayDesc:SetText(curL["INTRO_STEP8_BDAY_DESC"] or "Informe sua data de aniversário para receber os parabéns da guilda e figurar na Agenda:") end
         if p8.openConfigBtn then p8.openConfigBtn:SetText(curL["INTRO_STEP8_OPEN_CONFIG"] or "Abrir Configurações (/gmconfig)") end
+        if self._saveBdayBtn then p8.saveBdayBtn = self._saveBdayBtn end
+        if self._saveBdayBtn then self._saveBdayBtn:SetText(curL["INTRO_SAVE_BDAY_BTN"] or "Save Birthday") end
     end
 
+    self:updateStep1Mock(curL)
+    self:updateStep2Mock(curL)
+    self:updateStep3Mock(curL)
+    self:updateStep4Mock(curL)
+    self:updateStep5Mock(curL)
+    self:updateStep7Mock(curL)
+
     self:goToStep(self._currentStep or 1)
+end
+
+function IntroView:updateStep1Mock(curL)
+    local p = self._stepContainers and self._stepContainers[1]
+    if not p or not p.mockRows then return end
+    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
+    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP1_MOCK_HEADER"] or "|cffffd200Live Example of Guild Member Audit:|r") end
+    local defs = isPt and {
+        { name = "|cffc79c6eThorgrimm|r", rank = "Líder da Guilda", lvl = "60", pubNote = "Tanque Principal", offNote = "|cffff4040[SOMENTE OFICIAIS]|r", status = "|cff40ff40Online|r" },
+        { name = "|cff69ccf0Sylphira|r", rank = "Oficial", lvl = "60", pubNote = "Maga Gelo / Alquimia", offNote = "|cffff4040[SOMENTE OFICIAIS]|r", status = "|cff40ff40Online|r" },
+        { name = "|cfffff569Shadowalker|r", rank = "Membro", lvl = "54", pubNote = "Dungeon leveling", offNote = "|cffff4040[SOMENTE OFICIAIS]|r", status = "|cff888888Offline|r" },
+    } or {
+        { name = "|cffc79c6eThorgrimm|r", rank = "Guild Master", lvl = "60", pubNote = "Main Tank", offNote = "|cffff4040[OFFICERS ONLY]|r", status = "|cff40ff40Online|r" },
+        { name = "|cff69ccf0Sylphira|r", rank = "Officer", lvl = "60", pubNote = "Frost Mage / Alchemy", offNote = "|cffff4040[OFFICERS ONLY]|r", status = "|cff40ff40Online|r" },
+        { name = "|cfffff569Shadowalker|r", rank = "Member", lvl = "54", pubNote = "Dungeon leveling", offNote = "|cffff4040[OFFICERS ONLY]|r", status = "|cff888888Offline|r" },
+    }
+    local lvlWord = curL["COL_LEVEL"] or "Lvl"
+    local noteWord = isPt and "Nota:" or "Note:"
+    for i, data in ipairs(defs) do
+        local r = p.mockRows[i]
+        if r then
+            r.tName:SetText(data.name)
+            r.tLvl:SetText(lvlWord .. " " .. data.lvl)
+            r.tRank:SetText("|cffffd200" .. data.rank .. "|r")
+            r.tNote:SetText("|cffaaaaaa" .. noteWord .. "|r " .. data.pubNote)
+            r.tOff:SetText(data.offNote)
+            r.tSt:SetText(data.status)
+        end
+    end
+end
+
+function IntroView:updateStep2Mock(curL)
+    local p = self._stepContainers and self._stepContainers[2]
+    if not p or not p.mockRows then return end
+    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
+    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP2_MOCK_HEADER"] or "|cffffd200History & Event Badges Example:|r") end
+    local defs = isPt and {
+        { date = "Hoje 14:20", text = "|cffc79c6eThorgrimm|r |cff40ff40RECRUTOU|r |cfffff569Shadowalker|r para a guilda." },
+        { date = "Hoje 13:05", text = "|cff69ccf0Sylphira|r |cffffd91aSUBIU|r para o nível |cffffffff60|r!" },
+        { date = "Ontem 19:40", text = "|cffc79c6eThorgrimm|r |cff00e5ffPROMOVEU|r |cff69ccf0Sylphira|r para o cargo |cffffd200Oficial|r." },
+    } or {
+        { date = "Today 14:20", text = "|cffc79c6eThorgrimm|r |cff40ff40RECRUITED|r |cfffff569Shadowalker|r to the guild." },
+        { date = "Today 13:05", text = "|cff69ccf0Sylphira|r |cffffd91aREACHED|r level |cffffffff60|r!" },
+        { date = "Yesterday 19:40", text = "|cffc79c6eThorgrimm|r |cff00e5ffPROMOTED|r |cff69ccf0Sylphira|r to rank |cffffd200Officer|r." },
+    }
+    for i, log in ipairs(defs) do
+        local r = p.mockRows[i]
+        if r then
+            r.tDate:SetText(log.date)
+            r.tMsg:SetText(log.text)
+        end
+    end
+end
+
+function IntroView:updateStep3Mock(curL)
+    local p = self._stepContainers and self._stepContainers[3]
+    if not p or not p.mockRows then return end
+    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
+    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP3_MOCK_HEADER"] or "|cffffd200Monthly Calendar Events Example:|r") end
+    local defs = isPt and {
+        { tag = "|cffff6060[RAIDE]|r", title = "Núcleo Ígneo (Molten Core) - 20:00", leader = "Org: Thorgrimm" },
+        { tag = "|cff40c0ff[MASMORRA]|r", title = "Pico da Rocha Negra Superior (UBRS) - 17:30", leader = "Org: Sylphira" },
+        { tag = "|cffff80df[ANIVERSÁRIO]|r", title = "Aniversário de Sylphira - Parabéns!", leader = "Comemoração" },
+    } or {
+        { tag = "|cffff6060[RAID]|r", title = "Molten Core - 20:00", leader = "Org: Thorgrimm" },
+        { tag = "|cff40c0ff[DUNGEON]|r", title = "Upper Blackrock Spire (UBRS) - 17:30", leader = "Org: Sylphira" },
+        { tag = "|cffff80df[BIRTHDAY]|r", title = "Sylphira's Birthday - Happy Birthday!", leader = "Celebration" },
+    }
+    for i, evt in ipairs(defs) do
+        local r = p.mockRows[i]
+        if r then
+            r.tTag:SetText(evt.tag)
+            r.tTitle:SetText(evt.title)
+            r.tLdr:SetText(evt.leader)
+        end
+    end
+end
+
+function IntroView:updateStep4Mock(curL)
+    local p = self._stepContainers and self._stepContainers[4]
+    if not p or not p.mockRows then return end
+    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
+    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP4_MOCK_HEADER"] or "|cffffd200Dungeon Squad & 1-Click Mass Invite:|r") end
+    local defs = isPt and {
+        { role = "|cff4aa0e0[TANQUE]|r", name = "|cffc79c6eThorgrimm|r", class = "Guerreiro (Nv 60)" },
+        { role = "|cff40ff40[CURADOR]|r", name = "|cffffffffAluneth|r", class = "Sacerdote (Nv 60)" },
+        { role = "|cffff4040[DANO 1]|r", name = "|cff69ccf0Sylphira|r", class = "Maga (Nv 60)" },
+        { role = "|cffff4040[DANO 2]|r", name = "|cfffff569Shadowalker|r", class = "Ladino (Nv 58)" },
+    } or {
+        { role = "|cff4aa0e0[TANK]|r", name = "|cffc79c6eThorgrimm|r", class = "Warrior (Lvl 60)" },
+        { role = "|cff40ff40[HEALER]|r", name = "|cffffffffAluneth|r", class = "Priest (Lvl 60)" },
+        { role = "|cffff4040[DPS 1]|r", name = "|cff69ccf0Sylphira|r", class = "Mage (Lvl 60)" },
+        { role = "|cffff4040[DPS 2]|r", name = "|cfffff569Shadowalker|r", class = "Rogue (Lvl 58)" },
+    }
+    for i, rData in ipairs(defs) do
+        local r = p.mockRows[i]
+        if r then
+            r.tRole:SetText(rData.role)
+            r.tName:SetText(rData.name)
+            r.tCls:SetText(rData.class)
+        end
+    end
+end
+
+function IntroView:updateStep5Mock(curL)
+    local p = self._stepContainers and self._stepContainers[5]
+    if not p or not p.mockRows then return end
+    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
+    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP5_MOCK_HEADER"] or "|cffffd200Crafting Work Order on Guild Board Example:|r") end
+    local defs = isPt and {
+        { item = "|cffa335ee[Frasco de Poder Titânico]|r", crafter = "Artesão: Sylphira", tip = "Comissão: |cffffd70015 Ouro|r", status = "|cff40ff40Pendente|r" },
+        { item = "|cff0070dd[Armadura de Placas de Ferro Negro]|r", crafter = "Artesão: Thorgrimm", tip = "Comissão: |cffffd70025 Ouro|r", status = "|cffffff00Em Fabricação|r" },
+        { item = "|cffa335ee[Manto de Feitiçaria]|r", crafter = "Qualquer Artesão", tip = "Comissão: |cffffd70010 Ouro|r", status = "|cff40ff40Aberto à Guilda|r" },
+    } or {
+        { item = "|cffa335ee[Flask of the Titans]|r", crafter = "Crafter: Sylphira", tip = "Tip: |cffffd70015 Gold|r", status = "|cff40ff40Pending|r" },
+        { item = "|cff0070dd[Dark Iron Plate Armor]|r", crafter = "Crafter: Thorgrimm", tip = "Tip: |cffffd70025 Gold|r", status = "|cffffff00In Progress|r" },
+        { item = "|cffa335ee[Robe of the Archmage]|r", crafter = "Any Crafter", tip = "Tip: |cffffd70010 Gold|r", status = "|cff40ff40Open to Guild|r" },
+    }
+    for i, oData in ipairs(defs) do
+        local r = p.mockRows[i]
+        if r then
+            r.tItem:SetText(oData.item)
+            r.tCrafter:SetText(oData.crafter)
+            r.tTip:SetText(oData.tip)
+            r.tStatus:SetText(oData.status)
+        end
+    end
+end
+
+function IntroView:updateStep7Mock(curL)
+    local p = self._stepContainers and self._stepContainers[7]
+    if not p or not p.mockRows then return end
+    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
+    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP7_MOCK_HEADER"] or "|cffffd200World Map (M) Live Tracking View:|r") end
+    local defs = isPt and {
+        { zone = "Ventobravo", count = "4 membros online", names = "Thorgrimm, Sylphira, Aluneth, Durgar" },
+        { zone = "Selva do Espinhaço", count = "2 membros explorando", names = "Shadowalker, Valerius" },
+        { zone = "Cavernas das Lamentações", count = "3 membros em grupo", names = "Brakkar, Kaelen, Moira" },
+    } or {
+        { zone = "Stormwind City", count = "4 members online", names = "Thorgrimm, Sylphira, Aluneth, Durgar" },
+        { zone = "Stranglethorn Vale", count = "2 members exploring", names = "Shadowalker, Valerius" },
+        { zone = "Wailing Caverns", count = "3 members in party", names = "Brakkar, Kaelen, Moira" },
+    }
+    for i, zData in ipairs(defs) do
+        local r = p.mockRows[i]
+        if r then
+            r.tZone:SetText("|cffffffff" .. zData.zone .. "|r  |cffaaaaaa(" .. zData.count .. ")|r")
+            r.tNames:SetText("|cff888888" .. zData.names .. "|r")
+        end
+    end
 end
 
 --- Exibe a janela de introdução.

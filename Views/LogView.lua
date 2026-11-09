@@ -441,6 +441,9 @@ function LogView:createUI()
         -- Tooltip com detalhes completos ao passar o mouse
         row:SetScript("OnEnter", function(r)
             if r.logData then
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
+                local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+                local unknownColored = isEn and "|cff888888Unknown|r" or "|cff888888Desconhecido|r"
                 GameTooltip:SetOwner(r, "ANCHOR_RIGHT")
                 local log = r.logData
                 local evt = log:getEvent()
@@ -448,56 +451,57 @@ function LogView:createUI()
 
                 local coloredName = self:formatColoredName(log:getName(), log:getGuid(), log:getClass())
                 GameTooltip:AddLine(string.format("%s[%s]|r %s", colorInfo.hex, evt, coloredName), 1, 1, 1)
-                GameTooltip:AddLine("Data: |cffffffff" .. (log:getDate() ~= "" and log:getDate() or "N/A") .. "|r", 0.9, 0.8, 0.5)
+                GameTooltip:AddLine(string.format(curL["LOG_TT_DATE_FMT"], (log:getDate() ~= "" and log:getDate() or "N/A")), 0.9, 0.8, 0.5)
 
                 local recruiter = log:getRecruiter()
                 if recruiter and recruiter ~= "" then
-                    local coloredRecruiter = (recruiter ~= "Desconhecido") and self:formatColoredName(recruiter, nil, log:getRecruiterClass()) or "|cff888888Desconhecido|r"
-                    GameTooltip:AddLine("Recrutado por: " .. coloredRecruiter, 0.9, 0.8, 0.5)
+                    local coloredRecruiter = (recruiter ~= "Desconhecido" and recruiter ~= "Unknown") and self:formatColoredName(recruiter, nil, log:getRecruiterClass()) or unknownColored
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_RECRUITED_BY_FMT"], coloredRecruiter), 0.9, 0.8, 0.5)
                 end
 
                 local promoter = (log.getPromoter and log:getPromoter()) or ""
                 if promoter and promoter ~= "" then
-                    local coloredPromoter = (promoter ~= "Desconhecido") and self:formatColoredName(promoter, nil, log:getPromoterClass()) or "|cff888888Desconhecido|r"
-                    GameTooltip:AddLine("Promovido por: " .. coloredPromoter, 0.9, 0.8, 0.5)
+                    local coloredPromoter = (promoter ~= "Desconhecido" and promoter ~= "Unknown") and self:formatColoredName(promoter, nil, log:getPromoterClass()) or unknownColored
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_PROMOTED_BY_FMT"], coloredPromoter), 0.9, 0.8, 0.5)
                 end
 
                 local demoter = (log.getDemoter and log:getDemoter()) or ""
                 if demoter and demoter ~= "" then
-                    local coloredDemoter = (demoter ~= "Desconhecido") and self:formatColoredName(demoter, nil, log:getDemoterClass()) or "|cff888888Desconhecido|r"
-                    GameTooltip:AddLine("Rebaixado por: " .. coloredDemoter, 0.9, 0.8, 0.5)
+                    local coloredDemoter = (demoter ~= "Desconhecido" and demoter ~= "Unknown") and self:formatColoredName(demoter, nil, log:getDemoterClass()) or unknownColored
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_DEMOTED_BY_FMT"], coloredDemoter), 0.9, 0.8, 0.5)
                 end
 
                 local oldRank = (log.getOldRank and log:getOldRank()) or ""
                 local newRank = (log.getNewRank and log:getNewRank()) or ""
                 if oldRank and oldRank ~= "" then
-                    GameTooltip:AddLine("Cargo anterior: |cffffffff" .. oldRank .. "|r", 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_PREV_RANK_FMT"], oldRank), 0.9, 0.8, 0.5)
                 end
                 if newRank and newRank ~= "" then
-                    GameTooltip:AddLine("Novo cargo: |cffffff00" .. newRank .. "|r", 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_NEW_RANK_FMT"], newRank), 0.9, 0.8, 0.5)
                 end
 
                 local dateLeft = (log.getDateLeft and log:getDateLeft()) or ""
                 if dateLeft and dateLeft ~= "" then
-                    GameTooltip:AddLine("Data em que saiu: |cffffffff" .. dateLeft .. "|r", 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_LEFT_DATE_FMT"], dateLeft), 0.9, 0.8, 0.5)
                 end
 
                 local lastRank = (log.getLastRank and log:getLastRank()) or ""
                 if lastRank and lastRank ~= "" then
-                    GameTooltip:AddLine("Último cargo anterior: |cffffff00" .. lastRank .. "|r", 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_LAST_RANK_FMT"], lastRank), 0.9, 0.8, 0.5)
                 end
 
                 local timesLeft = (log.getTimesLeft and log:getTimesLeft()) or 0
                 if timesLeft and timesLeft > 0 then
-                    GameTooltip:AddLine("Vezes que saiu da guilda: |cffff9926" .. tostring(timesLeft) .. "|r", 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_TIMES_LEFT_FMT"], tostring(timesLeft)), 0.9, 0.8, 0.5)
                 end
 
                 local oldNote = (log.getOldNote and log:getOldNote()) or ""
                 local newNote = (log.getNewNote and log:getNewNote()) or ""
                 if oldNote ~= "" or newNote ~= "" then
-                    local label = (evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE") and "Nota de Oficial" or "Nota Pública"
-                    GameTooltip:AddLine(string.format("%s anterior: |cffffffff%s|r", label, oldNote ~= "" and oldNote or "vazio"), 0.9, 0.8, 0.5)
-                    GameTooltip:AddLine(string.format("Nova %s: |cffffff00%s|r", label, newNote ~= "" and newNote or "vazio"), 0.9, 0.8, 0.5)
+                    local label = (evt == LogEvent.OFFICERNOTE or evt == "OFFICERNOTE") and curL["LOG_TT_OFFICER_NOTE_LBL"] or curL["LOG_TT_PUBLIC_NOTE_LBL"]
+                    local emptyStr = curL["LOG_TT_EMPTY_NOTE"]
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_PREV_NOTE_FMT"], label, oldNote ~= "" and oldNote or emptyStr), 0.9, 0.8, 0.5)
+                    GameTooltip:AddLine(string.format(curL["LOG_TT_NEW_NOTE_FMT"], label, newNote ~= "" and newNote or emptyStr), 0.9, 0.8, 0.5)
                 end
 
                 local guid = log:getGuid()
@@ -523,7 +527,7 @@ function LogView:createUI()
     -- =========================================================================
     local footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 14)
-    footerText:SetText("|cffaaaaaaTotal de registros: 0|r")
+    footerText:SetText(string.format(L["LOG_FOOTER_TOTAL"], 0))
     self._footerText = footerText
 
     -- Controles de Paginação (50 registros por página, centralizados no rodapé)
@@ -554,9 +558,10 @@ function LogView:createUI()
     end)
     prevPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Página Anterior", 1, 0.82, 0)
-            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(curL["AUDIT_PAGE_PREV_TT"], 1, 0.82, 0)
+            GameTooltip:AddLine(curL["AUDIT_PAGE_NAV_DESC"], 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end
     end)
@@ -574,8 +579,9 @@ function LogView:createUI()
     end)
     firstPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Primeira Página", 1, 0.82, 0)
+            GameTooltip:AddLine(curL["AUDIT_PAGE_FIRST_TT"], 1, 0.82, 0)
             GameTooltip:Show()
         end
     end)
@@ -593,9 +599,10 @@ function LogView:createUI()
     end)
     nextPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Próxima Página", 1, 0.82, 0)
-            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(curL["AUDIT_PAGE_NEXT_TT"], 1, 0.82, 0)
+            GameTooltip:AddLine(curL["AUDIT_PAGE_NAV_DESC"], 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end
     end)
@@ -613,8 +620,9 @@ function LogView:createUI()
     end)
     lastPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Última Página", 1, 0.82, 0)
+            GameTooltip:AddLine(curL["AUDIT_PAGE_LAST_TT"], 1, 0.82, 0)
             GameTooltip:Show()
         end
     end)
@@ -1219,7 +1227,8 @@ function LogView:applyFilters()
     end
 
     if self._footerText then
-        self._footerText:SetText(string.format("|cffaaaaaaTotal de registros: %d|r", #self._logs))
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        self._footerText:SetText(string.format(curL["LOG_FOOTER_TOTAL"], #self._logs))
     end
 
     self:renderRows()
@@ -1515,12 +1524,20 @@ function LogView:formatColoredMessage(log)
     if evt == LogEvent.NAMECHANGE or evt == "NAMECHANGE" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
         local rawMsg = log:getMessage() or ""
-        return string.format("%s |cffd98cffALTEROU NOME|r |cffe1bee7%s|r", coloredName, rawMsg)
+        if isEn then
+            return string.format("%s |cffd98cffCHANGED NAME|r |cffe1bee7%s|r", coloredName, rawMsg)
+        else
+            return string.format("%s |cffd98cffALTEROU NOME|r |cffe1bee7%s|r", coloredName, rawMsg)
+        end
     end
 
     if evt == LogEvent.INACTIVERETURN or evt == "INACTIVERETURN" then
         local coloredName = self:formatColoredName(name, log:getGuid(), log:getClass())
-        return string.format("%s |cff26ffbfRETORNOU|r |cffb2dfdbà atividade na guilda|r", coloredName)
+        if isEn then
+            return string.format("%s |cff26ffbfRETURNED|r |cffb2dfdbto guild activity|r", coloredName)
+        else
+            return string.format("%s |cff26ffbfRETORNOU|r |cffb2dfdbà atividade na guilda|r", coloredName)
+        end
     end
 
     local rawMsg = log:getMessage() or ""

@@ -116,56 +116,81 @@ local CLASS_ICON_COORDS = {
     DEATHKNIGHT = { 0.25, 0.49609375, 0.5, 0.75 },
 }
 
+local THEME_MT = {
+    __index = function(t, k)
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+        if k == "label" then
+            return isEn and t.labelEN or t.labelPT
+        elseif k == "shortTag" then
+            return isEn and t.shortTagEN or t.shortTagPT
+        end
+    end
+}
+
 local TYPE_THEMES = {
-    RAID = {
-        label     = "[Raide]",
-        shortTag  = "Raide",
-        colorCode = "|cffff4040",
-        border    = { 0.85, 0.22, 0.22, 0.95 },
-        bg        = { 0.16, 0.03, 0.03, 0.88 },
-    },
-    DUNGEON = {
-        label     = "[Masmorra]",
-        shortTag  = "Masm",
-        colorCode = "|cff38a8ff",
-        border    = { 0.20, 0.60, 0.95, 0.95 },
-        bg        = { 0.02, 0.08, 0.16, 0.88 },
-    },
-    PVP = {
-        label     = "[JxJ / PvP]",
-        shortTag  = "PvP",
-        colorCode = "|cffff8800",
-        border    = { 0.95, 0.52, 0.10, 0.95 },
-        bg        = { 0.16, 0.07, 0.02, 0.88 },
-    },
-    REUNIAO = {
-        label     = "[Reunião]",
-        shortTag  = "Reunião",
-        colorCode = "|cff00e872",
-        border    = { 0.15, 0.82, 0.45, 0.95 },
-        bg        = { 0.02, 0.14, 0.06, 0.88 },
-    },
-    ANIVERSARIO = {
-        label     = "[Aniversário]",
-        shortTag  = "Aniv",
-        colorCode = "|cffffd200",
-        border    = { 0.95, 0.80, 0.15, 0.95 },
-        bg        = { 0.16, 0.12, 0.02, 0.88 },
-    },
-    PROMO = {
-        label     = "[Promoção]",
-        shortTag  = "Promo",
-        colorCode = "|cff00e5ff",
-        border    = { 0.15, 0.78, 0.92, 0.95 },
-        bg        = { 0.02, 0.11, 0.16, 0.88 },
-    },
-    OUTRO = {
-        label     = "[Outro]",
-        shortTag  = "Outro",
-        colorCode = "|cffa888db",
-        border    = { 0.65, 0.50, 0.85, 0.90 },
-        bg        = { 0.08, 0.05, 0.12, 0.88 },
-    },
+    RAID = setmetatable({
+        labelPT    = "[Raide]",
+        labelEN    = "[Raid]",
+        shortTagPT = "Raide",
+        shortTagEN = "Raid",
+        colorCode  = "|cffff4040",
+        border     = { 0.85, 0.22, 0.22, 0.95 },
+        bg         = { 0.16, 0.03, 0.03, 0.88 },
+    }, THEME_MT),
+    DUNGEON = setmetatable({
+        labelPT    = "[Masmorra]",
+        labelEN    = "[Dungeon]",
+        shortTagPT = "Masm",
+        shortTagEN = "Dng",
+        colorCode  = "|cff38a8ff",
+        border     = { 0.20, 0.60, 0.95, 0.95 },
+        bg         = { 0.02, 0.08, 0.16, 0.88 },
+    }, THEME_MT),
+    PVP = setmetatable({
+        labelPT    = "[JxJ / PvP]",
+        labelEN    = "[PvP]",
+        shortTagPT = "PvP",
+        shortTagEN = "PvP",
+        colorCode  = "|cffff8800",
+        border     = { 0.95, 0.52, 0.10, 0.95 },
+        bg         = { 0.16, 0.07, 0.02, 0.88 },
+    }, THEME_MT),
+    REUNIAO = setmetatable({
+        labelPT    = "[Reunião]",
+        labelEN    = "[Meeting]",
+        shortTagPT = "Reunião",
+        shortTagEN = "Meeting",
+        colorCode  = "|cff00e872",
+        border     = { 0.15, 0.82, 0.45, 0.95 },
+        bg         = { 0.02, 0.14, 0.06, 0.88 },
+    }, THEME_MT),
+    ANIVERSARIO = setmetatable({
+        labelPT    = "[Aniversário]",
+        labelEN    = "[Birthday]",
+        shortTagPT = "Aniv",
+        shortTagEN = "Bday",
+        colorCode  = "|cffffd200",
+        border     = { 0.95, 0.80, 0.15, 0.95 },
+        bg         = { 0.16, 0.12, 0.02, 0.88 },
+    }, THEME_MT),
+    PROMO = setmetatable({
+        labelPT    = "[Promoção]",
+        labelEN    = "[Promotion]",
+        shortTagPT = "Promo",
+        shortTagEN = "Promo",
+        colorCode  = "|cff00e5ff",
+        border     = { 0.15, 0.78, 0.92, 0.95 },
+        bg         = { 0.02, 0.11, 0.16, 0.88 },
+    }, THEME_MT),
+    OUTRO = setmetatable({
+        labelPT    = "[Outro]",
+        labelEN    = "[Other]",
+        shortTagPT = "Outro",
+        shortTagEN = "Other",
+        colorCode  = "|cffa888db",
+        border     = { 0.65, 0.50, 0.85, 0.90 },
+        bg         = { 0.08, 0.05, 0.12, 0.88 },
+    }, THEME_MT),
 }
 
 -- Compatibilidade retroativa com TYPE_BADGES
@@ -436,6 +461,16 @@ function AgendaView:updateLocale(skipRender)
     if self._emptyBirthdaysText then self._emptyBirthdaysText:SetText(L["AGENDA_NO_UPCOMING"] or L["AGENDA_EMPTY_BIRTHDAYS"]) end
     if self._todayBtn then self._todayBtn:SetText(L["AGENDA_TODAY_BTN"] or "Hoje") end
     if self._newEventOnDayBtn then self._newEventOnDayBtn:SetText(L["AGENDA_NEW_EVENT_DAY_BTN"] or "+ Novo Evento nesta data") end
+    if self._searchPlaceholder then self._searchPlaceholder:SetText(L["AGENDA_SEARCH_PLACEHOLDER"] or "Buscar...") end
+
+    if self._filterDefs and self._filterButtons then
+        for _, fDef in ipairs(self._filterDefs) do
+            local btn = self._filterButtons[fDef.id]
+            if btn and btn.bText and fDef.labelKey then
+                btn.bText:SetText(L[fDef.labelKey] or fDef.label)
+            end
+        end
+    end
 
     self:updateEventModalLocale()
     self:updateInviteeModalLocale()
@@ -488,6 +523,15 @@ function AgendaView:updateInviteeModalLocale()
     if modal.addBtn then modal.addBtn:SetText(L["EVENT_ADD_INVITEE_BTN"]) end
     if modal.emptyInvText then modal.emptyInvText:SetText(L["EVENT_INVITEES_EMPTY"]) end
     if modal.bottomCloseBtn then modal.bottomCloseBtn:SetText(L["CLOSE"]) end
+    if modal.suggestEmpty then modal.suggestEmpty:SetText(L["AGENDA_INVITEE_NONE_FOUND"]) end
+    if modal.suggestRows then
+        for _, r in ipairs(modal.suggestRows) do
+            if r.actionText then r.actionText:SetText(L["AGENDA_INVITEE_ADD_ACTION"]) end
+        end
+    end
+    if modal:IsShown() and modal.currentEvent then
+        self:refreshInviteeModal()
+    end
 end
 
 function AgendaView:show()
@@ -996,7 +1040,7 @@ function AgendaView:createLeftPanel()
 
     local hCount = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hCount:SetPoint("LEFT", hTitle, "RIGHT", 8, 0)
-    hCount:SetText("|cffaaaaaa(0 eventos)|r")
+    hCount:SetText(string.format(L["AGENDA_ITEMS_COUNT_FMT"] or "|cffaaaaaa(%d itens)|r", 0))
     self._eventsCountText = hCount
 
     self._newEventBtn = nil
@@ -1010,14 +1054,15 @@ function AgendaView:createLeftPanel()
     -- Botões de filtro rápido
     local filterButtons = {}
     local filterDefs = {
-        { id = "TODOS",       label = "Todos",     width = 48 },
-        { id = "RAID",        label = "Raides",    width = 52 },
-        { id = "DUNGEON",     label = "Masmorras", width = 64 },
-        { id = "PVP",         label = "PvP",       width = 40 },
-        { id = "REUNIAO",     label = "Reunião",   width = 54 },
-        { id = "ANIVERSARIO", label = "Aniv.",      width = 48 },
-        { id = "PROMO",       label = "Promo",     width = 50 },
+        { id = "TODOS",       labelKey = "AGENDA_FILTER_ALL",      label = "Todos",     width = 48 },
+        { id = "RAID",        labelKey = "AGENDA_FILTER_RAIDS",    label = "Raides",    width = 52 },
+        { id = "DUNGEON",     labelKey = "AGENDA_FILTER_DUNGEONS", label = "Masmorras", width = 64 },
+        { id = "PVP",         labelKey = "AGENDA_FILTER_PVP",      label = "PvP",       width = 40 },
+        { id = "REUNIAO",     labelKey = "AGENDA_FILTER_MEETING",  label = "Reunião",   width = 54 },
+        { id = "ANIVERSARIO", labelKey = "AGENDA_FILTER_BDAY",     label = "Aniv.",      width = 48 },
+        { id = "PROMO",       labelKey = "AGENDA_FILTER_PROMO",    label = "Promo",     width = 50 },
     }
+    self._filterDefs = filterDefs
 
     local startX = 4
     for _, fDef in ipairs(filterDefs) do
@@ -1035,7 +1080,7 @@ function AgendaView:createLeftPanel()
 
         local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        bText:SetText(fDef.label)
+        bText:SetText(L[fDef.labelKey] or fDef.label)
         btn.bText = bText
 
         btn:SetScript("OnClick", function()
@@ -1059,7 +1104,8 @@ function AgendaView:createLeftPanel()
 
     local searchPlaceholder = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchPlaceholder:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchPlaceholder:SetText("Buscar...")
+    searchPlaceholder:SetText(L["AGENDA_SEARCH_PLACEHOLDER"] or "Buscar...")
+    self._searchPlaceholder = searchPlaceholder
 
     searchEB:SetScript("OnTextChanged", function(box)
         local txt = box:GetText() or ""
@@ -1150,8 +1196,9 @@ function AgendaView:createLeftPanel()
     local colWidth = 84
     local colGap = 2
     local weekdayLabels = {}
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local isPT = true
-    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("language") == "enUS" then
+    if (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (_G.GM and _G.GM.settingsService and _G.GM.settingsService:get("language") == "enUS") then
         isPT = false
     end
     local wNames = isPT and WEEKDAYS_PT or WEEKDAYS_EN
@@ -1225,49 +1272,51 @@ function AgendaView:createLeftPanel()
             local total = numEvents + numBdays + numPromos
 
             if not GameTooltip then return end
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
+            local lvlPrefix = curL["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
             GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
             local dtFmt = string.format("%02d/%02d/%04d", btn.cellDay or 1, btn.cellMonth or 1, btn.cellYear or 2026)
 
             if total == 0 then
                 if btn.cellDay then
-                    GameTooltip:AddLine("|cffffd200Data: " .. dtFmt .. "|r", 1, 1, 1)
-                    GameTooltip:AddLine("|cff888888Clique para selecionar esta data.\nDuplo-clique para criar evento.|r", 0.7, 0.7, 0.7)
+                    GameTooltip:AddLine(string.format(curL["AGENDA_CELL_DATE_FMT"], dtFmt), 1, 1, 1)
+                    GameTooltip:AddLine(curL["AGENDA_CELL_EMPTY_HINT"], 0.7, 0.7, 0.7)
                     GameTooltip:Show()
                 end
                 return
             end
 
-            GameTooltip:AddLine(string.format("|cffffd200Data: %s (%d itens)|r", dtFmt, total), 1, 1, 1)
+            GameTooltip:AddLine(string.format(curL["AGENDA_CELL_DATE_ITEMS_FMT"], dtFmt, total), 1, 1, 1)
 
             if numEvents > 0 then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cffffd200• Eventos da Guilda:|r", 1, 0.85, 0.0)
+                GameTooltip:AddLine(curL["AGENDA_CELL_GUILD_EVENTS"], 1, 0.85, 0.0)
                 for _, ev in ipairs(btn.cellEvents) do
                     local tDef = TYPE_THEMES[ev:getType()] or TYPE_THEMES.OUTRO
-                    GameTooltip:AddLine(string.format("  %s %s |cffaaaaaa(às %s)|r", tDef.colorCode .. tDef.label .. "|r", ev:getTitle() or "", ev:getTime() or "20:00"), 1, 1, 1)
+                    GameTooltip:AddLine(string.format(curL["AGENDA_CELL_EVENT_LINE_FMT"], tDef.colorCode .. tDef.label .. "|r", ev:getTitle() or "", ev:getTime() or "20:00"), 1, 1, 1)
                 end
             end
 
             if numBdays > 0 then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine(TYPE_THEMES.ANIVERSARIO.colorCode .. "• Aniversários:|r", 1, 0.85, 0.0)
+                GameTooltip:AddLine(TYPE_THEMES.ANIVERSARIO.colorCode .. curL["AGENDA_CELL_BIRTHDAYS"], 1, 0.85, 0.0)
                 for _, b in ipairs(btn.cellBirthdays) do
                     local rk = b.rank and b.rank ~= "" and (" • " .. b.rank) or ""
-                    GameTooltip:AddLine(string.format("  %s %s |cff888888(Nv %d%s)|r", TYPE_THEMES.ANIVERSARIO.colorCode .. "•|r", getColoredName(b.cleanName or b.name, b.class), b.level or 1, rk), 1, 1, 1)
+                    GameTooltip:AddLine(string.format("  %s %s |cff888888(%s %d%s)|r", TYPE_THEMES.ANIVERSARIO.colorCode .. "•|r", getColoredName(b.cleanName or b.name, b.class), lvlPrefix, b.level or 1, rk), 1, 1, 1)
                 end
             end
 
             if numPromos > 0 then
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine(TYPE_THEMES.PROMO.colorCode .. "• Promoções de Cargo:|r", 1, 0.85, 0.0)
+                GameTooltip:AddLine(TYPE_THEMES.PROMO.colorCode .. curL["AGENDA_CELL_PROMOTIONS"], 1, 0.85, 0.0)
                 for _, p in ipairs(btn.cellPromotions) do
-                    local st = p.isEligibleNow and "|cff00ff00[Elegível]|r" or string.format("|cffffff00[Meta: %d dias]|r", p.requiredDays or 0)
+                    local st = p.isEligibleNow and curL["AGENDA_CELL_PROMO_ELIGIBLE"] or string.format(curL["AGENDA_CELL_PROMO_GOAL_FMT"], p.requiredDays or 0)
                     GameTooltip:AddLine(string.format("  %s %s ➔ |cffffd200%s|r %s", TYPE_THEMES.PROMO.colorCode .. "•|r", getColoredName(p.cleanName or p.name, p.class), p.targetRank or "", st), 1, 1, 1)
                 end
             end
 
             GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("|cff00ff00Clique para ver detalhes nesta data.\nDuplo-clique para criar novo evento.|r", 0.2, 1.0, 0.2)
+            GameTooltip:AddLine(curL["AGENDA_CELL_FILLED_HINT"], 0.2, 1.0, 0.2)
             GameTooltip:Show()
         end)
         cell:SetScript("OnLeave", function()
@@ -1348,7 +1397,8 @@ function AgendaView:createLeftPanel()
         end
 
         if not canOfficer then
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
+            print("|cffff4444[GuildManager]|r " .. (curL["EVENT_ERR_OFFICER_ONLY"] or "Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda."))
             return
         end
 
@@ -1473,7 +1523,7 @@ function AgendaView:createRightPanel()
     emptyBirthdaysText:SetPoint("CENTER", rightPanel, "CENTER", 0, -20)
     emptyBirthdaysText:SetWidth(250)
     emptyBirthdaysText:SetJustifyH("CENTER")
-    emptyBirthdaysText:SetText(L["AGENDA_NO_UPCOMING"] or "Nenhum evento, aniversário ou promoção próxima.")
+    emptyBirthdaysText:SetText(L["AGENDA_NO_UPCOMING"] or "No upcoming events, birthdays or promotions.")
     emptyBirthdaysText:Hide()
     self._emptyBirthdaysText = emptyBirthdaysText
 end
@@ -1601,8 +1651,9 @@ function AgendaView:renderCalendar()
     local year = self._calendarYear or curDate.year or 2026
     local month = self._calendarMonth or curDate.month or 10
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local isPT = true
-    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("language") == "enUS" then
+    if (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (_G.GM and _G.GM.settingsService and _G.GM.settingsService:get("language") == "enUS") then
         isPT = false
     end
 
@@ -1697,7 +1748,7 @@ function AgendaView:renderCalendar()
 
     local totalMatching = totalMatchingEvents + totalMatchingBdays + totalMatchingPromos
     if self._eventsCountText then
-        self._eventsCountText:SetText(string.format("|cffaaaaaa(%d itens)|r", totalMatching))
+        self._eventsCountText:SetText(string.format(L["AGENDA_ITEMS_COUNT_FMT"] or "|cffaaaaaa(%d itens)|r", totalMatching))
     end
 
     local firstWday = getFirstWeekdayOfMonth(year, month)
@@ -1832,7 +1883,7 @@ function AgendaView:renderCalendar()
                         local sName = b.cleanName:sub(1, 6)
                         cell.badge:SetText(string.format("%s• %s|r", bTheme.colorCode, sName))
                     else
-                        cell.badge:SetText(string.format("%s• %d aniv|r", bTheme.colorCode, #dayBdays))
+                        cell.badge:SetText(string.format(L["AGENDA_CELL_BDAY_BADGE_FMT"] or "%s• %d aniv|r", bTheme.colorCode, #dayBdays))
                     end
                 elseif #dayPromos > 0 and #dayEvents == 0 and #dayBdays == 0 then
                     local pTheme = TYPE_THEMES.PROMO
@@ -1841,7 +1892,7 @@ function AgendaView:renderCalendar()
                         local sName = p.cleanName:sub(1, 6)
                         cell.badge:SetText(string.format("%s• %s|r", pTheme.colorCode, sName))
                     else
-                        cell.badge:SetText(string.format("%s• %d promo|r", pTheme.colorCode, #dayPromos))
+                        cell.badge:SetText(string.format(L["AGENDA_CELL_PROMO_BADGE_FMT"] or "%s• %d promo|r", pTheme.colorCode, #dayPromos))
                     end
                 else
                     local parts = {}
@@ -1965,13 +2016,13 @@ function AgendaView:renderSelectedDayEvents()
 
     if self._selectedDayTitleText then
         local baseTitle = string.format(L["AGENDA_SELECTED_DAY_HEADER"] or "Eventos em %s", selDateStr)
-        local countStr = string.format("(%d atividade(s))", totalItems)
+        local countStr = string.format(L["AGENDA_SELECTED_ACTIVITIES_FMT"] or "(%d atividade(s))", totalItems)
         self._selectedDayTitleText:SetText(string.format("%s |cffaaaaaa%s|r", baseTitle, countStr))
     end
 
     if totalItems == 0 then
         if self._emptyEventsText then
-            self._emptyEventsText:SetText(L["AGENDA_NO_EVENTS_DAY"] or "Nenhum evento agendado para este dia.\nClique em + Novo Evento nesta data para criar.")
+            self._emptyEventsText:SetText(L["AGENDA_NO_EVENTS_DAY"] or "No events scheduled for this day.")
             self._emptyEventsText:Show()
         end
         self._eventsScrollChild:SetHeight(1)
@@ -2059,19 +2110,23 @@ function AgendaView:renderSelectedDayEvents()
             card:SetBackdropBorderColor(evTheme.border[1], evTheme.border[2], evTheme.border[3], evTheme.border[4])
         end
 
-        card.typeBadge:SetText(evTheme.colorCode .. evTheme.label .. "|r")
-        card.titleText:SetText("|cffffffff" .. (ev:getTitle() or "Sem título") .. "|r")
+        card.inviteBtn:SetText(L["EVENT_INVITEES_BTN"] or "Convidados")
+        card.editBtn:SetText(L["EVENT_EDIT_BTN"] or "Editar")
+        card.deleteBtn:SetText(L["EVENT_DELETE_BTN"] or "Excluir")
 
-        local dtStr = string.format("|cffffd200Data: %s|r  |cffffffffàs %s|r", ev:getDate() or "-", ev:getTime() or "20:00")
+        card.typeBadge:SetText(evTheme.colorCode .. evTheme.label .. "|r")
+        card.titleText:SetText("|cffffffff" .. (ev:getTitle() or L["AGENDA_UNTITLED"] or "Sem título") .. "|r")
+
+        local dtStr = string.format(L["AGENDA_CARD_DATETIME_FMT"] or "|cffffd200Data: %s|r  |cffffffffàs %s|r", ev:getDate() or "-", ev:getTime() or "20:00")
         card.dateTimeText:SetText(dtStr)
 
         local creatorName = ev:getCreator()
-        if creatorName == "" then creatorName = "Guilda" end
+        if creatorName == "" then creatorName = L["AGENDA_CREATOR_DEFAULT"] or "Guilda" end
         local invCount = ev:getInviteeCount()
-        card.infoText:SetText(string.format("|cff888888• Criado por: |cffffff00%s|r  • |cff00ff88%d convidado(s)|r", creatorName, invCount))
+        card.infoText:SetText(string.format(L["AGENDA_CARD_INFO_FMT"] or "|cff888888• Criado por: |cffffff00%s|r  • |cff00ff88%d convidado(s)|r", creatorName, invCount))
 
         local desc = ev:getDescription() or ""
-        if desc == "" then desc = "|cff666666(Sem descrição adicional)|r" end
+        if desc == "" then desc = L["AGENDA_CARD_NO_DESC"] or "|cff666666(Sem descrição adicional)|r" end
         card.descText:SetText(desc)
 
         local currentEventId = ev:getId()
@@ -2089,15 +2144,17 @@ function AgendaView:renderSelectedDayEvents()
 
         card.editBtn:SetScript("OnClick", function()
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem editar eventos da agenda.")
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
+                print("|cffff4444[GuildManager]|r " .. (curL["AGENDA_NO_PERM_EDIT"] or "Apenas Oficiais ou o Líder da Guilda podem editar eventos da agenda."))
                 return
             end
             self:openEventModal(ev)
         end)
 
         card.deleteBtn:SetScript("OnClick", function()
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir eventos da agenda.")
+                print(curL["AGENDA_NO_PERM_DELETE_MSG"] or "|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir eventos da agenda.")
                 return
             end
             local confirm = true
@@ -2106,9 +2163,9 @@ function AgendaView:renderSelectedDayEvents()
             end
             if confirm and StaticPopupDialogs then
                 StaticPopupDialogs["GM_CONFIRM_DELETE_EVENT"] = {
-                    text = "Deseja realmente excluir este evento da guilda?",
-                    button1 = "Sim",
-                    button2 = "Não",
+                    text = curL["AGENDA_CONFIRM_DELETE_TEXT"] or "Deseja realmente excluir este evento da guilda?",
+                    button1 = curL["YES"] or "Sim",
+                    button2 = curL["NO"] or "Não",
                     OnAccept = function()
                         if self._onDeleteEventCallback then
                             self._onDeleteEventCallback(currentEventId)
@@ -2191,9 +2248,11 @@ function AgendaView:renderSelectedDayEvents()
             card.titleText:SetPoint("LEFT", card, "TOPLEFT", 8, -8)
         end
 
+        local lvlPrefix = L["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
         local rk = b.rank and b.rank ~= "" and (" • " .. b.rank) or ""
-        card.titleText:SetText(bTheme.colorCode .. "[Aniversário]|r " .. getColoredName(b.cleanName or b.name, b.class) .. " |cff888888(Nv " .. (b.level or 1) .. rk .. ")|r")
-        card.detailText:SetText(string.format("|cffffd200Data:|r %s • Comemoração de Aniversário na guilda", b.birthday or "--/--"))
+        card.titleText:SetText(bTheme.colorCode .. bTheme.label .. "|r " .. getColoredName(b.cleanName or b.name, b.class) .. " |cff888888(" .. lvlPrefix .. " " .. (b.level or 1) .. rk .. ")|r")
+        card.detailText:SetText(string.format(L["AGENDA_BDAY_CARD_DETAIL_FMT"] or "|cffffd200Data:|r %s • Comemoração de Aniversário na guilda", b.birthday or "--/--"))
+        card.scheduleBtn:SetText(L["AGENDA_SCHEDULE_BTN"] or "+ Agendar")
 
         card.scheduleBtn:EnableMouse(true)
         if canOfficer then
@@ -2203,19 +2262,20 @@ function AgendaView:renderSelectedDayEvents()
         end
 
         card.scheduleBtn:SetScript("OnClick", function()
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem agendar eventos.")
+                print(curL["AGENDA_SCHEDULE_NO_PERM_MSG"] or "|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem agendar eventos.")
                 return
             end
             if self._onCreateBirthdayEventCallback and b.member then
                 self._onCreateBirthdayEventCallback(b.member)
             else
                 self:openEventModal(nil, {
-                    title = "Aniversário de " .. (b.cleanName or b.name),
+                    title = string.format(curL["AGENDA_BDAY_PREFILL_TITLE_FMT"] or "Aniversário de %s", b.cleanName or b.name),
                     type = "ANIVERSARIO",
                     date = selDateStr,
                     time = "20:00",
-                    description = "Comemoração de aniversário de " .. (b.cleanName or b.name) .. "!",
+                    description = string.format(curL["AGENDA_BDAY_PREFILL_DESC_FMT"] or "Comemoração de aniversário de %s!", b.cleanName or b.name),
                 })
             end
         end)
@@ -2274,10 +2334,12 @@ function AgendaView:renderSelectedDayEvents()
             card:SetBackdropBorderColor(pTheme.border[1], pTheme.border[2], pTheme.border[3], pTheme.border[4])
         end
 
-        card.titleText:SetText(pTheme.colorCode .. "[Promoção]|r " .. getColoredName(p.cleanName or p.name, p.class) .. " |cff888888(Nv " .. (p.level or 1) .. ")|r")
+        local lvlPrefix = L["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
+        card.promoteBtn:SetText(L["AGENDA_PROMOTE_BTN"] or "Promover")
+        card.titleText:SetText(pTheme.colorCode .. pTheme.label .. "|r " .. getColoredName(p.cleanName or p.name, p.class) .. " |cff888888(" .. lvlPrefix .. " " .. (p.level or 1) .. ")|r")
 
-        local statusStr = p.isEligibleNow and "|cff00ff00[Elegível Hoje]|r" or string.format("|cffffff00[Meta: %d dias]|r", p.requiredDays or 0)
-        card.detailText:SetText(string.format("Promover para: " .. pTheme.colorCode .. "%s|r • Tempo na guilda: %d dias %s", p.targetRank or "", p.daysInGuild or 0, statusStr))
+        local statusStr = p.isEligibleNow and (L["AGENDA_PROMO_ELIGIBLE_TODAY_TAG"] or "|cff00ff00[Elegível Hoje]|r") or string.format(L["AGENDA_CELL_PROMO_GOAL_FMT"] or "|cffffff00[Meta: %d dias]|r", p.requiredDays or 0)
+        card.detailText:SetText(string.format(L["AGENDA_PROMO_CARD_DETAIL_FMT"] or "Promover para: %s%s|r • Tempo na guilda: %d dias %s", pTheme.colorCode, p.targetRank or "", p.daysInGuild or 0, statusStr))
 
         card.promoteBtn:EnableMouse(true)
         if canOfficer and p.isEligibleNow then
@@ -2288,25 +2350,27 @@ function AgendaView:renderSelectedDayEvents()
 
         card.promoteBtn:SetScript("OnEnter", function(btn)
             if not GameTooltip then return end
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine(string.format("|cffffd200Promoção para %s|r", p.targetRank or ""), 1, 1, 1)
+            GameTooltip:AddLine(string.format(curL["AGENDA_PROMO_TT_TITLE_FMT"] or "|cffffd200Promoção para %s|r", p.targetRank or ""), 1, 1, 1)
             if not canOfficer then
-                GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem promover membros.|r", 1, 0.3, 0.3, true)
+                GameTooltip:AddLine(curL["AGENDA_PROMO_NO_PERM_TT"] or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem promover membros.|r", 1, 0.3, 0.3, true)
             elseif p.isEligibleNow then
-                GameTooltip:AddLine("|cff00ff00Clique para promover este membro agora!|r", 0.2, 1.0, 0.2)
+                GameTooltip:AddLine(curL["AGENDA_PROMO_CLICK_NOW_TT"] or "|cff00ff00Clique para promover este membro agora!|r", 0.2, 1.0, 0.2)
             else
-                GameTooltip:AddLine(string.format("|cffaaaaaaMembro atinge os %d dias requeridos nesta data.|r", p.requiredDays or 0), 0.7, 0.7, 0.7)
+                GameTooltip:AddLine(string.format(curL["AGENDA_PROMO_REACHES_ON_DATE_FMT"] or "|cffaaaaaaMembro atinge os %d dias requeridos nesta data.|r", p.requiredDays or 0), 0.7, 0.7, 0.7)
             end
             GameTooltip:Show()
         end)
         card.promoteBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         card.promoteBtn:SetScript("OnClick", function()
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem promover membros.")
+                print(curL["AGENDA_PROMO_NO_PERM_MSG"] or "|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem promover membros.")
                 return
             end
             if not p.isEligibleNow then
-                print(string.format("|cffffaa00[GuildManager]|r %s atinge a meta no dia previsto (%d dias na guilda).", p.cleanName or p.name, p.requiredDays or 0))
+                print(string.format(curL["AGENDA_PROMO_NOT_YET_DATE_MSG_FMT"] or "|cffffaa00[GuildManager]|r %s atinge a meta no dia previsto (%d dias na guilda).", p.cleanName or p.name, p.requiredDays or 0))
                 return
             end
             if self._onPromoteMemberCallback then
@@ -2354,13 +2418,13 @@ function AgendaView:renderUpcomingFeed()
             if daysUntil >= 0 and daysUntil <= 60 then
                 local dText = ""
                 if daysUntil == 0 then
-                    dText = "|cff00ff00Hoje!|r"
+                    dText = L["EVENT_TODAY_TAG"] or "|cff00ff00Hoje!|r"
                 elseif daysUntil == 1 then
-                    dText = "|cffffff00Amanhã!|r"
+                    dText = L["EVENT_TOMORROW_TAG"] or "|cffffff00Amanhã!|r"
                 elseif daysUntil <= 7 then
-                    dText = string.format("|cffffff00Em %d dias|r", daysUntil)
+                    dText = string.format(L["EVENT_IN_DAYS_SOON_FMT"] or "|cffffff00Em %d dias|r", daysUntil)
                 else
-                    dText = string.format("|cffaaaaaaEm %d dias|r", daysUntil)
+                    dText = string.format(L["EVENT_IN_DAYS_LATER_FMT"] or "|cffaaaaaaEm %d dias|r", daysUntil)
                 end
 
                 table.insert(combined, {
@@ -2507,6 +2571,7 @@ function AgendaView:renderUpcomingFeed()
 
         card.actionBtn:EnableMouse(true)
 
+        local lvlPrefix = L["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
         if item.itemType == "EVENT" then
             local okIcon = card.cIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
             if okIcon ~= false and card.cIcon:GetTexture() then
@@ -2519,7 +2584,7 @@ function AgendaView:renderUpcomingFeed()
             card.nameText:SetPoint("LEFT", card.cIcon, "RIGHT", 5, 0)
 
             card.nameText:SetText(itemTheme.colorCode .. itemTheme.label .. "|r |cffffffff" .. (item.title or "") .. "|r")
-            card.detailText:SetText(string.format("|cffffd200Data: %s|r às %s", item.date or "--/--", item.time or "20:00"))
+            card.detailText:SetText(string.format(L["AGENDA_FEED_EVENT_DETAIL_FMT"] or "|cffffd200Data: %s|r às %s", item.date or "--/--", item.time or "20:00"))
             card.countdownText:SetText(item.daysText or "")
 
             card.actionBtn:SetText(L["AGENDA_VIEW_BTN"] or "Ver")
@@ -2527,9 +2592,10 @@ function AgendaView:renderUpcomingFeed()
             card.actionBtn:SetAlpha(1.0)
             card.actionBtn:SetScript("OnEnter", function(btn)
                 if not GameTooltip then return end
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                GameTooltip:AddLine("|cffffd200Ver no Calendário|r", 1, 1, 1)
-                GameTooltip:AddLine("|cff00ff00Clique para selecionar esta data no calendário e ver os detalhes.|r", 0.2, 1.0, 0.2)
+                GameTooltip:AddLine(curL["AGENDA_VIEW_CAL_TT_TITLE"] or "|cffffd200Ver no Calendário|r", 1, 1, 1)
+                GameTooltip:AddLine(curL["AGENDA_VIEW_CAL_TT_DESC"] or "|cff00ff00Clique para selecionar esta data no calendário e ver os detalhes.|r", 0.2, 1.0, 0.2)
                 GameTooltip:Show()
             end)
             card.actionBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -2554,13 +2620,13 @@ function AgendaView:renderUpcomingFeed()
                 card.nameText:SetPoint("LEFT", card, "TOPLEFT", 8, -6)
             end
 
-            card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(Nv " .. (item.level or 1) .. ")|r")
+            card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(" .. lvlPrefix .. " " .. (item.level or 1) .. ")|r")
             local rk = item.rank or ""
             if rk ~= "" then rk = " • " .. rk end
-            card.detailText:SetText(string.format("%sAniv: %s|r%s", itemTheme.colorCode, item.birthday or "--/--", rk))
+            card.detailText:SetText(string.format(L["AGENDA_FEED_BDAY_DETAIL_FMT"] or "%sAniv: %s|r%s", itemTheme.colorCode, item.birthday or "--/--", rk))
             card.countdownText:SetText(item.daysText or "")
 
-            card.actionBtn:SetText("+ Agendar")
+            card.actionBtn:SetText(L["AGENDA_SCHEDULE_BTN"] or "+ Agendar")
             card.actionBtn:SetWidth(72)
             if canOfficer then
                 card.actionBtn:SetAlpha(1.0)
@@ -2569,19 +2635,21 @@ function AgendaView:renderUpcomingFeed()
             end
             card.actionBtn:SetScript("OnEnter", function(btn)
                 if not GameTooltip then return end
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                GameTooltip:AddLine("|cffffd200Agendar Comemoração|r", 1, 1, 1)
+                GameTooltip:AddLine(curL["AGENDA_SCHEDULE_BDAY_TT_TITLE"] or "|cffffd200Agendar Comemoração|r", 1, 1, 1)
                 if not canOfficer then
-                    GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem agendar comemorações.|r", 1, 0.3, 0.3, true)
+                    GameTooltip:AddLine(curL["AGENDA_SCHEDULE_BDAY_NO_PERM_TT"] or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem agendar comemorações.|r", 1, 0.3, 0.3, true)
                 else
-                    GameTooltip:AddLine("|cff00ff00Clique para criar um evento na agenda para este aniversário.|r", 0.2, 1.0, 0.2)
+                    GameTooltip:AddLine(curL["AGENDA_SCHEDULE_BDAY_CLICK_TT"] or "|cff00ff00Clique para criar um evento na agenda para este aniversário.|r", 0.2, 1.0, 0.2)
                 end
                 GameTooltip:Show()
             end)
             card.actionBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
             card.actionBtn:SetScript("OnClick", function()
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
                 if not canOfficer then
-                    print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda.")
+                    print("|cffff4444[GuildManager]|r " .. (curL["EVENT_ERR_OFFICER_ONLY"] or "Apenas Oficiais ou o Líder da Guilda podem criar eventos da agenda."))
                     return
                 end
                 if self._onCreateBirthdayEventCallback and item.member then
@@ -2591,11 +2659,11 @@ function AgendaView:renderUpcomingFeed()
                     local m, d = (item.birthday or ""):match("^(%d%d?)/(%d%d?)$")
                     local targetDate = string.format("%02d/%02d/%04d", tonumber(d) or 1, tonumber(m) or 1, item.targetYear or curYear)
                     self:openEventModal(nil, {
-                        title = "Aniversário de " .. (item.cleanName or item.name),
+                        title = string.format(curL["AGENDA_BDAY_PREFILL_TITLE_FMT"] or "Aniversário de %s", item.cleanName or item.name),
                         type = "ANIVERSARIO",
                         date = targetDate,
                         time = "20:00",
-                        description = "Comemoração de aniversário de " .. (item.cleanName or item.name) .. "!",
+                        description = string.format(curL["AGENDA_BDAY_PREFILL_DESC_FMT"] or "Comemoração de aniversário de %s!", item.cleanName or item.name),
                     })
                 end
             end)
@@ -2606,9 +2674,9 @@ function AgendaView:renderUpcomingFeed()
             card.cIcon:Show()
             card.nameText:SetPoint("LEFT", card.cIcon, "RIGHT", 5, 0)
 
-            card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(Nv " .. (item.level or 1) .. ")|r")
-            card.detailText:SetText(string.format("Cargo: %s%s|r (%dd / %dd)", itemTheme.colorCode, item.targetRank or "", item.daysInGuild or 0, item.requiredDays or 0))
-            card.countdownText:SetText(item.isEligibleNow and "|cff00ff00Elegível Hoje!|r" or (item.daysText or ""))
+            card.nameText:SetText(getColoredName(item.cleanName or item.name, item.class) .. " |cff888888(" .. lvlPrefix .. " " .. (item.level or 1) .. ")|r")
+            card.detailText:SetText(string.format(L["AGENDA_FEED_PROMO_DETAIL_FMT"] or "Cargo: %s%s|r (%dd / %dd)", itemTheme.colorCode, item.targetRank or "", item.daysInGuild or 0, item.requiredDays or 0))
+            card.countdownText:SetText(item.isEligibleNow and (L["EVENT_ELIGIBLE_TODAY"] or "|cff00ff00Elegível Hoje!|r") or (item.daysText or ""))
 
             card.actionBtn:SetText(L["AGENDA_PROMOTE_BTN"] or "Promover")
             card.actionBtn:SetWidth(68)
@@ -2619,26 +2687,28 @@ function AgendaView:renderUpcomingFeed()
             end
             card.actionBtn:SetScript("OnEnter", function(btn)
                 if not GameTooltip then return end
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                GameTooltip:AddLine(string.format("|cffffd200Promoção para %s|r", item.targetRank or ""), 1, 1, 1)
-                GameTooltip:AddLine(string.format("Tempo na guilda: |cffffff00%d dias|r (Meta: %d dias)", item.daysInGuild or 0, item.requiredDays or 0), 1, 1, 1)
+                GameTooltip:AddLine(string.format(curL["AGENDA_PROMO_TT_TITLE_FMT"] or "|cffffd200Promoção para %s|r", item.targetRank or ""), 1, 1, 1)
+                GameTooltip:AddLine(string.format(curL["AGENDA_FEED_PROMO_TIME_TT_FMT"] or "Tempo na guilda: |cffffff00%d dias|r (Meta: %d dias)", item.daysInGuild or 0, item.requiredDays or 0), 1, 1, 1)
                 if not canOfficer then
-                    GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem promover membros.|r", 1, 0.3, 0.3, true)
+                    GameTooltip:AddLine(curL["AGENDA_PROMO_NO_PERM_TT"] or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem promover membros.|r", 1, 0.3, 0.3, true)
                 elseif item.isEligibleNow then
-                    GameTooltip:AddLine("|cff00ff00Clique para promover este membro no jogo!|r", 0.2, 1.0, 0.2)
+                    GameTooltip:AddLine(curL["AGENDA_FEED_PROMO_CLICK_TT"] or "|cff00ff00Clique para promover este membro no jogo!|r", 0.2, 1.0, 0.2)
                 else
-                    GameTooltip:AddLine(string.format("|cffaaaaaaMembro ainda não atingiu o tempo mínimo (%d dias restantes).|r", item.daysUntil or 0), 0.7, 0.7, 0.7)
+                    GameTooltip:AddLine(string.format(curL["AGENDA_FEED_PROMO_REM_TT_FMT"] or "|cffaaaaaaMembro ainda não atingiu o tempo mínimo (%d dias restantes).|r", item.daysUntil or 0), 0.7, 0.7, 0.7)
                 end
                 GameTooltip:Show()
             end)
             card.actionBtn:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
             card.actionBtn:SetScript("OnClick", function()
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
                 if not canOfficer then
-                    print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem promover membros.")
+                    print(curL["AGENDA_PROMO_NO_PERM_MSG"] or "|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem promover membros.")
                     return
                 end
                 if not item.isEligibleNow then
-                    print(string.format("|cffffaa00[GuildManager]|r %s ainda não atingiu os %d dias necessários para esta promoção (%d dias restantes).", item.cleanName or item.name, item.requiredDays or 0, item.daysUntil or 0))
+                    print(string.format(curL["AGENDA_FEED_PROMO_REM_MSG_FMT"] or "|cffffaa00[GuildManager]|r %s ainda não atingiu os %d dias necessários para esta promoção (%d dias restantes).", item.cleanName or item.name, item.requiredDays or 0, item.daysUntil or 0))
                     return
                 end
                 if self._onPromoteMemberCallback then
@@ -2899,7 +2969,7 @@ function AgendaView:createEventModal()
             if not canOfficer then
                 GameTooltip:AddLine(curL["EVENT_ERR_OFFICER_ONLY"], 1, 0.3, 0.3, true)
             else
-                GameTooltip:AddLine("|cff00ff00Clique para confirmar e salvar o evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+                GameTooltip:AddLine(curL["AGENDA_SAVE_CONFIRM_TT"] or "|cff00ff00Clique para confirmar e salvar o evento.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
             end
             GameTooltip:Show()
         end
@@ -3072,14 +3142,15 @@ function AgendaView:createInviteeModal()
     closeBtn:SetSize(28, 28)
     closeBtn:SetScript("OnClick", function() modal:Hide() end)
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local mTitle = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     mTitle:SetPoint("TOPLEFT", modal, "TOPLEFT", 18, -16)
-    mTitle:SetText("|cffffd200CONVIDADOS DO EVENTO|r")
+    mTitle:SetText(L["EVENT_INVITEES_TITLE"])
     modal.mTitle = mTitle
 
     local mSubtitle = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     mSubtitle:SetPoint("TOPLEFT", mTitle, "BOTTOMLEFT", 0, -4)
-    mSubtitle:SetText("|cffaaaaaaGerencie os participantes e envie convites in-game|r")
+    mSubtitle:SetText(L["EVENT_INVITEES_SUB"])
     modal.mSubtitle = mSubtitle
 
     local mSep = modal:CreateTexture(nil, "ARTWORK")
@@ -3092,7 +3163,7 @@ function AgendaView:createInviteeModal()
     local inviteAllBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     inviteAllBtn:SetSize(210, 24)
     inviteAllBtn:SetPoint("TOPLEFT", mSep, "BOTTOMLEFT", 4, -10)
-    inviteAllBtn:SetText("Convidar Online para Grupo")
+    inviteAllBtn:SetText(L["EVENT_INVITE_ONLINE_BTN"])
     inviteAllBtn:SetScript("OnClick", function()
         if modal.currentEvent and self._onInviteAllOnlineCallback then
             self._onInviteAllOnlineCallback(modal.currentEvent:getId())
@@ -3102,7 +3173,7 @@ function AgendaView:createInviteeModal()
 
     local totalText = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     totalText:SetPoint("LEFT", inviteAllBtn, "RIGHT", 12, 0)
-    totalText:SetText("|cffaaaaaaTotal: 0 convidados|r")
+    totalText:SetText(string.format(L["AGENDA_INVITEE_TOTAL_FMT"] or "|cffaaaaaaTotal: |cffffd200%d|r convidado(s)|r", 0))
     modal.totalText = totalText
 
     -- Linha de Adicionar Convidado com Busca / Autocomplete
@@ -3119,13 +3190,13 @@ function AgendaView:createInviteeModal()
 
     local addSearchHint = addEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     addSearchHint:SetPoint("LEFT", addEB, "LEFT", 8, 0)
-    addSearchHint:SetText("|cffaaaaaaBuscar membro na guilda...|r")
+    addSearchHint:SetText(L["EVENT_ADD_INVITEE_SEARCH"])
     modal.addSearchHint = addSearchHint
 
     local addBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     addBtn:SetSize(110, 22)
     addBtn:SetPoint("LEFT", addEB, "RIGHT", 8, 0)
-    addBtn:SetText("+ Adicionar")
+    addBtn:SetText(L["EVENT_ADD_INVITEE_BTN"])
     modal.addBtn = addBtn
 
     -- Dropdown Flutuante de Sugestões de Membros da Guilda
@@ -3159,7 +3230,7 @@ function AgendaView:createInviteeModal()
 
     local suggestEmpty = suggestFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     suggestEmpty:SetPoint("CENTER", suggestFrame, "CENTER", 0, 0)
-    suggestEmpty:SetText("|cff888888Nenhum membro encontrado|r")
+    suggestEmpty:SetText(L["AGENDA_INVITEE_NONE_FOUND"])
     suggestEmpty:Hide()
     modal.suggestEmpty = suggestEmpty
 
@@ -3209,7 +3280,7 @@ function AgendaView:createInviteeModal()
         -- Dica de ação
         local actionText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         actionText:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-        actionText:SetText("|cff00ff00+ Convidar|r")
+        actionText:SetText(L["AGENDA_INVITEE_ADD_ACTION"])
         row.actionText = actionText
 
         row:SetScript("OnEnter", function()
@@ -3309,7 +3380,8 @@ function AgendaView:createInviteeModal()
                 self:refreshInviteeModal()
                 self:renderEvents()
             else
-                print(string.format("|cffff4444[GuildManager]|r %s", err or "Falha ao adicionar."))
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
+                print(string.format("|cffff4444[GuildManager]|r %s", err or (curL["AGENDA_INVITEE_ADD_ERR"] or "Falha ao adicionar.")))
             end
         end
     end)
@@ -3428,12 +3500,14 @@ function AgendaView:renderInviteeSuggestions()
     local maxVisible = 6
     local rowHeight = 24
 
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local lvlPrefix = curL["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
     if #candidates == 0 then
         for _, row in ipairs(modal.suggestRows or {}) do row:Hide() end
         if modal.suggestScrollBar then modal.suggestScrollBar:Hide() end
         if modal.suggestEmpty then
             local q = (modal.addEB and modal.addEB:GetText()) or ""
-            modal.suggestEmpty:SetText(string.format("|cff888888Nenhum membro encontrado com \"%s\"|r", q))
+            modal.suggestEmpty:SetText(string.format(curL["AGENDA_INVITEE_NONE_MATCH_FMT"] or "|cff888888No members found matching \"%s\"|r", q))
             modal.suggestEmpty:Show()
         end
         sf:SetHeight(38)
@@ -3496,11 +3570,14 @@ function AgendaView:renderInviteeSuggestions()
             row.nameText:SetText(getColoredName(item.cleanName, item.class))
 
             -- Informações (Nível / Cargo)
-            local infoStr = string.format("|cffaaaaaaNv. %d|r", item.level or 1)
+            local infoStr = string.format("|cffaaaaaa%s. %d|r", lvlPrefix, item.level or 1)
             if item.rank and item.rank ~= "" then
                 infoStr = infoStr .. string.format(" |cff888888• %s|r", item.rank)
             end
             row.infoText:SetText(infoStr)
+            if row.actionText then
+                row.actionText:SetText(curL["AGENDA_INVITEE_ADD_ACTION"] or "|cff00ff00+ Convidar|r")
+            end
 
             -- Destaque de seleção
             if cIndex == (modal.suggestSelectedIndex or 1) then
@@ -3590,15 +3667,18 @@ function AgendaView:refreshInviteeModal()
         end
     end
 
+    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    local lvlPrefix = L["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     local ev = modal.currentEvent
-    modal.mSubtitle:SetText(string.format("|cffffd200%s|r  |cffaaaaaa(%s às %s)|r", ev:getTitle(), ev:getDate(), ev:getTime()))
+    modal.mSubtitle:SetText(string.format(L["AGENDA_INVITEE_SUBTITLE_FMT"] or "|cffffd200%s|r  |cffaaaaaa(%s às %s)|r", ev:getTitle(), ev:getDate(), ev:getTime()))
 
     for _, c in ipairs(modal.inviteeCardPool) do
         c:Hide()
     end
 
     local invitees = ev:getInvitees() or {}
-    modal.totalText:SetText(string.format("|cffaaaaaaTotal: |cffffd200%d|r convidado(s)|r", #invitees))
+    modal.totalText:SetText(string.format(L["AGENDA_INVITEE_TOTAL_FMT"] or "|cffaaaaaaTotal: |cffffd200%d|r convidado(s)|r", #invitees))
 
     if #invitees == 0 then
         modal.emptyInvText:Show()
@@ -3644,7 +3724,7 @@ function AgendaView:refreshInviteeModal()
             local invBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             invBtn:SetSize(110, 20)
             invBtn:SetPoint("RIGHT", row, "RIGHT", -34, 0)
-            invBtn:SetText("Convidar (Grupo)")
+            invBtn:SetText(L["EVENT_INVITE_GROUP_BTN"] or "Convidar (Grupo)")
             row.invBtn = invBtn
 
             -- Botão Remover
@@ -3659,6 +3739,7 @@ function AgendaView:refreshInviteeModal()
 
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", modal.scrollChild, "TOPLEFT", 2, -totalY)
+        row.invBtn:SetText(L["EVENT_INVITE_GROUP_BTN"] or "Convidar (Grupo)")
 
         local tok = inv.class and (CLASS_NAME_TO_TOKEN[inv.class:upper()] or inv.class:upper()) or ""
         local coords = tok ~= "" and CLASS_ICON_COORDS[tok]
@@ -3671,12 +3752,21 @@ function AgendaView:refreshInviteeModal()
             row.nameText:SetPoint("LEFT", row, "LEFT", 10, 0)
         end
 
-        row.nameText:SetText(getColoredName(inv.name, inv.class) .. " |cff888888(Nv " .. (inv.level or 1) .. ")|r")
+        row.nameText:SetText(getColoredName(inv.name, inv.class) .. " |cff888888(" .. lvlPrefix .. " " .. (inv.level or 1) .. ")|r")
 
         local stColor = "|cffffff00"
-        if inv.status == "CONFIRMADO" then stColor = "|cff00ff00"
-        elseif inv.status == "RECUSADO" then stColor = "|cffff4444" end
-        row.statusText:SetText(stColor .. "[" .. (inv.status or "PENDENTE") .. "]|r")
+        local rawStatus = inv.status or "PENDENTE"
+        local dispStatus = rawStatus
+        if rawStatus == "CONFIRMADO" then
+            stColor = "|cff00ff00"
+            dispStatus = isEn and "CONFIRMED" or "CONFIRMADO"
+        elseif rawStatus == "RECUSADO" then
+            stColor = "|cffff4444"
+            dispStatus = isEn and "DECLINED" or "RECUSADO"
+        else
+            dispStatus = isEn and "PENDING" or "PENDENTE"
+        end
+        row.statusText:SetText(stColor .. "[" .. dispStatus .. "]|r")
 
         local invName = inv.name
         row.invBtn:SetScript("OnClick", function()

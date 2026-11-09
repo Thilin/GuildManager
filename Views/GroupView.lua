@@ -2118,7 +2118,7 @@ function GroupView:renderDetailMembers(group)
             local makeLeaderBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             makeLeaderBtn:SetSize(90, 20)
             makeLeaderBtn:SetPoint("RIGHT", row, "RIGHT", -30, 0)
-            makeLeaderBtn:SetText("Tornar Líder")
+            makeLeaderBtn:SetText(L["GROUP_MAKE_LEADER_BTN"] or "Tornar Líder")
             row.makeLeaderBtn = makeLeaderBtn
 
             -- Botão "Remover" (×)
@@ -2158,6 +2158,7 @@ function GroupView:renderDetailMembers(group)
             row.makeLeaderBtn:Hide()
         else
             row.crown:Hide()
+            row.makeLeaderBtn:SetText(L["GROUP_MAKE_LEADER_BTN"] or "Tornar Líder")
             row.makeLeaderBtn:Show()
             row.makeLeaderBtn:SetScript("OnClick", function()
                 if self._onSetLeaderCallback then

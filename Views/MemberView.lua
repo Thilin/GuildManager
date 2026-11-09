@@ -24,6 +24,35 @@ local RACE_TRANSLATION_PT = {
     ["bloodelf"] = "Elfo Sangrento",
     ["blood elf"] = "Elfo Sangrento",
     ["elfo sangrento"] = "Elfo Sangrento",
+    ["highelf"] = "Elfo Superior",
+    ["high elf"] = "Elfo Superior",
+    ["elfo superior"] = "Elfo Superior",
+    ["highborne"] = "Celonato da Alta Ordem",
+    ["celonato da alta ordem"] = "Celonato da Alta Ordem",
+}
+
+local CLASS_TRANSLATION_EN = {
+    WARRIOR = "Warrior",
+    PALADIN = "Paladin",
+    HUNTER = "Hunter",
+    ROGUE = "Rogue",
+    PRIEST = "Priest",
+    SHAMAN = "Shaman",
+    MAGE = "Mage",
+    WARLOCK = "Warlock",
+    DRUID = "Druid",
+}
+
+local CLASS_TRANSLATION_PT = {
+    WARRIOR = "Guerreiro",
+    PALADIN = "Paladino",
+    HUNTER = "Caçador",
+    ROGUE = "Ladino",
+    PRIEST = "Sacerdote",
+    SHAMAN = "Xamã",
+    MAGE = "Mago",
+    WARLOCK = "Bruxo",
+    DRUID = "Druida",
 }
 
 local function getRoleLabel()
@@ -98,9 +127,55 @@ end
 local function getRaceInPortuguese(race)
     if not race or race == "" then return "" end
     local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
-    if isEn then return race end
-    local clean = race:match("^%s*(.-)%s*$"):lower()
+    local clean = (race:match("^%s*(.-)%s*$") or race):lower()
+    if isEn then
+        if clean:find("celonat") or clean:find("highborne") or clean:find("alta ordem") then
+            return "Highborne"
+        elseif clean:find("high elf") or clean:find("elf[oa] superior") or clean:find("altonat") or clean:find("quel'dorei") then
+            return "High Elf"
+        elseif clean:find("blood elf") or clean:find("elf[oa] sangrent") or clean:find("sin'dorei") then
+            return "Blood Elf"
+        elseif clean:find("^an") or clean:find("^dwarf") then
+            return "Dwarf"
+        elseif clean:find("noturn") or clean:find("night") or clean:find("elf") then
+            return "Night Elf"
+        elseif clean:find("^hum") then
+            return "Human"
+        elseif clean:find("^gnom") then
+            return "Gnome"
+        elseif clean:find("^orc") or clean:find("^orq") then
+            return "Orc"
+        elseif clean:find("^trol") then
+            return "Troll"
+        elseif clean:find("^taur") then
+            return "Tauren"
+        elseif clean:find("^mort") or clean:find("undead") or clean:find("renegad") or clean:find("forsaken") or clean:find("scourge") then
+            return "Undead"
+        elseif clean:find("draenei") then
+            return "Draenei"
+        elseif clean:find("goblin") then
+            return "Goblin"
+        elseif clean:find("worgen") then
+            return "Worgen"
+        end
+        return race
+    end
     return RACE_TRANSLATION_PT[clean] or race
+end
+
+local function getLocalizedClassName(member)
+    if not member then return "" end
+    local token = (member.getClass and member:getClass() or ""):upper()
+    local display = (member.getClassDisplayName and member:getClassDisplayName()) or token
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+    if isEn then
+        return CLASS_TRANSLATION_EN[token] or display
+    else
+        if CLASS_TRANSLATION_EN[token] and display == CLASS_TRANSLATION_EN[token] then
+            return CLASS_TRANSLATION_PT[token] or display
+        end
+        return display ~= "" and display or (CLASS_TRANSLATION_PT[token] or token)
+    end
 end
 
 ---@class MemberView
@@ -318,11 +393,12 @@ function MemberView:createUI()
     end)
     mainTagBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
             if self._isMain then
-                GameTooltip:SetText("Personagem Principal [M]\n|cffaaaaaaClique para mudar para Alt [A]|r")
+                GameTooltip:SetText(curL["MEMBER_MAIN_TAG_TT"])
             else
-                GameTooltip:SetText("Personagem Secundário [A]\n|cffaaaaaaClique para mudar para Main [M]|r")
+                GameTooltip:SetText(curL["MEMBER_ALT_TAG_TT"])
             end
             GameTooltip:Show()
         end
@@ -369,8 +445,10 @@ function MemberView:createUI()
         if tooltip then
             eb:SetScript("OnEnter", function(selfBox)
                 if GameTooltip then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or L
                     GameTooltip:SetOwner(selfBox, "ANCHOR_TOP")
-                    GameTooltip:SetText(tooltip)
+                    local ttText = type(tooltip) == "function" and tooltip(curL) or (curL[tooltip] or tooltip)
+                    GameTooltip:SetText(ttText)
                     GameTooltip:Show()
                 end
             end)
@@ -445,10 +523,11 @@ function MemberView:createUI()
 
     local function showDateJoinTooltip(target)
         if not GameTooltip then return end
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:SetOwner(target, "ANCHOR_TOP")
-        GameTooltip:AddLine("|cffffd200Data de Entrada|r", 1, 1, 1)
+        GameTooltip:AddLine(curL["MEMBER_JOIN_DATE_TT_TITLE"], 1, 1, 1)
         local curVal = dateJoinEB:GetText() or ""
-        GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", curVal ~= "" and curVal or "(Não informado)"), 0.85, 0.85, 0.85)
+        GameTooltip:AddLine(string.format(curL["MEMBER_CURRENT_VAL_FMT"], curVal ~= "" and curVal or curL["MEMBER_NOT_INFORMED"]), 0.85, 0.85, 0.85)
         GameTooltip:AddLine(" ")
 
         local canOfficer = false
@@ -461,9 +540,9 @@ function MemberView:createUI()
         end
 
         if not canOfficer then
-            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar este campo.|r", 1, 0.3, 0.3, true)
+            GameTooltip:AddLine(curL["AUDIT_CELL_NO_PERM_TT"], 1, 0.3, 0.3, true)
         else
-            GameTooltip:AddLine("|cff00ff00Clique para editar.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            GameTooltip:AddLine(curL["AUDIT_CELL_CLICK_EDIT_TT"], 0.2, 1.0, 0.2)
         end
         GameTooltip:Show()
     end
@@ -480,8 +559,9 @@ function MemberView:createUI()
             canOfficer = true
         end
         if not canOfficer then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             eb:ClearFocus()
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.")
+            print(curL["MEMBER_JOIN_DATE_NO_PERM_MSG"])
         end
     end)
 
@@ -635,7 +715,7 @@ function MemberView:createUI()
     birthdayEB:SetPoint("TOPLEFT", birthdayLabel, "BOTTOMLEFT", 0, -2)
     birthdayEB:SetSize(70, 20)
     birthdayEB:SetMaxLetters(5)
-    styleEditBox(birthdayEB, "Data de Aniversário (MM/DD)\n|cffaaaaaaClique para editar|r")
+    styleEditBox(birthdayEB, "MEMBER_BIRTHDAY_BOX_TT")
     self._birthdayEB = birthdayEB
 
     -- 2. Nota Interna Customizada (customNote) - Altura Ampliada até próximo à Função/Recrutador
@@ -684,8 +764,9 @@ function MemberView:createUI()
 
     local function showCustomNoteTip(owner)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(owner, "ANCHOR_TOP")
-            GameTooltip:SetText("Nota Interna Customizada\n|cffaaaaaaClique para editar|r")
+            GameTooltip:SetText(curL["MEMBER_CUSTOM_NOTE_BOX_TT"])
             GameTooltip:Show()
         end
     end
@@ -746,8 +827,9 @@ function MemberView:createUI()
     end)
     altsLabelBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
-            GameTooltip:SetText("Alts Vinculados\n|cffaaaaaaClique para gerenciar, vincular alts ou definir o Main|r")
+            GameTooltip:SetText(curL["MEMBER_ALTS_LABEL_TT"])
             GameTooltip:Show()
         end
     end)
@@ -788,8 +870,9 @@ function MemberView:createUI()
             altsBtn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
         end
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
-            GameTooltip:SetText("Alts Vinculados\n|cffaaaaaaClique para abrir a janela de gerenciamento de alts|r")
+            GameTooltip:SetText(curL["MEMBER_ALTS_BTN_TT"])
             GameTooltip:Show()
         end
     end)
@@ -891,7 +974,7 @@ function MemberView:createUI()
         end
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (not (_G.GM and _G.GM.GetLocale) and GetLocale and GetLocale() ~= "ptBR")
             local lbl = isEn and "Role" or "Função"
             GameTooltip:AddLine(string.format("|cffffd200%s|r", lbl), 1, 1, 1)
             local cur = (self._selectedRole and self._selectedRole ~= "") and self._selectedRole or (isEn and "(Unassigned)" or "(Não definida)")
@@ -1064,6 +1147,28 @@ function MemberView:updateLocale()
     if self._altsLabel then self._altsLabel:SetText("|cffffd200" .. L["MEMBER_LINKED_ALTS"] .. "|r") end
     if self._altsManageHint then self._altsManageHint:SetText("|cffffd200" .. L["MEMBER_MANAGE_ALTS"] .. "|r") end
     if self._recruiterLabel then self._recruiterLabel:SetText("|cffffd200" .. L["MEMBER_RECRUITER"] .. "|r") end
+    if self._roleLabel then self._roleLabel:SetText("|cffffd200" .. getRoleLabel() .. "|r") end
+    self:updateRoleButtonVisual(self._selectedRole)
+
+    if self._pickerTitle then self._pickerTitle:SetText(L["MEMBER_PICKER_TITLE"]) end
+    if self._pickerSearchEB and self._pickerSearchEB.hint then
+        self._pickerSearchEB.hint:SetText(L["MEMBER_PICKER_SEARCH_HINT"])
+    end
+    if self._altManagerTitle then self._altManagerTitle:SetText(L["MEMBER_ALT_MGR_TITLE"]) end
+    if self._altManagerSec1Title then self._altManagerSec1Title:SetText(L["MEMBER_ALT_MGR_LINKED_HEADER"]) end
+    if self._altManagerSec1Hint then self._altManagerSec1Hint:SetText(L["MEMBER_ALT_MGR_MAIN_HINT"]) end
+    if self._familyEmptyNotice then self._familyEmptyNotice:SetText(L["MEMBER_ALT_MGR_EMPTY_NOTICE"]) end
+    if self._altManagerSec2Title then self._altManagerSec2Title:SetText(L["MEMBER_ALT_MGR_LINK_NEW_HEADER"]) end
+    if self._availableAltsSearchEB and self._availableAltsSearchEB.hint then
+        self._availableAltsSearchEB.hint:SetText(L["MEMBER_ALT_MGR_SEARCH_HINT"])
+    end
+    if self._availableAltRows then
+        for _, r in ipairs(self._availableAltRows) do
+            if r.linkBtn and r.linkBtn.text then
+                r.linkBtn.text:SetText(L["MEMBER_ALT_MGR_LINK_BTN"])
+            end
+        end
+    end
 
     if self._currentMember and self._frame:IsShown() then
         self:updateProfessionsVisual(self._currentMember)
@@ -1194,7 +1299,7 @@ function MemberView:showMember(member, isLocked)
     local level = member:getLevel() or 1
     self._levelVal:SetText(tostring(level))
 
-    local classDisplay = member:getClassDisplayName() or member:getClass() or ""
+    local classDisplay = getLocalizedClassName(member)
     local classColor = RAID_CLASS_COLORS and RAID_CLASS_COLORS[member:getClass()]
     if classColor then
         local r = math.floor(classColor.r * 255)
@@ -1236,7 +1341,8 @@ function MemberView:showMember(member, isLocked)
         local officerNote = member:getOfficerNote()
         self._officerNoteVal:SetText(officerNote ~= "" and officerNote or (isEn and "|cff888888(None)|r" or "|cff888888(Nenhuma)|r"))
     else
-        self._officerNoteVal:SetText("|cffff4444SOMENTE OFICIAIS|r")
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        self._officerNoteVal:SetText(curL["OFFICERS_ONLY_TAG"])
     end
 
     self:updateAltsVisual()
@@ -1362,15 +1468,16 @@ end
 ---@param name string
 ---@return string
 function MemberView:formatColoredMemberName(name)
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     if not name or name == "" then
-        return "|cff666666(Não informado)|r"
+        return "|cff666666" .. curL["MEMBER_NOT_INFORMED"] .. "|r"
     end
 
     local clean = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("[%.,!]+$", "")
     clean = clean:match("^[^-]+") or clean
     clean = clean:match("^%s*(.-)%s*$") or clean
     if clean == "" then
-        return "|cff666666(Não informado)|r"
+        return "|cff666666" .. curL["MEMBER_NOT_INFORMED"] .. "|r"
     end
 
     -- 1. Tenta buscar no serviço/repositório de membros (busca exata)
@@ -1476,9 +1583,11 @@ function MemberView:createRecruiterPickerUI()
     end
 
     -- Título
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local title = picker:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("TOPLEFT", picker, "TOPLEFT", 14, -12)
-    title:SetText("|cffffd200SELECIONAR RECRUTADOR|r")
+    title:SetText(curL["MEMBER_PICKER_TITLE"])
+    self._pickerTitle = title
 
     -- Botão Fechar ("X")
     local closeBtn = CreateFrame("Button", nil, picker, "UIPanelCloseButton")
@@ -1520,7 +1629,7 @@ function MemberView:createRecruiterPickerUI()
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("|cffaaaaaaBuscar membro...|r")
+    searchHint:SetText(curL["MEMBER_PICKER_SEARCH_HINT"])
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -1731,7 +1840,8 @@ function MemberView:toggleRecruiterPicker()
     end
 
     if not canOfficer then
-        print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para alterar o recrutador.")
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        print(curL["MEMBER_RECRUITER_NO_PERM_MSG"])
         return
     end
 
@@ -1781,10 +1891,11 @@ function MemberView:refreshRecruiterPickerList(filterText)
     local items = {}
 
     -- Opção de limpar/remover recrutador se já houver um configurado
-    if currentRecruiter ~= "" and (query == "" or ("remover"):find(query, 1, true) or ("nenhum"):find(query, 1, true)) then
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    if currentRecruiter ~= "" and (query == "" or ("remover"):find(query, 1, true) or ("nenhum"):find(query, 1, true) or ("remove"):find(query, 1, true) or ("none"):find(query, 1, true)) then
         table.insert(items, {
             isClear = true,
-            displayName = "|cffff5555[Remover Recrutador]|r",
+            displayName = curL["MEMBER_PICKER_REMOVE_OPT"],
         })
     end
 
@@ -1889,13 +2000,14 @@ function MemberView:selectRecruiter(selectedName)
         self._recruiterPickerFrame:Hide()
     end
 
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     if newRecruiter ~= "" then
-        print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r alterado para %s.",
+        print(string.format(curL["MEMBER_RECRUITER_CHANGED_FMT"],
             self._currentMember:getName(),
             self:formatColoredMemberName(newRecruiter)
         ))
     else
-        print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r removido.",
+        print(string.format(curL["MEMBER_RECRUITER_REMOVED_FMT"],
             self._currentMember:getName()
         ))
     end
@@ -1907,14 +2019,15 @@ function MemberView:updateAltsVisual()
         return
     end
 
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     if not self._currentMember then
-        self._altsVal:SetText("|cff666666(Nenhum)|r")
+        self._altsVal:SetText("|cff666666" .. curL["MEMBER_NONE_ALTS"] .. "|r")
         return
     end
 
     local alts = self._currentMember:getAlts() or {}
     if #alts == 0 then
-        self._altsVal:SetText("|cff666666(Nenhum)|r")
+        self._altsVal:SetText("|cff666666" .. curL["MEMBER_NONE_ALTS"] .. "|r")
         return
     end
 
@@ -1957,14 +2070,16 @@ function MemberView:createAltManagerUI()
     end
 
     -- Título da Janela (Centralizado, Dourado)
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local title = manager:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", manager, "TOP", 0, -12)
-    title:SetText("|cffffd200Gerenciar Alts Vinculados|r")
+    title:SetText(curL["MEMBER_ALT_MGR_TITLE"])
+    self._altManagerTitle = title
 
     -- Subtítulo com o nome do membro inspecionado
     local subtitle = manager:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitle:SetPoint("TOPLEFT", manager, "TOPLEFT", 18, -28)
-    subtitle:SetText("Família de alts")
+    subtitle:SetText(curL["MEMBER_ALT_MGR_SUBTITLE_DEFAULT"])
     self._altManagerSubtitle = subtitle
 
     -- Botão Fechar ("X" clássico vermelho com moldura)
@@ -1990,7 +2105,8 @@ function MemberView:createAltManagerUI()
 
     local sec1Title = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sec1Title:SetPoint("TOPLEFT", inset1, "TOPLEFT", 10, -8)
-    sec1Title:SetText("|cffffd200PERSONAGENS VINCULADOS|r")
+    sec1Title:SetText(curL["MEMBER_ALT_MGR_LINKED_HEADER"])
+    self._altManagerSec1Title = sec1Title
 
     local sep1 = inset1:CreateTexture(nil, "ARTWORK")
     sep1:SetPoint("TOPLEFT", inset1, "TOPLEFT", 8, -24)
@@ -2000,14 +2116,15 @@ function MemberView:createAltManagerUI()
 
     local sec1Hint = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sec1Hint:SetPoint("TOPLEFT", sep1, "BOTTOMLEFT", 2, -4)
-    sec1Hint:SetText("|cffffd200Apenas 1 Main por família (clique em [A] para tornar Main):|r")
+    sec1Hint:SetText(curL["MEMBER_ALT_MGR_MAIN_HINT"])
+    self._altManagerSec1Hint = sec1Hint
 
     -- Mensagem informativa caso não haja alts vinculados ainda
     local emptyNotice = inset1:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyNotice:SetPoint("TOPLEFT", sec1Hint, "BOTTOMLEFT", 6, -18)
     emptyNotice:SetPoint("RIGHT", inset1, "RIGHT", -12, 0)
     emptyNotice:SetJustifyH("LEFT")
-    emptyNotice:SetText("|cffaaaaaaNenhum outro alt vinculado.\nUse a lista abaixo para selecionar e vincular membros.|r")
+    emptyNotice:SetText(curL["MEMBER_ALT_MGR_EMPTY_NOTICE"])
     emptyNotice:Hide()
     self._familyEmptyNotice = emptyNotice
 
@@ -2086,7 +2203,8 @@ function MemberView:createAltManagerUI()
         mainBtn:SetScript("OnClick", function()
             if row.memberName then
                 if row.isMain then
-                    print(string.format("|cffffff00[GuildManager]|r %s já é o Main. Para mudar o Main, clique no botão [A] de outro personagem da lista.",
+                    local cL = (_G.GM and _G.GM.L) or _G.L or L
+                    print(string.format(cL["MEMBER_ALT_MGR_ALREADY_MAIN_FMT"],
                         row.memberName
                     ))
                 else
@@ -2097,11 +2215,12 @@ function MemberView:createAltManagerUI()
 
         mainBtn:SetScript("OnEnter", function(btn)
             if GameTooltip and row.memberName then
+                local cL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
                 if row.isMain then
-                    GameTooltip:SetText(string.format("|cffffd200Personagem Principal [M]|r\n|cffffffff%s|r\n|cffaaaaaa(Apenas um Main é permitido por família)|r", row.memberName))
+                    GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_MAIN_ROW_TT_FMT"], row.memberName))
                 else
-                    GameTooltip:SetText(string.format("|cffffffffPersonagem Secundário [A]|r\n|cffffffff%s|r\n|cff00ff00Clique para definir como o ÚNICO Main desta família|r\n|cffaaaaaa(Todos os outros se tornarão automaticamente alts)|r", row.memberName))
+                    GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_ALT_ROW_TT_FMT"], row.memberName))
                 end
                 GameTooltip:Show()
             end
@@ -2141,8 +2260,9 @@ function MemberView:createAltManagerUI()
                 unlinkBtn:SetBackdropBorderColor(1.0, 0.25, 0.25, 1.0)
             end
             if GameTooltip and row.memberName then
+                local cL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
-                GameTooltip:SetText(string.format("Desvincular Alt\n|cffaaaaaaRemove |cffffff00%s|r da lista de alts vinculados|r", row.memberName))
+                GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_UNLINK_TT_FMT"], row.memberName))
                 GameTooltip:Show()
             end
         end)
@@ -2181,7 +2301,8 @@ function MemberView:createAltManagerUI()
 
     local sec2Title = inset2:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     sec2Title:SetPoint("TOPLEFT", inset2, "TOPLEFT", 10, -8)
-    sec2Title:SetText("|cffffd200VINCULAR NOVO ALT|r")
+    sec2Title:SetText(curL["MEMBER_ALT_MGR_LINK_NEW_HEADER"])
+    self._altManagerSec2Title = sec2Title
 
     local sep2 = inset2:CreateTexture(nil, "ARTWORK")
     sep2:SetPoint("TOPLEFT", inset2, "TOPLEFT", 8, -24)
@@ -2221,7 +2342,7 @@ function MemberView:createAltManagerUI()
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("|cffaaaaaaBuscar membro da guilda...|r")
+    searchHint:SetText(curL["MEMBER_ALT_MGR_SEARCH_HINT"])
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -2304,7 +2425,8 @@ function MemberView:createAltManagerUI()
 
         local linkBtnText = linkBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         linkBtnText:SetPoint("CENTER", linkBtn, "CENTER", 0, 0)
-        linkBtnText:SetText("|cff60e060+ Vincular|r")
+        linkBtnText:SetText(curL["MEMBER_ALT_MGR_LINK_BTN"])
+        linkBtn.text = linkBtnText
 
         linkBtn:SetScript("OnClick", function(btn)
             if btn.memberName then
@@ -2316,8 +2438,9 @@ function MemberView:createAltManagerUI()
                 linkBtn:SetBackdropBorderColor(0.45, 0.85, 0.35, 1.0)
             end
             if GameTooltip and btn.memberName then
+                local cL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
-                GameTooltip:SetText(string.format("Vincular Alt\n|cffaaaaaaAdiciona |cffffff00%s|r como alt à família atual|r", btn.memberName))
+                GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_LINK_TT_FMT"], btn.memberName))
                 GameTooltip:Show()
             end
         end)
@@ -2377,8 +2500,9 @@ function MemberView:refreshAltManager()
     end
 
     if self._altManagerSubtitle then
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         local coloredName = self:formatColoredMemberName(self._currentMember:getName())
-        self._altManagerSubtitle:SetText("Família de: " .. coloredName)
+        self._altManagerSubtitle:SetText(string.format(curL["MEMBER_ALT_MGR_SUBTITLE_FMT"], coloredName))
     end
 
     self:renderLinkedFamilyRows()
@@ -2452,17 +2576,19 @@ function MemberView:renderLinkedFamilyRows()
             end
 
             -- Nome colorido por classe + detalhes de nível e cargo
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
+            local lvlPrefix = curL["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
             local coloredName = self:formatColoredMemberName(mName)
             local lvl = m.getLevel and m:getLevel() or 0
             local rank = m.getRankName and m:getRankName() or ""
             local details = ""
             if lvl > 0 and rank ~= "" then
-                details = string.format(" |cff888888(Nv %d • %s)|r", lvl, rank)
+                details = string.format(" |cff888888(%s %d • %s)|r", lvlPrefix, lvl, rank)
             elseif lvl > 0 then
-                details = string.format(" |cff888888(Nv %d)|r", lvl)
+                details = string.format(" |cff888888(%s %d)|r", lvlPrefix, lvl)
             end
             if isThisMemberCurrent then
-                details = details .. " |cffffe680[Atual]|r"
+                details = details .. " " .. curL["MEMBER_ALT_MGR_CURRENT_TAG"]
             end
             row.nameText:SetText(coloredName .. details)
 
@@ -2582,6 +2708,8 @@ end
 function MemberView:renderAvailableAltRows()
     local offset = self._availableAltsOffset or 0
     local items = self._availableAltsFilteredList or {}
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local lvlPrefix = curL["MEMBER_ALT_MGR_LVL_PREFIX"] or "Nv"
 
     for i, row in ipairs(self._availableAltRows) do
         local index = offset + i
@@ -2591,9 +2719,9 @@ function MemberView:renderAvailableAltRows()
             local coloredName = self:formatColoredMemberName(item.name)
             local details = ""
             if item.level and item.level > 0 and item.rankName and item.rankName ~= "" then
-                details = string.format(" |cff888888(Nv %d • %s)|r", item.level, item.rankName)
+                details = string.format(" |cff888888(%s %d • %s)|r", lvlPrefix, item.level, item.rankName)
             elseif item.level and item.level > 0 then
-                details = string.format(" |cff888888(Nv %d)|r", item.level)
+                details = string.format(" |cff888888(%s %d)|r", lvlPrefix, item.level)
             end
             row.nameText:SetText(coloredName .. details)
             row.linkBtn.memberName = item.name
@@ -2658,9 +2786,10 @@ function MemberView:linkAltToCurrentFamily(targetName)
         return
     end
 
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local memberService = _G.GM and _G.GM.memberService
     if not memberService then
-        print("|cffff0000[GuildManager]|r Erro: MemberService não encontrado.")
+        print(curL["MEMBER_ALT_MGR_ERR_SERVICE"])
         return
     end
 
@@ -2693,7 +2822,7 @@ function MemberView:linkAltToCurrentFamily(targetName)
     self:updateAltsVisual()
     self:refreshAltManager()
 
-    print(string.format("|cff00ff00[GuildManager]|r %s foi vinculado como alt à família de %s.",
+    print(string.format(curL["MEMBER_ALT_MGR_LINKED_MSG_FMT"],
         self:formatColoredMemberName(targetName),
         self:formatColoredMemberName(currentMainName)
     ))
@@ -2729,7 +2858,8 @@ function MemberView:setFamilyMain(targetName)
     self:updateAltsVisual()
     self:refreshAltManager()
 
-    print(string.format("|cff00ff00[GuildManager]|r %s agora é o MAIN da família de alts. Todos os outros tornaram-se alts.",
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    print(string.format(curL["MEMBER_ALT_MGR_NEW_MAIN_MSG_FMT"],
         self:formatColoredMemberName(targetName)
     ))
 end
@@ -2757,7 +2887,8 @@ function MemberView:unlinkAltFromCurrentFamily(targetName)
     self:updateAltsVisual()
     self:refreshAltManager()
 
-    print(string.format("|cff00ff00[GuildManager]|r %s foi desvinculado da família de alts.",
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    print(string.format(curL["MEMBER_ALT_MGR_UNLINKED_MSG_FMT"],
         self:formatColoredMemberName(targetName)
     ))
 end
@@ -2776,7 +2907,7 @@ end
 
 local function getLocalizedProfName(profKey, fallbackName)
     if not profKey or profKey == "" then return fallbackName or "" end
-    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (not (_G.GM and _G.GM.GetLocale) and GetLocale and GetLocale() ~= "ptBR")
     local uKey = tostring(profKey):upper()
     local dict = isEn and PROF_NAMES_LOCALIZED.enUS or PROF_NAMES_LOCALIZED.ptBR
     if dict and dict[uKey] then
@@ -2790,7 +2921,7 @@ end
 function MemberView:showProfessionsTooltip(anchor)
     if not GameTooltip or not self._currentMember then return end
     GameTooltip:SetOwner(anchor, "ANCHOR_TOP")
-    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (not (_G.GM and _G.GM.GetLocale) and GetLocale and GetLocale() ~= "ptBR")
     GameTooltip:AddLine(isEn and "|cffffd200Character Professions|r" or "|cffffd200Profissões do Personagem|r", 1, 0.82, 0)
 
     local profs = self._currentMember.getProfessions and self._currentMember:getProfessions()
@@ -2840,7 +2971,7 @@ end
 function MemberView:updateProfessionsVisual(member)
     if not self._prof1Label or not self._prof1Val then return end
 
-    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (not (_G.GM and _G.GM.GetLocale) and GetLocale and GetLocale() ~= "ptBR")
     local curL = (_G.GM and _G.GM.L) or _G.L or L
 
     if not member or not member.getProfessions then

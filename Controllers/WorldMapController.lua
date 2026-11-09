@@ -1,4 +1,4 @@
-﻿---@class WorldMapController
+---@class WorldMapController
 ---@field private _memberService MemberService
 ---@field private _guildRosterService GuildRosterService
 ---@field private _worldMapView WorldMapView
@@ -241,7 +241,8 @@ function WorldMapController:getCurrentMapName(mapID)
         local z = GetZoneText()
         if z and z ~= "" then return z end
     end
-    return "Região Atual"
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    return (curL and curL["CURRENT_REGION"]) or "Current Region"
 end
 
 --- Verifica se a zona do membro pertence à região, continente ou mundo visualizado no mapa.

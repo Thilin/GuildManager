@@ -188,11 +188,15 @@ local function cleanPlayerName(name)
     return clean:match("^%s*(.-)%s*$") or clean
 end
 
---- Retorna o nome do reagente localizado em português se disponível
+--- Retorna o nome do reagente localizado conforme o idioma configurado no Addon
 ---@param name string|nil
 ---@return string
 function ProfessionView:getReagentLocalizedName(name)
     if not name or name == "" then return "" end
+    local lang = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale()) or "ptBR"
+    if lang == "enUS" then
+        return name
+    end
     return REAGENT_NAMES_PT[name] or name
 end
 
@@ -293,6 +297,22 @@ function ProfessionView:updateLocale()
         end
     end
 
+    if self._profHeader then
+        self._profHeader:SetText(curL["PROF_CRAFTING_HEADER"] or "|cffffd200Profissões de Fabricação|r")
+    end
+
+    for pKey, btn in pairs(self._profButtons or {}) do
+        if btn.nameTxt then
+            local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(pKey)) or (ProfessionData.PROFESSIONS[pKey] and ProfessionData.PROFESSIONS[pKey].name) or pKey
+            btn.nameTxt:SetText(pName)
+        end
+    end
+
+    if self._selectedProfKey and self._profActiveTitle then
+        local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(self._selectedProfKey)) or (ProfessionData.PROFESSIONS[self._selectedProfKey] and ProfessionData.PROFESSIONS[self._selectedProfKey].name) or self._selectedProfKey
+        self._profActiveTitle:SetText(pName)
+    end
+
     if self._searchBox and self._searchBox:GetText() == "" and self._searchPlaceholder then
         self._searchPlaceholder:SetText(curL["PROF_SEARCH_PLACEHOLDER"] or "Buscar receita ou item...")
     end
@@ -301,16 +321,82 @@ function ProfessionView:updateLocale()
         self._cbOnlyGuildText:SetText(curL["PROF_FILTER_KNOWN_GUILD"] or "Apenas com Artesão na Guilda")
     end
 
+    if self._reagentsHeader then
+        self._reagentsHeader:SetText(curL["PROF_REAGENTS_HEADER"] or "|cffffd200Materiais Necessários:|r")
+    end
+    if self._craftersHeader then
+        self._craftersHeader:SetText(curL["PROF_WHO_CRAFTS"] or "|cffffd200Quem faz esta receita na guilda:|r")
+    end
+    if self._noCraftersNotice then
+        self._noCraftersNotice:SetText(curL["PROF_NO_ONE_CRAFTS"] or "No one in the guild knows this recipe yet.")
+    end
+    for _, row in ipairs(self._crafterRows or {}) do
+        if row.orderBtn and row.orderBtn.text then
+            row.orderBtn.text:SetText(curL["PROF_BTN_CREATE_ORDER"] or "Pedir")
+        end
+        if row.whisperBtn and row.whisperBtn.text then
+            row.whisperBtn.text:SetText(curL["PROF_BTN_WHISPER"] or "Sussurrar")
+        end
+    end
+    if self._publicOrderBtn and self._publicOrderBtn.text then
+        self._publicOrderBtn.text:SetText(curL["PROF_PUBLIC_ORDER_BTN"] or "|cffffd200+ Fazer Pedido de Fabricação|r")
+    end
+
+    if self._orderFilterBtns then
+        if self._orderFilterBtns["ALL"] and self._orderFilterBtns["ALL"].text then
+            self._orderFilterBtns["ALL"].text:SetText(curL["ORDER_FILTER_ALL"] or "Todos os Pedidos")
+        end
+        if self._orderFilterBtns["MINE"] and self._orderFilterBtns["MINE"].text then
+            self._orderFilterBtns["MINE"].text:SetText(curL["ORDER_FILTER_MINE"] or "Meus Pedidos")
+        end
+        if self._orderFilterBtns["FOR_ME"] and self._orderFilterBtns["FOR_ME"].text then
+            self._orderFilterBtns["FOR_ME"].text:SetText(curL["ORDER_FILTER_FOR_ME"] or "Pedidos para Mim")
+        end
+    end
+
+    if self._orderColHeaders then
+        for _, colH in ipairs(self._orderColHeaders) do
+            if colH.fs and colH.key then
+                colH.fs:SetText(curL[colH.key] or colH.default)
+            end
+        end
+    end
+
     if self._newOrderBtn and self._newOrderBtn.text then
         self._newOrderBtn.text:SetText(curL["ORDER_NEW_BTN"] or "+ Novo Pedido de Profissão")
     end
 
+    if self._myProfTitle then
+        self._myProfTitle:SetText(curL["MY_PROF_TITLE"] or "Minhas Profissões & Receitas Aprendidas")
+    end
+    if self._myProfHint then
+        self._myProfHint:SetText(curL["MY_PROF_SCAN_HINT"] or "Abra a sua janela de profissão no jogo (Alquimia, Ferraria, etc.) para registrar automaticamente todas as suas receitas!")
+    end
+    if self._myProfStatusTitle then
+        self._myProfStatusTitle:SetText(curL["MY_PROF_DETECTED"] or "Profissões Primárias Detectadas:")
+    end
     if self._scanBtn and self._scanBtn.text then
         self._scanBtn.text:SetText(curL["MY_PROF_SCAN_BTN"] or "Escanear Minhas Profissões Agora")
     end
-
     if self._syncProfBtn and self._syncProfBtn.text then
         self._syncProfBtn.text:SetText("|cffffd200" .. (curL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
+    end
+
+    if self._modalTitle then self._modalTitle:SetText(curL["ORDER_MODAL_TITLE"] or "Novo Pedido de Profissão") end
+    if self._modalRecipeLabel then self._modalRecipeLabel:SetText(curL["PROF_MODAL_RECIPE_LABEL"] or "|cffffd200Receita / Item Solicitado:|r") end
+    if self._modalCrafterLabel then self._modalCrafterLabel:SetText(curL["PROF_MODAL_CRAFTER_LABEL"] or "|cffffd200Artesão Direcionado (deixe em branco para aberto à guilda):|r") end
+    if self._modalQtyLabel then self._modalQtyLabel:SetText(curL["PROF_MODAL_QTY_LABEL"] or "|cffffd200Quantidade:|r") end
+    if self._modalTipLabel then self._modalTipLabel:SetText(curL["PROF_MODAL_TIP_LABEL"] or "|cffffd200Gorjeta / Comissão (Ouro):|r") end
+    if self._modalNotesLabel then self._modalNotesLabel:SetText(curL["PROF_MODAL_NOTES_LABEL"] or "|cffffd200Observações (ex: levo todos os materiais):|r") end
+    if self._modalConfirmTxt then self._modalConfirmTxt:SetText(curL["ORDER_MODAL_CONFIRM"] or "Confirmar Pedido") end
+    if self._modalCancelTxt then self._modalCancelTxt:SetText(curL["CANCEL"] or "Cancelar") end
+
+    if ProfessionData and ProfessionData.clearItemCache then
+        ProfessionData.clearItemCache()
+    end
+
+    if self:isShown() then
+        self:refresh()
     end
 end
 
@@ -563,7 +649,8 @@ function ProfessionView:createBrowserContainer()
 
     local profHeader = profListInset:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     profHeader:SetPoint("TOPLEFT", profListInset, "TOPLEFT", 8, -8)
-    profHeader:SetText("|cffffd200Profissões de Fabricação|r")
+    profHeader:SetText(curL["PROF_CRAFTING_HEADER"] or "|cffffd200Profissões de Fabricação|r")
+    self._profHeader = profHeader
 
     local pSep = profListInset:CreateTexture(nil, "ARTWORK")
     pSep:SetPoint("TOPLEFT", profHeader, "BOTTOMLEFT", 0, -4)
@@ -599,13 +686,13 @@ function ProfessionView:createBrowserContainer()
         -- Nome da profissão
         local nameTxt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         nameTxt:SetPoint("TOPLEFT", icon, "TOPRIGHT", 8, -2)
-        nameTxt:SetText(def.name)
+        nameTxt:SetText((ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or def.name)
         btn.nameTxt = nameTxt
 
         -- Badge de membros com a profissão
         local countTxt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         countTxt:SetPoint("BOTTOMLEFT", icon, "BOTTOMRIGHT", 8, 2)
-        countTxt:SetText("|cffaaaaaa0 artesãos|r")
+        countTxt:SetText(string.format(curL["PROF_CRAFTERS_COUNT_FMT"] or "|cffaaaaaa%d artesão(s)|r", 0))
         btn.countTxt = countTxt
         btn.profKey = profKey
 
@@ -638,7 +725,7 @@ function ProfessionView:createBrowserContainer()
 
     local profActiveTitle = centerInset:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     profActiveTitle:SetPoint("LEFT", profActiveIcon, "RIGHT", 8, 0)
-    profActiveTitle:SetText("Alquimia")
+    profActiveTitle:SetText((ProfessionData.getProfessionName and ProfessionData.getProfessionName("ALCHEMY")) or "Alquimia")
     self._profActiveTitle = profActiveTitle
 
     -- Lista resumida de membros que possuem a profissão
@@ -646,7 +733,7 @@ function ProfessionView:createBrowserContainer()
     guildCraftersSummary:SetPoint("TOPLEFT", profActiveIcon, "BOTTOMLEFT", 0, -6)
     guildCraftersSummary:SetPoint("RIGHT", centerInset, "RIGHT", -8, 0)
     guildCraftersSummary:SetJustifyH("LEFT")
-    guildCraftersSummary:SetText("|cffffd200Membros com esta profissão:|r Carregando...")
+    guildCraftersSummary:SetText(curL["PROF_CRAFTERS_LOADING"] or "|cffffd200Membros com esta profissão:|r Carregando...")
     self._guildCraftersSummary = guildCraftersSummary
 
     -- Caixa de Busca
@@ -856,7 +943,7 @@ function ProfessionView:createBrowserContainer()
     detailTitle:SetPoint("RIGHT", itemStatsContainer, "RIGHT", -8, 0)
     detailTitle:SetJustifyH("LEFT")
     detailTitle:SetWordWrap(true)
-    detailTitle:SetText("Selecione uma receita")
+    detailTitle:SetText(curL["PROF_SELECT_RECIPE"] or "Selecione uma receita")
     self._detailTitle = detailTitle
 
     local detailSubtitle = itemStatsContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -910,13 +997,14 @@ function ProfessionView:createBrowserContainer()
     local reagentsHeader = rightInset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     reagentsHeader:SetPoint("TOPLEFT", itemStatsContainer, "BOTTOMLEFT", 0, -6)
     reagentsHeader:SetText(curL["PROF_REAGENTS_HEADER"] or "|cffffd200Materiais Necessários:|r")
+    self._reagentsHeader = reagentsHeader
 
     local reagentsText = rightInset:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     reagentsText:SetPoint("TOPLEFT", reagentsHeader, "BOTTOMLEFT", 0, -3)
     reagentsText:SetPoint("RIGHT", rightInset, "RIGHT", -10, 0)
     reagentsText:SetJustifyH("LEFT")
     reagentsText:SetWordWrap(true)
-    reagentsText:SetText("|cffaaaaaaNenhum material listado.|r")
+    reagentsText:SetText(curL["PROF_NO_REAGENTS"] or "|cffaaaaaaNo materials listed.|r")
     self._reagentsText = reagentsText
 
     local dSep = rightInset:CreateTexture(nil, "ARTWORK")
@@ -929,6 +1017,7 @@ function ProfessionView:createBrowserContainer()
     local craftersHeader = rightInset:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     craftersHeader:SetPoint("TOPLEFT", dSep, "BOTTOMLEFT", 0, -6)
     craftersHeader:SetText(curL["PROF_WHO_CRAFTS"] or "|cffffd200Quem faz esta receita na guilda:|r")
+    self._craftersHeader = craftersHeader
 
     -- ScrollFrame de Artesãos que conhecem a receita
     local craftersScroll = CreateFrame("ScrollFrame", "GM_ProfCraftersScroll", rightInset)
@@ -939,7 +1028,7 @@ function ProfessionView:createBrowserContainer()
     local noCraftersNotice = rightInset:CreateFontString(nil, "OVERLAY", "GameFontDisable")
     noCraftersNotice:SetPoint("CENTER", craftersScroll, "CENTER", 0, 0)
     noCraftersNotice:SetWidth(280)
-    noCraftersNotice:SetText(curL["PROF_NO_ONE_CRAFTS"] or "Nenhum membro da guilda conhece esta receita ainda.")
+    noCraftersNotice:SetText(curL["PROF_NO_ONE_CRAFTS"] or "No one in the guild knows this recipe yet.")
     self._noCraftersNotice = noCraftersNotice
 
     -- Linhas de artesãos (5 linhas visíveis)
@@ -1030,7 +1119,7 @@ function ProfessionView:createBrowserContainer()
     end
     local pubTxt = publicOrderBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     pubTxt:SetPoint("CENTER", publicOrderBtn, "CENTER", 0, 0)
-    pubTxt:SetText("|cffffd200+ Fazer Pedido de Fabricação|r")
+    pubTxt:SetText(curL["PROF_PUBLIC_ORDER_BTN"] or "|cffffd200+ Fazer Pedido de Fabricação|r")
     publicOrderBtn.text = pubTxt
     publicOrderBtn:SetScript("OnClick", function()
         if self._selectedRecipe then
@@ -1068,7 +1157,9 @@ function ProfessionView:selectProfession(profKey)
     local def = ProfessionData.PROFESSIONS[profKey]
     if def then
         if self._profActiveIcon then self._profActiveIcon:SetTexture(def.icon) end
-        if self._profActiveTitle then self._profActiveTitle:SetText(def.name) end
+        if self._profActiveTitle then
+            self._profActiveTitle:SetText((ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or def.name)
+        end
     end
 
     self:refreshRecipeList()
@@ -1093,12 +1184,13 @@ function ProfessionView:refreshRecipeList()
     local profKey = self._selectedProfKey or "ALCHEMY"
     local pService = _G.GM and _G.GM.professionService
     if not pService then return end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
 
     -- Membros da guilda com a profissão
     local membersWithProf = pService:getGuildMembersWithProfession(profKey)
     if self._guildCraftersSummary then
         if #membersWithProf == 0 then
-            self._guildCraftersSummary:SetText("|cffaaaaaaNenhum membro da guilda com esta profissão registrado.|r")
+            self._guildCraftersSummary:SetText(curL["PROF_CRAFTERS_NONE"] or "|cffaaaaaaNo guild members registered with this profession yet.|r")
         else
             local names = {}
             for _, info in ipairs(membersWithProf) do
@@ -1108,7 +1200,8 @@ function ProfessionView:refreshRecipeList()
                 local dispName = self:getMemberDisplayName(m)
                 table.insert(names, string.format("%s%s|r (%d/%d)", cColor, dispName, info.rank or 0, info.maxRank or 300))
             end
-            self._guildCraftersSummary:SetText(string.format("|cffffd200Membros com %s (%d):|r %s", ProfessionData.PROFESSIONS[profKey].name, #membersWithProf, table.concat(names, ", ")))
+            local profName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or ProfessionData.PROFESSIONS[profKey].name
+            self._guildCraftersSummary:SetText(string.format(curL["PROF_CRAFTERS_LIST_FMT"] or "|cffffd200Membros com %s (%d):|r %s", profName, #membersWithProf, table.concat(names, ", ")))
         end
     end
 
@@ -1116,7 +1209,7 @@ function ProfessionView:refreshRecipeList()
     for pK, btn in pairs(self._profButtons or {}) do
         local mList = pService:getGuildMembersWithProfession(pK)
         if btn.countTxt then
-            btn.countTxt:SetText(string.format("|cffaaaaaa%d artesão(s)|r", #mList))
+            btn.countTxt:SetText(string.format(curL["PROF_CRAFTERS_COUNT_FMT"] or "|cffaaaaaa%d artesão(s)|r", #mList))
         end
     end
 
@@ -1157,6 +1250,7 @@ end
 
 --- Renderiza as linhas visíveis da lista de receitas
 function ProfessionView:renderRecipeRows()
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local startIdx = self._recipeOffset or 0
     for i = 1, 10 do
         local row = self._recipeRows[i]
@@ -1177,12 +1271,12 @@ function ProfessionView:renderRecipeRows()
             local qColor = (itemData and itemData.qualityColor) or ProfessionData.getQualityColor(r.quality or 1)
             local displayName = (itemData and itemData.name) or ProfessionData.getRecipeDisplayName(r)
             row.nameTxt:SetText(string.format("%s%s|r", qColor, displayName))
-            row.skillTxt:SetText(string.format("Perícia: %d", r.skill or 1))
+            row.skillTxt:SetText(string.format(curL["PROF_SKILL_FMT"] or "Perícia: %d", r.skill or 1))
 
             if (data.crafterCount or 0) > 0 then
-                row.craftersTxt:SetText(string.format("|cff00ff00%d artesão(s)|r", data.crafterCount))
+                row.craftersTxt:SetText(string.format(curL["PROF_RECIPE_CRAFTERS_FMT"] or "|cff00ff00%d artesão(s)|r", data.crafterCount))
             else
-                row.craftersTxt:SetText("|cff888888Sem artesão|r")
+                row.craftersTxt:SetText(curL["PROF_RECIPE_NO_CRAFTER"] or "|cff888888Sem artesão|r")
             end
 
             local isSelected = (self._selectedRecipe and self._selectedRecipe.id == r.id)
@@ -1215,8 +1309,9 @@ end
 --- Atualiza o painel de detalhes e lista de artesãos para a receita selecionada
 ---@param recipe table
 function ProfessionView:updateRecipeDetails(recipe)
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     if not recipe then
-        if self._detailTitle then self._detailTitle:SetText("Selecione uma receita") end
+        if self._detailTitle then self._detailTitle:SetText(curL["PROF_SELECT_RECIPE"] or "Selecione uma receita") end
         if self._detailIcon then self._detailIcon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark") end
         if self._detailIconBorder then self._detailIconBorder:SetVertexColor(0.5, 0.5, 0.5, 0.5) end
         if self._detailSubtitle then self._detailSubtitle:SetText(""); self._detailSubtitle:Hide() end
@@ -1338,13 +1433,15 @@ function ProfessionView:updateRecipeDetails(recipe)
 
         -- Tipo de Vinculação (Liga-se quando equipado / ao coletar)
         local slotRaw = itemData and itemData.slot
-        local isGear = slotRaw and not slotRaw:find("Poção") and not slotRaw:find("Elixir")
-            and not slotRaw:find("Frasco") and not slotRaw:find("Reagente")
-            and not slotRaw:find("Consumível") and not slotRaw:find("Encantamento")
+        local isGear = slotRaw and not slotRaw:find("Poção") and not slotRaw:find("Potion")
+            and not slotRaw:find("Elixir") and not slotRaw:find("Frasco") and not slotRaw:find("Flask")
+            and not slotRaw:find("Reagente") and not slotRaw:find("Reagent")
+            and not slotRaw:find("Consumível") and not slotRaw:find("Consumable")
+            and not slotRaw:find("Encantamento") and not slotRaw:find("Enchant")
         if isGear then
-            local bindStr = "Liga-se quando equipado"
+            local bindStr = curL["PROF_BIND_ON_EQUIP"] or "Liga-se quando equipado"
             if quality == 4 or (itemData and itemData.source == "raid") then
-                bindStr = "Liga-se ao coletar"
+                bindStr = curL["PROF_BIND_ON_PICKUP"] or "Liga-se ao coletar"
             end
             table.insert(linesData, {
                 left = bindStr,
@@ -1374,7 +1471,7 @@ function ProfessionView:updateRecipeDetails(recipe)
         -- Armadura
         if itemData and itemData.armor and itemData.armor > 0 then
             table.insert(linesData, {
-                left = string.format("%d de Armadura", itemData.armor),
+                left = string.format(curL["PROF_ARMOR_FMT"] or "%d de Armadura", itemData.armor),
                 colorLeft = { 1, 1, 1 },
                 font = "GameFontHighlightSmall",
             })
@@ -1388,7 +1485,7 @@ function ProfessionView:updateRecipeDetails(recipe)
                     local num, attr = clean:match("^%+(%d+)%s+(.*)$")
                     local statFormatted = clean
                     if num and attr and not attr:find("^de ") then
-                        statFormatted = string.format("+%s de %s", num, attr)
+                        statFormatted = string.format(curL["PROF_STAT_FMT"] or "+%s de %s", num, attr)
                     end
                     table.insert(linesData, {
                         left = statFormatted,
@@ -1412,7 +1509,7 @@ function ProfessionView:updateRecipeDetails(recipe)
         -- Requer Nível
         if itemData and itemData.reqLevel and itemData.reqLevel > 0 then
             table.insert(linesData, {
-                left = string.format("Requer Nível %d", itemData.reqLevel),
+                left = string.format(curL["PROF_REQ_LEVEL_FMT"] or "Requer Nível %d", itemData.reqLevel),
                 colorLeft = { 1, 1, 1 },
                 font = "GameFontHighlightSmall",
             })
@@ -1539,7 +1636,7 @@ function ProfessionView:updateRecipeDetails(recipe)
             end
             self._reagentsText:SetText(table.concat(rParts, "   "))
         else
-            self._reagentsText:SetText("|cffaaaaaaMateriais sob consulta no jogo.|r")
+            self._reagentsText:SetText(curL["PROF_REAGENTS_IN_GAME"] or "|cffaaaaaaMateriais sob consulta no jogo.|r")
         end
     end
 
@@ -1574,7 +1671,7 @@ function ProfessionView:updateRecipeDetails(recipe)
             local cColor = CLASS_COLORS[cTok] and CLASS_COLORS[cTok].hex or "|cffffffff"
             local dispName = self:getMemberDisplayName(m)
             row.nameTxt:SetText(string.format("%s%s|r", cColor, dispName))
-            row.rankTxt:SetText(string.format("Perícia: %d/%d", cData.rank or 0, cData.maxRank or 300))
+            row.rankTxt:SetText(string.format(curL["PROF_SKILL_MAX_FMT"] or "Perícia: %d/%d", cData.rank or 0, cData.maxRank or 300))
 
             if cData.isOnline then
                 row.statusDot:SetColorTexture(0.2, 1.0, 0.2, 1.0) -- Verde (Online)
@@ -1611,6 +1708,7 @@ function ProfessionView:showRecipeTooltip(anchorFrame, recipe)
     end
 
     if not showedLink then
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         local displayName = (itemData and itemData.name) or ProfessionData.getRecipeDisplayName(recipe)
         local rQ, gQ, bQ = (itemData and itemData.r or 1), (itemData and itemData.g or 1), (itemData and itemData.b or 1)
         GameTooltip:AddLine(displayName, rQ, gQ, bQ, true)
@@ -1623,7 +1721,7 @@ function ProfessionView:showRecipeTooltip(anchorFrame, recipe)
         end
 
         if itemData and itemData.armor and itemData.armor > 0 then
-            GameTooltip:AddLine(string.format("%d Armadura", itemData.armor), 1, 1, 1)
+            GameTooltip:AddLine(string.format(curL["PROF_ARMOR_SHORT_FMT"] or "%d Armadura", itemData.armor), 1, 1, 1)
         end
 
         if itemData and itemData.attrs and itemData.attrs ~= "" then
@@ -1635,7 +1733,7 @@ function ProfessionView:showRecipeTooltip(anchorFrame, recipe)
         end
 
         if itemData and itemData.reqLevel and itemData.reqLevel > 1 then
-            GameTooltip:AddLine(string.format("Requer Nível %d", itemData.reqLevel), 1, 1, 1)
+            GameTooltip:AddLine(string.format(curL["PROF_REQ_LEVEL_FMT"] or "Requer Nível %d", itemData.reqLevel), 1, 1, 1)
         end
 
         if itemData and itemData.desc and itemData.desc ~= "" then
@@ -1648,11 +1746,12 @@ function ProfessionView:showRecipeTooltip(anchorFrame, recipe)
     end
 
     -- Informações da Guilda no rodapé do tooltip
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     GameTooltip:AddLine(" ")
     local pService = _G.GM and _G.GM.professionService
     local crafters = pService and pService:getCraftersForRecipe(recipe.prof or self._selectedProfKey, recipe) or {}
     if #crafters > 0 then
-        GameTooltip:AddLine(string.format("|cffffd200Quem faz na guilda (%d):|r", #crafters))
+        GameTooltip:AddLine(string.format(curL["PROF_TT_WHO_CRAFTS_FMT"] or "|cffffd200Quem faz na guilda (%d):|r", #crafters))
         for _, c in ipairs(crafters) do
             local m = c.member
             local cTok = m:getClass()
@@ -1662,7 +1761,7 @@ function ProfessionView:showRecipeTooltip(anchorFrame, recipe)
             GameTooltip:AddLine(string.format("  %s %s%s|r (%d/%d)", st, cColor, dispName, c.rank or 0, c.maxRank or 300))
         end
     else
-        GameTooltip:AddLine("|cff888888Nenhum membro da guilda conhece esta receita ainda.|r")
+        GameTooltip:AddLine("|cff888888" .. (curL["PROF_NO_ONE_CRAFTS"] or "No one in the guild knows this recipe yet.") .. "|r")
     end
 
     GameTooltip:Show()
@@ -1757,19 +1856,21 @@ function ProfessionView:createOrdersContainer()
 
     -- Cabeçalhos das Colunas da Tabela
     local cols = {
-        { title = "Receita / Item",    x = 10,  width = 220 },
-        { title = "Solicitante",       x = 235, width = 110 },
-        { title = "Artesão",           x = 350, width = 110 },
-        { title = "Qtd",               x = 465, width = 45 },
-        { title = "Gorjeta / Comissão",x = 515, width = 100 },
-        { title = "Status",            x = 620, width = 90 },
-        { title = "Observações",       x = 715, width = 110 },
-        { title = "Ações",             x = 830, width = 80 },
+        { key = "ORDER_COL_RECIPE",    default = "Receita / Item",     x = 10,  width = 220 },
+        { key = "ORDER_COL_REQUESTER", default = "Solicitante",        x = 235, width = 110 },
+        { key = "ORDER_COL_CRAFTER",   default = "Artesão",            x = 350, width = 110 },
+        { key = "ORDER_COL_QTY",       default = "Qtd",                x = 465, width = 45 },
+        { key = "ORDER_COL_TIP",       default = "Gorjeta / Comissão", x = 515, width = 100 },
+        { key = "ORDER_COL_STATUS",    default = "Status",             x = 620, width = 90 },
+        { key = "ORDER_COL_NOTES",     default = "Observações",        x = 715, width = 110 },
+        { key = "ORDER_COL_ACTIONS",   default = "Ações",              x = 830, width = 80 },
     }
+    self._orderColHeaders = {}
     for _, c in ipairs(cols) do
         local hTxt = tableInset:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         hTxt:SetPoint("TOPLEFT", tableInset, "TOPLEFT", c.x, -8)
-        hTxt:SetText(c.title)
+        hTxt:SetText(curL[c.key] or c.default)
+        table.insert(self._orderColHeaders, { fs = hTxt, key = c.key, default = c.default })
     end
 
     local hSep = tableInset:CreateTexture(nil, "ARTWORK")
@@ -2342,9 +2443,10 @@ end
 ---@param recipe table|nil
 function ProfessionView:updateCrafterFeedback(text, recipe)
     if not self._modalCrafterFeedback then return end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local clean = (text:match("^[^-]+") or text or ""):match("^%s*(.-)%s*$") or ""
     if clean == "" then
-        self._modalCrafterFeedback:SetText("|cffaaaaaa(Aberto para qualquer artesão da guilda)|r")
+        self._modalCrafterFeedback:SetText(curL["PROF_CRAFTER_OPEN_ALL"] or "|cffaaaaaa(Aberto para qualquer artesão da guilda)|r")
         return
     end
 
@@ -2357,13 +2459,13 @@ function ProfessionView:updateCrafterFeedback(text, recipe)
         local nameStr = self:getMemberDisplayName(m or clean)
         local profStr = ""
         if best.knowsRecipe then
-            profStr = string.format(" |cff00ff00✓ Conhece a receita (%d/%d)|r", best.rank or 0, best.maxRank or 300)
+            profStr = string.format(curL["PROF_CRAFTER_KNOWS_FMT"] or " |cff00ff00✓ Conhece a receita (%d/%d)|r", best.rank or 0, best.maxRank or 300)
         elseif best.rank and best.rank > 0 then
             profStr = string.format(" |cffffff00(%d/%d)|r", best.rank, best.maxRank or 300)
         end
-        self._modalCrafterFeedback:SetText(string.format("Direcionado a: %s%s|r%s", cColor, nameStr, profStr))
+        self._modalCrafterFeedback:SetText(string.format(curL["PROF_CRAFTER_DIRECTED_FMT"] or "Direcionado a: %s%s|r%s", cColor, nameStr, profStr))
     else
-        self._modalCrafterFeedback:SetText("|cffff4444✗ Nenhum artesão ou membro encontrado|r")
+        self._modalCrafterFeedback:SetText(curL["PROF_CRAFTER_NOT_FOUND"] or "|cffff4444✗ No crafter or member found|r")
     end
 end
 
@@ -2371,6 +2473,7 @@ end
 ---@param text string|nil
 function ProfessionView:updateCrafterSuggestions(text)
     if not self._modalSuggestFrame then return end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local clean = (text:match("^[^-]+") or text or ""):match("^%s*(.-)%s*$") or ""
     if clean == "" then
         self._modalSuggestFrame:Hide()
@@ -2398,11 +2501,11 @@ function ProfessionView:updateCrafterSuggestions(text)
             row.nameTxt:SetText(string.format("%s%s|r", cColor, mName))
 
             if cand.knowsRecipe then
-                row.infoTxt:SetText(string.format("|cff00ff00Conhece (%d/%d)|r", cand.rank or 0, cand.maxRank or 300))
+                row.infoTxt:SetText(string.format(curL["PROF_SUGGEST_KNOWS_FMT"] or "|cff00ff00Conhece (%d/%d)|r", cand.rank or 0, cand.maxRank or 300))
             elseif cand.rank and cand.rank > 0 then
-                row.infoTxt:SetText(string.format("|cffffff00Perícia %d/%d|r", cand.rank, cand.maxRank or 300))
+                row.infoTxt:SetText(string.format(curL["PROF_SUGGEST_SKILL_FMT"] or "|cffffff00Perícia %d/%d|r", cand.rank, cand.maxRank or 300))
             else
-                row.infoTxt:SetText("|cff888888Membro|r")
+                row.infoTxt:SetText(curL["PROF_SUGGEST_MEMBER"] or "|cff888888Membro|r")
             end
 
             if cand.isOnline then
@@ -2487,6 +2590,7 @@ end
 
 --- Renderiza as linhas visíveis do mural de pedidos
 function ProfessionView:renderOrderRows()
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local myName, myFullName = self:getLocalPlayerNames()
 
     for i = 1, 12 do
@@ -2496,7 +2600,9 @@ function ProfessionView:renderOrderRows()
             row.orderData = order
 
             row.icon:SetTexture(order:getRecipeIcon())
-            row.recipeName:SetText(order:getRecipeName())
+            local rDef = ProfessionData.getRecipeById and ProfessionData.getRecipeById(order:getRecipeId(), order:getProfessionKey())
+            local locRecipeName = (rDef and ProfessionData.getRecipeDisplayName and ProfessionData.getRecipeDisplayName(rDef)) or order:getRecipeName()
+            row.recipeName:SetText(locRecipeName)
             row.requesterTxt:SetText(self:getPlayerColoredName(order:getRequester()))
 
             if order:isOpenToGuild() then
@@ -2504,7 +2610,7 @@ function ProfessionView:renderOrderRows()
                 if who and who ~= "" then
                     row.crafterTxt:SetText(self:getPlayerColoredName(who))
                 else
-                    row.crafterTxt:SetText("|cffffd200Qualquer Artesão|r")
+                    row.crafterTxt:SetText("|cffffd200" .. (curL["ORDER_ANY_CRAFTER"] or "Qualquer Artesão") .. "|r")
                 end
             else
                 row.crafterTxt:SetText(self:getPlayerColoredName(order:getCrafter()))
@@ -2515,13 +2621,13 @@ function ProfessionView:renderOrderRows()
 
             local status = order:getStatus()
             if status == CraftOrder.STATUS.PENDING then
-                row.statusTxt:SetText("|cffffcc00Pendente|r")
+                row.statusTxt:SetText("|cffffcc00" .. (curL["ORDER_STATUS_PENDING"] or "Pendente") .. "|r")
             elseif status == CraftOrder.STATUS.IN_PROGRESS then
-                row.statusTxt:SetText("|cff00ccffPreparando|r")
+                row.statusTxt:SetText("|cff00ccff" .. (curL["ORDER_STATUS_IN_PROGRESS"] or "Preparando") .. "|r")
             elseif status == CraftOrder.STATUS.COMPLETED then
-                row.statusTxt:SetText("|cff00ff00Concluído|r")
+                row.statusTxt:SetText("|cff00ff00" .. (curL["ORDER_STATUS_COMPLETED"] or "Concluído") .. "|r")
             elseif status == CraftOrder.STATUS.CANCELLED then
-                row.statusTxt:SetText("|cff888888Cancelado|r")
+                row.statusTxt:SetText("|cff888888" .. (curL["ORDER_STATUS_CANCELLED"] or "Cancelado") .. "|r")
             end
 
             row.notesTxt:SetText(order:getNotes() ~= "" and order:getNotes() or "-")
@@ -2617,17 +2723,17 @@ function ProfessionView:renderOrderRows()
                         end
                     end
                     if GameTooltip then
+                        local tL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
                         if btn.isDismissAction then
-                            local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-                            GameTooltip:SetText("|cff00ff00" .. (L["ORDER_DISMISS_TOOLTIP_TITLE"] or "Dispensar Pedido Concluído") .. "|r")
-                            GameTooltip:AddLine(L["ORDER_DISMISS_TOOLTIP_DESC"] or "Clique para remover este pedido concluído do seu mural.", 1, 1, 1, true)
+                            GameTooltip:SetText("|cff00ff00" .. (tL["ORDER_DISMISS_TOOLTIP_TITLE"] or "Dispensar Pedido Concluído") .. "|r")
+                            GameTooltip:AddLine(tL["ORDER_DISMISS_TOOLTIP_DESC"] or "Clique para remover este pedido concluído do seu mural.", 1, 1, 1, true)
                         elseif btn.isRefuseAction then
-                            GameTooltip:SetText("|cffff4444Recusar Pedido|r")
-                            GameTooltip:AddLine("Clique para recusar este pedido e liberá-lo para a guilda.", 1, 1, 1, true)
+                            GameTooltip:SetText(tL["PROF_TT_REFUSE_TITLE"] or "|cffff4444Recusar Pedido|r")
+                            GameTooltip:AddLine(tL["PROF_TT_REFUSE_DESC"] or "Clique para recusar este pedido e liberá-lo para a guilda.", 1, 1, 1, true)
                         else
-                            GameTooltip:SetText("|cffff4444Cancelar Pedido|r")
-                            GameTooltip:AddLine("Clique para cancelar e remover este pedido do mural.", 1, 1, 1, true)
+                            GameTooltip:SetText(tL["PROF_TT_CANCEL_TITLE"] or "|cffff4444Cancelar Pedido|r")
+                            GameTooltip:AddLine(tL["PROF_TT_CANCEL_DESC"] or "Clique para cancelar e remover este pedido do mural.", 1, 1, 1, true)
                         end
                         GameTooltip:Show()
                     end
@@ -2711,13 +2817,14 @@ function ProfessionView:renderOrderRows()
                         end
                     end
                     if GameTooltip then
+                        local tL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
                         if btn.isCompleteAction then
-                            GameTooltip:SetText("|cff00ccffConcluir Pedido|r")
-                            GameTooltip:AddLine("Clique para marcar este pedido como fabricado e entregue.", 1, 1, 1, true)
+                            GameTooltip:SetText(tL["PROF_TT_COMPLETE_TITLE"] or "|cff00ccffConcluir Pedido|r")
+                            GameTooltip:AddLine(tL["PROF_TT_COMPLETE_DESC"] or "Clique para marcar este pedido como fabricado e entregue.", 1, 1, 1, true)
                         else
-                            GameTooltip:SetText("|cff00ff00Aceitar Pedido|r")
-                            GameTooltip:AddLine("Clique para aceitar fabricar este pedido para o solicitante.", 1, 1, 1, true)
+                            GameTooltip:SetText(tL["PROF_TT_ACCEPT_TITLE"] or "|cff00ff00Aceitar Pedido|r")
+                            GameTooltip:AddLine(tL["PROF_TT_ACCEPT_DESC"] or "Clique para aceitar fabricar este pedido para o solicitante.", 1, 1, 1, true)
                         end
                         GameTooltip:Show()
                     end
@@ -2790,12 +2897,14 @@ function ProfessionView:createMyProfessionsContainer()
     local title = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", card, "TOPLEFT", 20, -20)
     title:SetText(curL["MY_PROF_TITLE"] or "Minhas Profissões & Receitas Aprendidas")
+    self._myProfTitle = title
 
     local hint = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     hint:SetPoint("RIGHT", card, "RIGHT", -20, 0)
     hint:SetJustifyH("LEFT")
     hint:SetText(curL["MY_PROF_SCAN_HINT"] or "Abra a sua janela de profissão no jogo (Alquimia, Ferraria, etc.) para registrar automaticamente todas as suas receitas!")
+    self._myProfHint = hint
 
     local scanBtn = CreateFrame("Button", nil, card, template)
     scanBtn:SetSize(240, 32)
@@ -2810,9 +2919,10 @@ function ProfessionView:createMyProfessionsContainer()
     scanTxt:SetText(curL["MY_PROF_SCAN_BTN"] or "Escanear Minhas Profissões Agora")
     scanBtn.text = scanTxt
     scanBtn:SetScript("OnClick", function()
+        local cL = (_G.GM and _G.GM.L) or _G.L or L
         if _G.GM and _G.GM.professionService then
             local count = _G.GM.professionService:scanAll()
-            print(string.format("|cff00ff00[GuildManager]|r Escaneamento concluído! %d profissão(ões) detectada(s).", count))
+            print(string.format("|cff00ff00[GuildManager]|r " .. (cL["PROF_SCAN_DONE_MSG"] or "Escaneamento concluído! %d profissão(ões) detectada(s)."), count))
             self:refresh()
         end
     end)
@@ -2833,14 +2943,15 @@ function ProfessionView:createMyProfessionsContainer()
     syncProfBtn.text = syncProfTxt
 
     syncProfBtn:SetScript("OnEnter", function(btn)
+        local cL = (_G.GM and _G.GM.L) or _G.L or L
         if btn.SetBackdropBorderColor then
             btn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
             btn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], 0.95)
         end
         if GameTooltip then
             GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
-            GameTooltip:AddLine("|cffffd200" .. (curL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
-            GameTooltip:AddLine(curL["SYNC_PROF_TOOLTIP"] or "Transmite suas profissões e receitas aprendidas para que todos na guilda saibam o que você fabrica.", 1, 1, 1, true)
+            GameTooltip:AddLine("|cffffd200" .. (cL["SYNC_PROF_BTN"] or "Sincronizar com a Guilda (P2P)") .. "|r")
+            GameTooltip:AddLine(cL["SYNC_PROF_TOOLTIP"] or "Transmite suas profissões e receitas aprendidas para que todos na guilda saibam o que você fabrica.", 1, 1, 1, true)
             GameTooltip:Show()
         end
     end)
@@ -2884,12 +2995,13 @@ function ProfessionView:createMyProfessionsContainer()
     local statusTitle = statusCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     statusTitle:SetPoint("TOPLEFT", statusCard, "TOPLEFT", 16, -16)
     statusTitle:SetText(curL["MY_PROF_DETECTED"] or "Profissões Primárias Detectadas:")
+    self._myProfStatusTitle = statusTitle
 
     local statusDetails = statusCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     statusDetails:SetPoint("TOPLEFT", statusTitle, "BOTTOMLEFT", 0, -12)
     statusDetails:SetPoint("RIGHT", statusCard, "RIGHT", -16, 0)
     statusDetails:SetJustifyH("LEFT")
-    statusDetails:SetText("Carregando informações locais...")
+    statusDetails:SetText(curL["PROF_MY_LOADING"] or "Carregando informações locais...")
     self._myProfsStatusDetails = statusDetails
 end
 
@@ -2897,10 +3009,11 @@ end
 function ProfessionView:refreshMyProfessions()
     local pService = _G.GM and _G.GM.professionService
     if not pService or not self._myProfsStatusDetails then return end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
 
     local member = pService:getLocalPlayerMember()
     if not member then
-        self._myProfsStatusDetails:SetText("|cffaaaaaaPersonagem local não encontrado no banco de dados.|r")
+        self._myProfsStatusDetails:SetText(curL["PROF_MY_LOCAL_NOT_FOUND"] or "|cffaaaaaaPersonagem local não encontrado no banco de dados.|r")
         return
     end
 
@@ -2928,8 +3041,9 @@ function ProfessionView:refreshMyProfessions()
                     end
                 end
             end
-            table.insert(parts, string.format("• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
-                def.icon, def.name, pData.rank or 0, pData.maxRank or 300, recipeCount))
+            local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or def.name
+            table.insert(parts, string.format(curL["PROF_MY_DETECTED_LINE_FMT"] or "• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
+                def.icon, pName, pData.rank or 0, pData.maxRank or 300, recipeCount))
         end
     end
 
@@ -2960,15 +3074,16 @@ function ProfessionView:refreshMyProfessions()
                             end
                         end
                     end
-                    table.insert(parts, string.format("• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
-                        def.icon, def.name, pData.rank or 0, pData.maxRank or 300, recipeCount))
+                    local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or def.name
+                    table.insert(parts, string.format(curL["PROF_MY_DETECTED_LINE_FMT"] or "• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
+                        def.icon, pName, pData.rank or 0, pData.maxRank or 300, recipeCount))
                 end
             end
         end
     end
 
     if #parts == 0 then
-        self._myProfsStatusDetails:SetText("|cffaaaaaaNenhuma profissão primária de fabricação foi detectada ainda.\nAbra as perícias do seu personagem (atalho K) ou a janela de profissão para registrar automaticamente!|r")
+        self._myProfsStatusDetails:SetText(curL["MY_PROF_NONE"] or "|cffaaaaaaNenhuma profissão primária de fabricação foi detectada ainda.\nAbra as perícias do seu personagem (atalho K) ou a janela de profissão para registrar automaticamente!|r")
     else
         self._myProfsStatusDetails:SetText(table.concat(parts, "\n\n"))
     end
@@ -3002,6 +3117,7 @@ function ProfessionView:createOrderModal()
     local mTitle = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     mTitle:SetPoint("TOPLEFT", modal, "TOPLEFT", 16, -16)
     mTitle:SetText(curL["ORDER_MODAL_TITLE"] or "Novo Pedido de Profissão")
+    self._modalTitle = mTitle
 
     local mClose = CreateFrame("Button", nil, modal, "UIPanelCloseButton")
     mClose:SetPoint("TOPRIGHT", modal, "TOPRIGHT", -4, -4)
@@ -3013,17 +3129,19 @@ function ProfessionView:createOrderModal()
     -- Item / Receita selecionada
     local rLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     rLabel:SetPoint("TOPLEFT", mTitle, "BOTTOMLEFT", 0, -14)
-    rLabel:SetText("|cffffd200Receita / Item Solicitado:|r")
+    rLabel:SetText(curL["PROF_MODAL_RECIPE_LABEL"] or "|cffffd200Receita / Item Solicitado:|r")
+    self._modalRecipeLabel = rLabel
 
     local rPreview = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     rPreview:SetPoint("TOPLEFT", rLabel, "BOTTOMLEFT", 0, -4)
-    rPreview:SetText("Nome do Item")
+    rPreview:SetText(curL["PROF_MODAL_ITEM_NAME"] or "Nome do Item")
     self._modalRecipePreview = rPreview
 
     -- Artesão direcionado
     local cLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     cLabel:SetPoint("TOPLEFT", rPreview, "BOTTOMLEFT", 0, -12)
-    cLabel:SetText("|cffffd200Artesão Direcionado (deixe em branco para aberto à guilda):|r")
+    cLabel:SetText(curL["PROF_MODAL_CRAFTER_LABEL"] or "|cffffd200Artesão Direcionado (deixe em branco para aberto à guilda):|r")
+    self._modalCrafterLabel = cLabel
 
     local cBox = CreateFrame("EditBox", nil, modal, template)
     cBox:SetPoint("TOPLEFT", cLabel, "BOTTOMLEFT", 0, -4)
@@ -3042,13 +3160,14 @@ function ProfessionView:createOrderModal()
     cFeedback:SetPoint("TOPLEFT", cBox, "BOTTOMLEFT", 2, -3)
     cFeedback:SetWidth(416)
     cFeedback:SetJustifyH("LEFT")
-    cFeedback:SetText("|cffaaaaaa(Aberto para qualquer artesão da guilda)|r")
+    cFeedback:SetText(curL["PROF_CRAFTER_OPEN_ALL"] or "|cffaaaaaa(Aberto para qualquer artesão da guilda)|r")
     self._modalCrafterFeedback = cFeedback
 
     -- Quantidade
     local qLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     qLabel:SetPoint("TOPLEFT", cFeedback, "BOTTOMLEFT", -2, -10)
-    qLabel:SetText("|cffffd200Quantidade:|r")
+    qLabel:SetText(curL["PROF_MODAL_QTY_LABEL"] or "|cffffd200Quantidade:|r")
+    self._modalQtyLabel = qLabel
 
     local qBox = CreateFrame("EditBox", nil, modal, template)
     qBox:SetPoint("TOPLEFT", qLabel, "BOTTOMLEFT", 0, -4)
@@ -3067,7 +3186,8 @@ function ProfessionView:createOrderModal()
     -- Comissão / Gorjeta em Ouro
     local tipLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     tipLabel:SetPoint("LEFT", qLabel, "RIGHT", 80, 0)
-    tipLabel:SetText("|cffffd200Gorjeta / Comissão (Ouro):|r")
+    tipLabel:SetText(curL["PROF_MODAL_TIP_LABEL"] or "|cffffd200Gorjeta / Comissão (Ouro):|r")
+    self._modalTipLabel = tipLabel
 
     local tipBox = CreateFrame("EditBox", nil, modal, template)
     tipBox:SetPoint("TOPLEFT", tipLabel, "BOTTOMLEFT", 0, -4)
@@ -3086,7 +3206,8 @@ function ProfessionView:createOrderModal()
     -- Observações
     local nLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     nLabel:SetPoint("TOPLEFT", qBox, "BOTTOMLEFT", 0, -12)
-    nLabel:SetText("|cffffd200Observações (ex: levo todos os materiais):|r")
+    nLabel:SetText(curL["PROF_MODAL_NOTES_LABEL"] or "|cffffd200Observações (ex: levo todos os materiais):|r")
+    self._modalNotesLabel = nLabel
 
     local nBox = CreateFrame("EditBox", nil, modal, template)
     nBox:SetPoint("TOPLEFT", nLabel, "BOTTOMLEFT", 0, -4)
@@ -3112,6 +3233,7 @@ function ProfessionView:createOrderModal()
     local cTxt = confirmBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cTxt:SetPoint("CENTER", confirmBtn, "CENTER", 0, 0)
     cTxt:SetText(curL["ORDER_MODAL_CONFIRM"] or "Confirmar Pedido")
+    self._modalConfirmTxt = cTxt
     confirmBtn:SetScript("OnClick", function()
         self:submitOrder()
     end)
@@ -3124,6 +3246,7 @@ function ProfessionView:createOrderModal()
     local canTxt = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     canTxt:SetPoint("CENTER", cancelBtn, "CENTER", 0, 0)
     canTxt:SetText(curL["CANCEL"] or "Cancelar")
+    self._modalCancelTxt = canTxt
     cancelBtn:SetScript("OnClick", function()
         if self._modalSuggestFrame then self._modalSuggestFrame:Hide() end
         modal:Hide()
@@ -3292,7 +3415,8 @@ function ProfessionView:openOrderModal(recipe, targetCrafter)
         self._modalTipBox:SetText("0")
     end
     if self._modalNotesBox then
-        self._modalNotesBox:SetText("Trago os materiais.")
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        self._modalNotesBox:SetText(curL["PROF_MODAL_DEFAULT_NOTES"] or "Trago os materiais.")
     end
 
     self._orderModal:Show()

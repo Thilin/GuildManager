@@ -202,7 +202,31 @@ end
 --- Obtém o tempo desde a última vez que o membro esteve online.
 ---@return string
 function Member:getLastOnline()
-    return self._lastOnline or ""
+    local raw = self._lastOnline or ""
+    if raw == "" then return "" end
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+    if isEn then
+        if raw == "< 1 hora" then return "< 1 hr" end
+        local d = raw:match("^(%d+)%s+d%s+atr")
+        if d then return d .. " d ago" end
+        local h = raw:match("^(%d+)%s+h%s+atr")
+        if h then return h .. " h ago" end
+        local m = raw:match("^(%d+)%s+m[êe]s")
+        if m then return m .. (tonumber(m) == 1 and " mo ago" or " mos ago") end
+        local y = raw:match("^(%d+)%s+ano")
+        if y then return y .. (tonumber(y) == 1 and " yr ago" or " yrs ago") end
+    else
+        if raw == "< 1 hr" then return "< 1 hora" end
+        local d = raw:match("^(%d+)%s+d%s+ago")
+        if d then return d .. " d atrás" end
+        local h = raw:match("^(%d+)%s+h%s+ago")
+        if h then return h .. " h atrás" end
+        local m = raw:match("^(%d+)%s+mos?%s+ago")
+        if m then return m .. (tonumber(m) == 1 and " mês atrás" or " meses atrás") end
+        local y = raw:match("^(%d+)%s+yrs?%s+ago")
+        if y then return y .. (tonumber(y) == 1 and " ano atrás" or " anos atrás") end
+    end
+    return raw
 end
 
 --- Define o tempo desde a última vez que o membro esteve online.

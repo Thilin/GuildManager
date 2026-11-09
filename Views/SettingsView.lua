@@ -1339,7 +1339,7 @@ function SettingsView:updateLocale()
     if self._widgets.s1Header then self._widgets.s1Header:SetText(curL["SETTINGS_S1_HEADER"]) end
     if self._widgets.tabDefLabel then self._widgets.tabDefLabel:SetText(curL["SETTINGS_DEFAULT_TAB_LABEL"]) end
     if self._widgets.tabButtons then
-        local tabKeys = { audit = "TAB_AUDIT", logs = "TAB_LOGS", groups = "TAB_GROUPS", agenda = "TAB_AGENDA", settings = "TAB_SETTINGS" }
+        local tabKeys = { audit = "TAB_AUDIT", logs = "TAB_LOGS", groups = "TAB_GROUPS", agenda = "TAB_AGENDA", professions = "TAB_PROFESSIONS", settings = "TAB_SETTINGS" }
         for id, btn in pairs(self._widgets.tabButtons) do
             if tabKeys[id] and btn.txt then btn.txt:SetText(curL[tabKeys[id]] or id) end
         end

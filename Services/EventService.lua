@@ -167,7 +167,8 @@ function EventService:ensureCacheValid()
     local settingsService = _G.GM and _G.GM.settingsService
     local promoEnabled = (settingsService and settingsService:get("enableJoinDatePromotions") == true) and "1" or "0"
     local lookahead = (settingsService and settingsService:get("birthdayLookaheadDays")) or 30
-    local stateKey = string.format("%d:%s:%s", repoRev, promoEnabled, tostring(lookahead))
+    local curLoc = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale()) or "enUS"
+    local stateKey = string.format("%d:%s:%s:%s", repoRev, promoEnabled, tostring(lookahead), curLoc)
 
     if self._cacheStateKey ~= stateKey or (now > 0 and now >= self._cacheExpiresAt) then
         self._monthBirthdaysCache = {}
@@ -243,14 +244,15 @@ end
 ---@param creator string|nil
 ---@return Event|nil event, string|nil errorMessage
 function EventService:createEvent(title, eventType, dateStr, timeStr, description, creator)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not title or title:match("^%s*$") then
-        return nil, "O título do evento é obrigatório."
+        return nil, curL["EVENT_ERR_TITLE_REQ"]
     end
 
     local cleanTitle = title:match("^%s*(.-)%s*$")
     local formattedDate = self:parseEventDate(dateStr)
     if not formattedDate then
-        return nil, "Data inválida. Use o formato DD/MM/AAAA ou MM/dd (ex: 15/10/2026)."
+        return nil, curL["EVENT_ERR_INVALID_DATE"]
     end
 
     local cleanTime = (timeStr and timeStr:match("^%s*(.-)%s*$")) or "20:00"
@@ -274,7 +276,7 @@ function EventService:createEvent(title, eventType, dateStr, timeStr, descriptio
     if ok then
         return event, nil
     end
-    return nil, "Falha ao salvar evento no banco de dados."
+    return nil, curL["EVENT_ERR_NOT_FOUND"]
 end
 
 --- Atualiza as informações de um evento existente.
@@ -286,23 +288,24 @@ end
 ---@param description string|nil
 ---@return Event|nil event, string|nil errorMessage
 function EventService:updateEvent(id, title, eventType, dateStr, timeStr, description)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not id or id == "" then
-        return nil, "ID do evento inválido."
+        return nil, curL["EVENT_ERR_NOT_FOUND"]
     end
 
     local event = self._eventRepository:findById(id)
     if not event then
-        return nil, "Evento não encontrado."
+        return nil, curL["EVENT_ERR_NOT_FOUND"]
     end
 
     if not title or title:match("^%s*$") then
-        return nil, "O título do evento é obrigatório."
+        return nil, curL["EVENT_ERR_TITLE_REQ"]
     end
 
     local cleanTitle = title:match("^%s*(.-)%s*$")
     local formattedDate = self:parseEventDate(dateStr)
     if not formattedDate then
-        return nil, "Data inválida. Use o formato DD/MM/AAAA ou MM/dd."
+        return nil, curL["EVENT_ERR_INVALID_DATE"]
     end
 
     local cleanTime = (timeStr and timeStr:match("^%s*(.-)%s*$")) or "20:00"
@@ -388,18 +391,19 @@ end
 ---@param memberName string
 ---@return boolean success, string|nil errorMessage
 function EventService:addInvitee(eventId, memberName)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local event = self._eventRepository:findById(eventId)
     if not event then
-        return false, "Evento não encontrado."
+        return false, curL["EVENT_ERR_NOT_FOUND"]
     end
 
     local cleanName = memberName and (memberName:match("^[^-]+") or memberName):match("^%s*(.-)%s*$")
     if not cleanName or cleanName == "" then
-        return false, "Nome do membro inválido."
+        return false, curL["EVENT_ERR_NAME_INVALID"]
     end
 
     if event:hasInvitee(cleanName) then
-        return false, string.format("%s já está convidado para este evento.", cleanName)
+        return false, curL["EVENT_ERR_ALREADY_INVITED"]
     end
 
     -- Busca detalhes do membro para enriquecer o card
@@ -588,20 +592,21 @@ function EventService:getUpcomingBirthdays(maxDays)
                 end
 
                 if not lookahead or lookahead <= 0 or daysUntil <= lookahead then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                     local daysText = ""
                     if daysUntil == 0 then
-                        daysText = "|cff00ff00Hoje!|r"
+                        daysText = "|cff00ff00" .. (curL["EVENT_DAYS_TODAY"] or "Today!") .. "|r"
                     elseif daysUntil == 1 then
-                        daysText = "|cffffff00Amanhã!|r"
+                        daysText = "|cffffff00" .. (curL["EVENT_DAYS_TOMORROW"] or "Tomorrow!") .. "|r"
                     elseif daysUntil <= 7 then
-                        daysText = string.format("|cffffff00Em %d dias|r", daysUntil)
+                        daysText = "|cffffff00" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", daysUntil) .. "|r"
                     elseif daysUntil <= 30 then
-                        daysText = string.format("|cffaaaaaaEm %d dias|r", daysUntil)
+                        daysText = "|cffaaaaaa" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", daysUntil) .. "|r"
                     else
-                        daysText = string.format("|cff777777Em %d dias|r", daysUntil)
+                        daysText = "|cff777777" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", daysUntil) .. "|r"
                     end
 
-                    local rawName = m:getName() or "Membro"
+                    local rawName = m:getName() or (curL["MEMBER_DEFAULT_RANK"] or "Member")
                     local cleanName = (m.getCleanName and m:getCleanName()) or rawName:match("^[^-]+") or rawName
 
                     table.insert(result, {
@@ -638,27 +643,28 @@ end
 ---@param member Member
 ---@return Event|nil event, string|nil errorMessage
 function EventService:createBirthdayEventForMember(member)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not member or type(member.getName) ~= "function" then
-        return nil, "Membro inválido."
+        return nil, curL["EVENT_ERR_INVALID_MEMBER"]
     end
 
     if type(member.isInGuild) == "function" and not member:isInGuild() then
-        return nil, "Este jogador não pertence mais à guilda."
+        return nil, curL["EVENT_ERR_INVALID_MEMBER"]
     end
 
     local bday = member:getBirthday()
     if not bday or bday == "" then
-        return nil, "Este membro não possui data de aniversário cadastrada."
+        return nil, curL["EVENT_ERR_NO_BDAY"]
     end
 
     local cleanName = (member:getName():match("^[^-]+") or member:getName()):match("^%s*(.-)%s*$")
     local formattedDate, m, d, y = self:parseEventDate(bday)
     if not formattedDate then
-        return nil, "Formato de aniversário inválido no cadastro do membro."
+        return nil, curL["EVENT_ERR_BDAY_FMT"]
     end
 
-    local title = string.format("Aniversário de %s", cleanName)
-    local desc = string.format("Festa de comemoração do aniversário de %s! Venha celebrar com a guilda.", cleanName)
+    local title = string.format(curL["EVENT_BDAY_AUTO_TITLE"] or "%s's Birthday", cleanName)
+    local desc = string.format(curL["EVENT_BDAY_AUTO_DESC"] or "Birthday celebration for %s!", cleanName)
 
     local event, err = self:createEvent(title, EventType.ANIVERSARIO, formattedDate, "20:00", desc)
     if not event then
@@ -765,15 +771,16 @@ function EventService:getUpcomingEvents(lookaheadDays)
 
             if daysUntil >= 0 then
                 if not lookahead or lookahead <= 0 or daysUntil <= lookahead then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                     local daysText = ""
                     if daysUntil == 0 then
-                        daysText = "|cff00ff00Hoje!|r"
+                        daysText = "|cff00ff00" .. (curL["EVENT_DAYS_TODAY"] or "Today!") .. "|r"
                     elseif daysUntil == 1 then
-                        daysText = "|cffffff00Amanhã!|r"
+                        daysText = "|cffffff00" .. (curL["EVENT_DAYS_TOMORROW"] or "Tomorrow!") .. "|r"
                     elseif daysUntil <= 7 then
-                        daysText = string.format("|cffffff00Em %d dias|r", daysUntil)
+                        daysText = "|cffffff00" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", daysUntil) .. "|r"
                     else
-                        daysText = string.format("|cffaaaaaaEm %d dias|r", daysUntil)
+                        daysText = "|cffaaaaaa" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", daysUntil) .. "|r"
                     end
 
                     table.insert(results, {
@@ -901,8 +908,9 @@ function EventService:getUpcomingPromotions(lookaheadDays)
                     end
                 end
 
+                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                 local promoItem = nil
-                local rawName = m:getName() or "Membro"
+                local rawName = m:getName() or (curL["MEMBER_DEFAULT_RANK"] or "Member")
                 local cleanName = (m.getCleanName and m:getCleanName()) or rawName:match("^[^-]+") or rawName
 
                 if eligiblePromotion then
@@ -921,16 +929,16 @@ function EventService:getUpcomingPromotions(lookaheadDays)
                         requiredDays = eligiblePromotion.requiredDays,
                         daysUntil = 0,
                         isEligibleNow = true,
-                        daysText = "|cff00ff00Elegível Hoje!|r",
+                        daysText = "|cff00ff00" .. (curL["EVENT_PROMO_ELIGIBLE_TODAY"] or "Eligible Today!") .. "|r",
                     }
                 elseif nextUpcomingPromotion and (not lookahead or lookahead <= 0 or nextUpcomingPromotion.daysUntil <= lookahead) then
                     local dText = ""
                     if nextUpcomingPromotion.daysUntil == 1 then
-                        dText = "|cffffff00Amanhã!|r"
+                        dText = "|cffffff00" .. (curL["EVENT_DAYS_TOMORROW"] or "Tomorrow!") .. "|r"
                     elseif nextUpcomingPromotion.daysUntil <= 7 then
-                        dText = string.format("|cffffff00Em %d dias|r", nextUpcomingPromotion.daysUntil)
+                        dText = "|cffffff00" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", nextUpcomingPromotion.daysUntil) .. "|r"
                     else
-                        dText = string.format("|cffaaaaaaEm %d dias|r", nextUpcomingPromotion.daysUntil)
+                        dText = "|cffaaaaaa" .. string.format(curL["EVENT_DAYS_IN_X"] or "In %d days", nextUpcomingPromotion.daysUntil) .. "|r"
                     end
 
                     promoItem = {

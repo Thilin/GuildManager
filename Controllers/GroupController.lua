@@ -37,6 +37,7 @@ function GroupController:initHooks()
     -- Callback de criação de grupo
     if self._groupView.setOnCreateGroupCallback then
         self._groupView:setOnCreateGroupCallback(function(name, groupType, leaderName, leaderRole, note)
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
             local canOfficer = false
             if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
                 canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
@@ -47,10 +48,10 @@ function GroupController:initHooks()
             end
 
             if not canOfficer then
-                return false, "Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos."
+                return false, curL["GROUP_ERR_OFFICER_ONLY"] or "Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos."
             end
 
-            if not self._groupService then return false, "Serviço de grupos indisponível." end
+            if not self._groupService then return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível." end
             local group, err = self._groupService:createGroup(name, groupType, leaderName, leaderRole, note)
             if group then
                 self:refreshGroups()
@@ -63,6 +64,7 @@ function GroupController:initHooks()
     -- Callback de exclusão de grupo
     if self._groupView.setOnDeleteGroupCallback then
         self._groupView:setOnDeleteGroupCallback(function(groupId)
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
             local canOfficer = false
             if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
                 canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
@@ -73,7 +75,7 @@ function GroupController:initHooks()
             end
 
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda têm permissão para excluir grupos.")
+                print("|cffff4444[GuildManager]|r " .. (curL["GROUP_ERR_OFFICER_ONLY"] or "Apenas Oficiais ou o Líder da Guilda têm permissão para excluir grupos."))
                 return
             end
 
@@ -86,7 +88,8 @@ function GroupController:initHooks()
     -- Callback de adição de membro
     if self._groupView.setOnAddMemberCallback then
         self._groupView:setOnAddMemberCallback(function(groupId, memberName, role)
-            if not self._groupService then return false, "Serviço de grupos indisponível." end
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            if not self._groupService then return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível." end
             local ok, err = self._groupService:addMemberToGroup(groupId, memberName, role)
             if ok then
                 self:refreshGroups()
@@ -126,7 +129,8 @@ function GroupController:initHooks()
     -- Callback de atualização de detalhes do grupo (nome, nota, líder)
     if self._groupView.setOnUpdateGroupDetailsCallback then
         self._groupView:setOnUpdateGroupDetailsCallback(function(groupId, name, note, leaderName)
-            if not self._groupService then return false, "Serviço de grupos indisponível." end
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            if not self._groupService then return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível." end
             local ok, err = self._groupService:updateGroupDetails(groupId, name, note, leaderName)
             if ok then
                 self:refreshGroups()
@@ -139,12 +143,13 @@ function GroupController:initHooks()
     -- Callback de convite para party/raid no WoW
     if self._groupView.setOnInviteGroupCallback then
         self._groupView:setOnInviteGroupCallback(function(groupId)
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
             if not self._groupService then return end
             local count = self._groupService:inviteGroupToParty(groupId)
             if count and count > 0 then
-                print(string.format("|cff00ff00[GuildManager]|r Enviando convite para %d membro(s) do grupo.", count))
+                print(string.format("|cff00ff00[GuildManager]|r " .. (curL["GROUP_CTRL_INVITING_MSG"] or "Sending party invites to %d group member(s)."), count))
             else
-                print("|cffff8800[GuildManager]|r Nenhum membro para convidar no momento (você pode ser o único membro do grupo).")
+                print("|cffff8800[GuildManager]|r " .. (curL["GROUP_CTRL_NO_INVITE_MSG"] or "No members to invite at this time (you may be the only group member)."))
             end
         end)
     end
@@ -206,7 +211,8 @@ end
 --- Abre a janela de gerenciamento de grupos.
 function GroupController:show()
     if not IsInGuild or not IsInGuild() then
-        print("|cffff0000[GuildManager]|r Você não está em uma guilda.")
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        print("|cffff0000[GuildManager]|r " .. (curL["NOT_IN_GUILD"] or "You are not in a guild."))
         return
     end
 

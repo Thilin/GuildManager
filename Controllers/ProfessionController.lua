@@ -45,10 +45,11 @@ function ProfessionController:initHooks()
         local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
         if arg == "scan" then
             if service and service.scanPlayerSkills then
+                local cL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
                 local count = service:scanPlayerSkills()
                 service:scanTradeSkillFrame()
                 service:scanCraftFrame()
-                print(string.format("|cff00ff00[GuildManager]|r Escaneamento concluído! %d profissões detectadas.", count))
+                print(string.format("|cff00ff00[GuildManager]|r " .. (cL["PROF_SCAN_DONE_MSG"] or "Escaneamento concluído! %d profissão(ões) detectada(s)."), count))
             end
         else
             self:toggle()

@@ -1027,6 +1027,147 @@ function ProfessionData.getQualityName(quality)
     return isPt and "Comum" or "Common"
 end
 
+--- Retorna o nome localizado da profissão conforme o idioma configurado no AddOn
+---@param profKey string
+---@return string
+function ProfessionData.getProfessionName(profKey)
+    local prof = ProfessionData.Professions[profKey]
+    if not prof then return profKey or "" end
+    local isPt = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "ptBR")
+    if isPt then
+        return prof.name or prof.nameEn or profKey
+    else
+        return prof.nameEn or prof.name or profKey
+    end
+end
+
+--- Retorna a descrição localizada da profissão conforme o idioma configurado no AddOn
+---@param profKey string
+---@return string
+function ProfessionData.getProfessionDescription(profKey)
+    local prof = ProfessionData.Professions[profKey]
+    if not prof then return "" end
+    local isPt = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "ptBR")
+    if isPt then
+        return prof.description or prof.descriptionEn or ""
+    else
+        return prof.descriptionEn or prof.description or ""
+    end
+end
+
+local STAT_PT_TO_EN_REPLACEMENTS = {
+    { "Peito %(Placa%)", "Chest (Plate)" },
+    { "Cabeça %(Placa%)", "Head (Plate)" },
+    { "Mãos %(Placa%)", "Hands (Plate)" },
+    { "Pés %(Placa%)", "Feet (Plate)" },
+    { "Pernas %(Placa%)", "Legs (Plate)" },
+    { "Ombros %(Placa%)", "Shoulder (Plate)" },
+    { "Pulso %(Placa%)", "Wrist (Plate)" },
+    { "Cintura %(Placa%)", "Waist (Plate)" },
+    { "Peito %(Malha%)", "Chest (Mail)" },
+    { "Cabeça %(Malha%)", "Head (Mail)" },
+    { "Mãos %(Malha%)", "Hands (Mail)" },
+    { "Pés %(Malha%)", "Feet (Mail)" },
+    { "Pernas %(Malha%)", "Legs (Mail)" },
+    { "Cintura %(Malha%)", "Waist (Mail)" },
+    { "Peito %(Couro%)", "Chest (Leather)" },
+    { "Cabeça %(Couro%)", "Head (Leather)" },
+    { "Mãos %(Couro%)", "Hands (Leather)" },
+    { "Pés %(Couro%)", "Feet (Leather)" },
+    { "Pernas %(Couro%)", "Legs (Leather)" },
+    { "Ombros %(Couro%)", "Shoulder (Leather)" },
+    { "Cintura %(Couro%)", "Waist (Leather)" },
+    { "Peito %(Tecido%)", "Chest (Cloth)" },
+    { "Cabeça %(Tecido%)", "Head (Cloth)" },
+    { "Mãos %(Tecido%)", "Hands (Cloth)" },
+    { "Pés %(Tecido%)", "Feet (Cloth)" },
+    { "Pernas %(Tecido%)", "Legs (Cloth)" },
+    { "Ombros %(Tecido%)", "Shoulder (Cloth)" },
+    { "Pulso %(Tecido%)", "Wrist (Cloth)" },
+    { "Cintura %(Tecido%)", "Waist (Cloth)" },
+    { "Costas %(Manto%)", "Back (Cloak)" },
+    { "Mão Secundária %(Escudo%)", "Off Hand (Shield)" },
+    { "Duas Mãos %(Espada%)", "Two-Hand (Sword)" },
+    { "Duas Mãos %(Machado%)", "Two-Hand (Axe)" },
+    { "Duas Mãos %(Maça%)", "Two-Hand (Mace)" },
+    { "Uma Mão %(Maça%)", "One-Hand (Mace)" },
+    { "Uma Mão %(Espada%)", "One-Hand (Sword)" },
+    { "Uma Mão %(Adaga%)", "One-Hand (Dagger)" },
+    { "Mão Principal %(Adaga%)", "Main Hand (Dagger)" },
+    { "Bolsa de (%d+) espaços", "%1 Slot Bag" },
+    { "Bolsa de Alma de (%d+) espaços", "%1 Slot Soul Bag" },
+    { "Bolsa de Encantamento de (%d+) espaços", "%1 Slot Enchanting Bag" },
+    { "Bolsa de Herborismo de (%d+) espaços", "%1 Slot Herb Bag" },
+    { "Aljava de (%d+) espaços", "%1 Slot Quiver" },
+    { "Bornal de Munição de (%d+) espaços", "%1 Slot Ammo Pouch" },
+    { "Berloque", "Trinket" },
+    { "Consumível %(Elixir%)", "Consumable (Elixir)" },
+    { "Consumível %(Poção%)", "Consumable (Potion)" },
+    { "Consumível %(Frasco%)", "Consumable (Flask)" },
+    { "Consumível %(Comida%)", "Consumable (Food)" },
+    { "Consumível %(Bandagem%)", "Consumable (Bandage)" },
+    { "Consumível %(Antiveneno%)", "Consumable (Anti-Venom)" },
+    { "Reagente / Transmutação", "Reagent / Transmutation" },
+    { "Encantamento Permanente", "Permanent Enchantment" },
+    { "Óleo Temporário", "Temporary Weapon Oil" },
+    { "Dispositivo de Engenharia", "Engineering Device" },
+    { "Munição %(Projétil%)", "Projectile (Bullet)" },
+    { "Munição %(Flecha%)", "Projectile (Arrow)" },
+    { "Reagente de Ferraria", "Blacksmithing Reagent" },
+    { "Modificação de Arma", "Weapon Modification" },
+    { "Modificação de Escudo", "Shield Modification" },
+    { "Chave de Serralheria", "Skeleton Key" },
+    { "Vara de Encantamento", "Enchanting Rod" },
+    { "Reforço de Armadura", "Armor Kit" },
+    { "Força", "Strength" },
+    { "Vigor", "Stamina" },
+    { "Agilidade", "Agility" },
+    { "Intelecto", "Intellect" },
+    { "Espírito", "Spirit" },
+    { "Resistência ao Fogo", "Fire Resistance" },
+    { "Resistência ao Gelo", "Frost Resistance" },
+    { "Resistência à Natureza", "Nature Resistance" },
+    { "Resistência à Sombra", "Shadow Resistance" },
+    { "Resistência ao Arcano", "Arcane Resistance" },
+    { "Equipado:", "Equip:" },
+    { "Uso:", "Use:" },
+    { "Chance ao acertar:", "Chance on hit:" },
+    { "Aumenta em (%d+)%% a sua chance de acerto crítico", "Improves your critical strike chance by %1%%" },
+    { "Aumenta em (%d+)%% a sua chance de acertar", "Improves your chance to hit by %1%%" },
+    { "Aumenta em (%d+)%% a sua chance de esquiva", "Increases your chance to dodge by %1%%" },
+    { "Aumenta em (%d+) a perícia em Defesa", "Increased Defense +%1" },
+    { "Aumenta em (%d+) o Poder de Ataque", "+%1 Attack Power" },
+    { "Aumenta em até (%d+) o dano e a cura de feitiços e efeitos mágicos", "Increases damage and healing done by magical spells and effects by up to %1" },
+    { "Aumenta em até (%d+) a cura realizada por feitiços e efeitos", "Increases healing done by spells and effects by up to %1" },
+    { "Aumenta em até (%d+) o dano causado por feitiços e efeitos de Sombra", "Increases damage done by Shadow spells and effects by up to %1" },
+    { "Aumenta em até (%d+) o dano causado por feitiços e efeitos de Gelo", "Increases damage done by Frost spells and effects by up to %1" },
+    { "Aumenta em até (%d+) o dano causado por feitiços e efeitos de Fogo", "Increases damage done by Fire spells and effects by up to %1" },
+    { "Restaura (%d+) de mana a cada 5 s", "Restores %1 mana per 5 sec" },
+    { "Restaura (%d+) de vida a cada 5 s", "Restores %1 health per 5 sec" },
+}
+
+local function translateStatText(text)
+    if not text or type(text) ~= "string" then return text end
+    local isPt = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "ptBR")
+    if isPt then return text end
+    local out = text
+    for _, pair in ipairs(STAT_PT_TO_EN_REPLACEMENTS) do
+        out = out:gsub(pair[1], pair[2])
+    end
+    return out
+end
+
+local function translateStatList(list)
+    if not list or type(list) ~= "table" then return list end
+    local isPt = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "ptBR")
+    if isPt then return list end
+    local out = {}
+    for i, v in ipairs(list) do
+        out[i] = translateStatText(v)
+    end
+    return out
+end
+
 --- Cache em memória para dados de itens mesclados (estáticos + GetItemInfo)
 local _itemDataCache = {}
 
@@ -1041,7 +1182,8 @@ end
 ---@return table
 function ProfessionData.getItemData(recipe)
     if not recipe then return nil end
-    local cacheKey = recipe.itemId or recipe.id
+    local curLoc = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale()) or "enUS"
+    local cacheKey = tostring(recipe.itemId or recipe.id) .. "_" .. curLoc
     if _itemDataCache[cacheKey] then
         return _itemDataCache[cacheKey]
     end
@@ -1051,19 +1193,21 @@ function ProfessionData.getItemData(recipe)
     local name = ProfessionData.getRecipeDisplayName(recipe)
     local itemLevel = recipe.stats and recipe.stats.itemLevel
     local reqLevel = recipe.stats and recipe.stats.reqLevel
-    local itemSlot = recipe.stats and recipe.stats.slot
-    local itemDesc = recipe.stats and recipe.stats.desc
+    local itemSlot = translateStatText(recipe.stats and recipe.stats.slot)
+    local itemDesc = translateStatText(recipe.stats and recipe.stats.desc)
 
     -- Consulta a WoW API se houver itemId disponível e a função existir
     if recipe.itemId and _G.GetItemInfo then
         local iName, iLink, iQuality, iLevel, iReqLevel, iClass, iSubClass, iMaxStack, iEquipLoc, iTexture = _G.GetItemInfo(recipe.itemId)
         if iName then
-            name = iName
+            if not (recipe.name and recipe.namePT) then
+                name = iName
+            end
             if iQuality and iQuality > 0 then quality = iQuality end
             if iLevel and iLevel > 0 then itemLevel = iLevel end
             if iReqLevel and iReqLevel > 0 then reqLevel = iReqLevel end
             if iTexture and iTexture ~= "" then icon = iTexture end
-            if iEquipLoc and iEquipLoc ~= "" and _G[iEquipLoc] then
+            if not itemSlot and iEquipLoc and iEquipLoc ~= "" and _G[iEquipLoc] then
                 itemSlot = _G[iEquipLoc]
             end
         end
@@ -1084,10 +1228,10 @@ function ProfessionData.getItemData(recipe)
         reqLevel = reqLevel,
         slot = itemSlot,
         armor = recipe.stats and recipe.stats.armor,
-        attrs = recipe.stats and recipe.stats.attrs,
-        effects = recipe.stats and recipe.stats.effects,
+        attrs = translateStatList(recipe.stats and recipe.stats.attrs),
+        effects = translateStatList(recipe.stats and recipe.stats.effects),
         desc = itemDesc,
-        flavor = recipe.stats and recipe.stats.flavor,
+        flavor = translateStatText(recipe.stats and recipe.stats.flavor),
         source = recipe.source or (recipe.stats and recipe.stats.source) or "trainer",
     }
 

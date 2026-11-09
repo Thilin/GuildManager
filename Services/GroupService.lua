@@ -89,18 +89,19 @@ end
 ---@param note string|nil @Nota / Horário opcional
 ---@return Group|nil, string|nil @grupoCriado, mensagemErro
 function GroupService:createGroup(name, groupType, leaderName, leaderRole, note)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not name or name:match("^%s*$") then
-        return nil, "O nome do grupo não pode ser vazio."
+        return nil, curL["GROUP_SVC_ERR_EMPTY_NAME"] or "O nome do grupo não pode ser vazio."
     end
 
     if not leaderName or leaderName:match("^%s*$") then
-        return nil, "Cada grupo precisa obrigatoriamente ter um líder da guilda."
+        return nil, curL["GROUP_SVC_ERR_NO_LEADER"] or "Cada grupo precisa obrigatoriamente ter um líder da guilda."
     end
 
     groupType = groupType or GroupType.DUNGEON
     if groupType == GroupType.DUNGEON or groupType == GroupType.RAID then
         if not leaderRole or leaderRole == GroupRole.NONE or (leaderRole ~= GroupRole.TANK and leaderRole ~= GroupRole.HEALER and leaderRole ~= GroupRole.DPS) then
-            return nil, "Para grupos de masmorra e raide, a função do líder deve ser definida (Tank, Curador ou Dano)."
+            return nil, curL["GROUP_SVC_ERR_LEADER_ROLE"] or "Para grupos de masmorra e raide, a função do líder deve ser definida (Tank, Curador ou Dano)."
         end
     else
         leaderRole = leaderRole or GroupRole.NONE
@@ -122,7 +123,7 @@ function GroupService:createGroup(name, groupType, leaderName, leaderRole, note)
 
     local saved = self._groupRepository:save(group)
     if not saved then
-        return nil, "Falha ao persistir o grupo no banco de dados."
+        return nil, curL["GROUP_SVC_ERR_SAVE"] or "Falha ao persistir o grupo no banco de dados."
     end
 
     return group, nil
@@ -142,24 +143,25 @@ end
 ---@param role GroupRole|nil
 ---@return boolean, string|nil
 function GroupService:addMemberToGroup(groupId, memberName, role)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not groupId or not memberName or memberName:match("^%s*$") then
-        return false, "Dados inválidos."
+        return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos."
     end
 
     local group = self._groupRepository:findById(groupId)
     if not group then
-        return false, "Grupo não encontrado."
+        return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado."
     end
 
     local cleanName = memberName:match("^%s*(.-)%s*$")
     if group:hasMember(cleanName) then
-        return false, "Este membro já faz parte do grupo."
+        return false, curL["GROUP_SVC_ERR_ALREADY_IN"] or "Este membro já faz parte do grupo."
     end
 
     local gType = group:getType()
     if gType == GroupType.DUNGEON or gType == GroupType.RAID then
         if not role or role == GroupRole.NONE or (role ~= GroupRole.TANK and role ~= GroupRole.HEALER and role ~= GroupRole.DPS) then
-            return false, "Defina a função do membro no grupo (Tank, Curador ou Dano)."
+            return false, curL["GROUP_SVC_ERR_MEMBER_ROLE"] or "Defina a função do membro no grupo (Tank, Curador ou Dano)."
         end
     else
         role = role or GroupRole.NONE
@@ -169,7 +171,7 @@ function GroupService:addMemberToGroup(groupId, memberName, role)
     group:addMember(cleanName, role, classToken, level)
 
     local ok = self._groupRepository:save(group)
-    return ok, ok and nil or "Erro ao salvar alterações no grupo."
+    return ok, ok and nil or (curL["GROUP_SVC_ERR_SAVE"] or "Erro ao salvar alterações no grupo.")
 end
 
 --- Remove um membro do grupo.
@@ -177,14 +179,15 @@ end
 ---@param memberName string
 ---@return boolean, string|nil
 function GroupService:removeMemberFromGroup(groupId, memberName)
-    if not groupId or not memberName then return false, "Dados inválidos." end
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not memberName then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
 
     local group = self._groupRepository:findById(groupId)
-    if not group then return false, "Grupo não encontrado." end
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
 
     local removed, wasLeader = group:removeMember(memberName)
     if not removed then
-        return false, "Membro não encontrado no grupo."
+        return false, curL["GROUP_SVC_ERR_MEMBER_NOT_IN"] or "Membro não encontrado no grupo."
     end
 
     self._groupRepository:save(group)
@@ -196,13 +199,14 @@ end
 ---@param newLeaderName string
 ---@return boolean, string|nil
 function GroupService:setGroupLeader(groupId, newLeaderName)
-    if not groupId or not newLeaderName then return false, "Dados inválidos." end
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not newLeaderName then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
 
     local group = self._groupRepository:findById(groupId)
-    if not group then return false, "Grupo não encontrado." end
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
 
     if not group:hasMember(newLeaderName) then
-        return false, "O líder deve ser um membro pertencente ao grupo."
+        return false, curL["GROUP_SVC_ERR_LEADER_MUST_IN"] or "O líder deve ser um membro pertencente ao grupo."
     end
 
     group:setLeader(newLeaderName)
@@ -216,17 +220,18 @@ end
 ---@param role GroupRole
 ---@return boolean, string|nil
 function GroupService:setMemberRole(groupId, memberName, role)
-    if not groupId or not memberName or not role then return false, "Dados inválidos." end
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not memberName or not role then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
 
     local group = self._groupRepository:findById(groupId)
-    if not group then return false, "Grupo não encontrado." end
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
 
     local ok = group:setMemberRole(memberName, role)
     if ok then
         self._groupRepository:save(group)
         return true, nil
     end
-    return false, "Função inválida."
+    return false, curL["GROUP_SVC_ERR_INVALID_ROLE"] or "Função inválida."
 end
 
 --- Atualiza informações básicas do grupo (nome, nota/horário e líder).
@@ -236,8 +241,9 @@ end
 ---@param leaderName string|nil
 ---@return boolean, string|nil
 function GroupService:updateGroupDetails(groupId, name, note, leaderName)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local group = self._groupRepository:findById(groupId)
-    if not group then return false, "Grupo não encontrado." end
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
 
     if name and not name:match("^%s*$") then
         group:setName(name:match("^%s*(.-)%s*$"))
@@ -271,7 +277,7 @@ function GroupService:updateGroupDetails(groupId, name, note, leaderName)
     end
 
     local ok = self._groupRepository:save(group)
-    return ok, ok and nil or "Erro ao salvar alterações do grupo."
+    return ok, ok and nil or (curL["GROUP_SVC_ERR_SAVE"] or "Erro ao salvar alterações do grupo.")
 end
 
 --- Busca um grupo pelo ID.

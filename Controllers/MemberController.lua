@@ -350,7 +350,8 @@ function MemberController:initHooks()
 
         if IsInGuild and IsInGuild() then
             local count = self._guildRosterService:scanRoster()
-            print(string.format("|cff00ff00[GuildManager]|r Roster sincronizado! %d membro(s) no banco.", count))
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            print(string.format(curL["MEMBER_ROSTER_SYNCED_FMT"] or "|cff00ff00[GuildManager]|r Roster synchronized! %d member(s) in database.", count))
 
             -- Tenta abrir a interface de guilda apropriada
             if CommunitiesFrame and ToggleCommunitiesFrame then
@@ -359,7 +360,8 @@ function MemberController:initHooks()
                 ToggleFriendsFrame(3)
             end
         else
-            print("|cffff0000[GuildManager]|r Você não está em uma guilda.")
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            print("|cffff0000[GuildManager]|r " .. (curL["NOT_IN_GUILD"] or "You are not in a guild."))
         end
     end
 end
@@ -1600,16 +1602,17 @@ function MemberController:handleGuildJoin(newMemberName)
     end
 
     -- 4. Notificação no chat com destaque visual
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if isReturning then
         if recruiter ~= "" then
-            print(string.format("|cff00ff00[GuildManager]|r Ex-membro retornou à guilda: |cffffff00%s|r (Recrutador: |cff00bfff%s|r)", cleanName, recruiter))
+            print(string.format(curL["MEMBER_REJOIN_REC_FMT"] or "|cff00ff00[GuildManager]|r Former member returned to the guild: |cffffff00%s|r (Recruiter: |cff00bfff%s|r)", cleanName, recruiter))
         else
-            print(string.format("|cff00ff00[GuildManager]|r Ex-membro retornou à guilda: |cffffff00%s|r", cleanName))
+            print(string.format(curL["MEMBER_REJOIN_FMT"] or "|cff00ff00[GuildManager]|r Former member returned to the guild: |cffffff00%s|r", cleanName))
         end
     elseif recruiter ~= "" then
-        print(string.format("|cff00ff00[GuildManager]|r Novo membro recrutado: |cffffff00%s|r (Recrutador: |cff00bfff%s|r)", cleanName, recruiter))
+        print(string.format(curL["MEMBER_JOIN_REC_FMT"] or "|cff00ff00[GuildManager]|r New member recruited: |cffffff00%s|r (Recruiter: |cff00bfff%s|r)", cleanName, recruiter))
     else
-        print(string.format("|cff00ff00[GuildManager]|r Novo membro entrou na guilda: |cffffff00%s|r", cleanName))
+        print(string.format(curL["MEMBER_JOIN_FMT"] or "|cff00ff00[GuildManager]|r New member joined the guild: |cffffff00%s|r", cleanName))
     end
 
     -- Se a janela estiver aberta exibindo este membro, atualiza o botão do recrutador em tempo real
@@ -1722,10 +1725,11 @@ function MemberController:handleGuildLeave(memberName, eventTimestamp)
     end
     -- Notificação no chat do jogo apenas para eventos em tempo real
     if not eventTimestamp or eventTimestamp <= 0 then
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         if unlinked then
-            print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda e foi desvinculado da lista de alts.", cleanName))
+            print(string.format(curL["MEMBER_LEFT_UNLINKED_FMT"] or "|cffff8800[GuildManager]|r %s left the guild and was unlinked from alts.", cleanName))
         else
-            print(string.format("|cffff8800[GuildManager]|r %s saiu da guilda.", cleanName))
+            print(string.format(curL["MEMBER_LEFT_FMT"] or "|cffff8800[GuildManager]|r %s left the guild.", cleanName))
         end
     end
 
@@ -1953,14 +1957,15 @@ function MemberController:handleGuildPromote(promotedName, promoterName, newRank
 
     -- Notificação no chat com destaque visual apenas para eventos em tempo real
     if not eventTimestamp or eventTimestamp <= 0 then
-        if cleanPromoter ~= "" and cleanPromoter ~= "Desconhecido" then
-            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
-                cleanPromoted, cleanRank, cleanPromoter,
-                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        local prevSuffix = (oldRank ~= "" and oldRank ~= cleanRank) and string.format(curL["MEMBER_PREV_RANK_FMT"] or " (previous: %s)", oldRank) or ""
+        if prevSuffix ~= "" then prevSuffix = " |cff888888" .. prevSuffix .. "|r" end
+        if cleanPromoter ~= "" and cleanPromoter ~= "Desconhecido" and cleanPromoter ~= "Unknown" then
+            print(string.format(curL["MEMBER_PROMOTED_BY_FMT"] or "|cff00ff00[GuildManager]|r |cffffff00%s|r was |cff00e5ffPROMOTED|r to |cffffff00%s|r by |cff00bfff%s|r!%s",
+                cleanPromoted, cleanRank, cleanPromoter, prevSuffix))
         else
-            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cff00e5ffPROMOVIDO|r a |cffffff00%s|r!%s",
-                cleanPromoted, cleanRank,
-                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+            print(string.format(curL["MEMBER_PROMOTED_FMT"] or "|cff00ff00[GuildManager]|r |cffffff00%s|r was |cff00e5ffPROMOTED|r to |cffffff00%s|r!%s",
+                cleanPromoted, cleanRank, prevSuffix))
         end
     end
 
@@ -2049,14 +2054,15 @@ function MemberController:handleGuildDemote(demotedName, demoterName, newRank, e
 
     -- Notificação no chat com destaque visual apenas para eventos em tempo real
     if not eventTimestamp or eventTimestamp <= 0 then
-        if cleanDemoter ~= "" and cleanDemoter ~= "Desconhecido" then
-            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r por |cff00bfff%s|r!%s",
-                cleanDemoted, cleanRank, cleanDemoter,
-                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+        local prevSuffix = (oldRank ~= "" and oldRank ~= cleanRank) and string.format(curL["MEMBER_PREV_RANK_FMT"] or " (previous: %s)", oldRank) or ""
+        if prevSuffix ~= "" then prevSuffix = " |cff888888" .. prevSuffix .. "|r" end
+        if cleanDemoter ~= "" and cleanDemoter ~= "Desconhecido" and cleanDemoter ~= "Unknown" then
+            print(string.format(curL["MEMBER_DEMOTED_BY_FMT"] or "|cff00ff00[GuildManager]|r |cffffff00%s|r was |cffff7043DEMOTED|r to |cffffff00%s|r by |cff00bfff%s|r!%s",
+                cleanDemoted, cleanRank, cleanDemoter, prevSuffix))
         else
-            print(string.format("|cff00ff00[GuildManager]|r |cffffff00%s|r foi |cffff7043REBAIXADO|r a |cffffff00%s|r!%s",
-                cleanDemoted, cleanRank,
-                (oldRank ~= "" and oldRank ~= cleanRank) and (" |cff888888(anterior: " .. oldRank .. ")|r") or ""))
+            print(string.format(curL["MEMBER_DEMOTED_FMT"] or "|cff00ff00[GuildManager]|r |cffffff00%s|r was |cffff7043DEMOTED|r to |cffffff00%s|r!%s",
+                cleanDemoted, cleanRank, prevSuffix))
         end
     end
 
@@ -2336,7 +2342,8 @@ function MemberController:applyRecruiterIfEmpty(recruitName, recruiterName, even
         if member:getRecruiter() == "" or member:getRecruiter() == "Desconhecido" then
             member:setRecruiter(cleanRecruiter)
             self._memberService:saveMember(member)
-            print(string.format("|cff00ff00[GuildManager]|r Recrutador de |cffffff00%s|r atualizado pelo log: |cff00bfff%s|r", cleanRecruit, cleanRecruiter))
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            print(string.format(curL["MEMBER_REC_UPDATED_FMT"] or "|cff00ff00[GuildManager]|r Recruiter for |cffffff00%s|r updated from log: |cff00bfff%s|r", cleanRecruit, cleanRecruiter))
         end
 
         -- Se o membro possui log recente de REJOINED, apenas atualiza o nome do recrutador no log existente

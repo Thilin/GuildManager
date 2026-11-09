@@ -139,6 +139,7 @@ function SettingsController:setupCallbacks()
     end)
 
     view:setOnPurgeLogsCallback(function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local purgedCount = service:purgeOldLogs()
         local settings = service:getSettings()
         local stats = service:getGuildStats()
@@ -151,12 +152,13 @@ function SettingsController:setupCallbacks()
             end
         end
 
-        local msg = string.format("Limpeza concluída! %d registro(s) antigo(s) removido(s).", purgedCount)
+        local msg = string.format(curL["SETTINGS_PURGE_SUCCESS_FMT"] or "Limpeza concluída! %d registro(s) antigo(s) removido(s).", purgedCount)
         print("|cff00ff00[GuildManager]|r " .. msg)
         view:showStatus(msg, false)
     end)
 
     view:setOnForceScanCallback(function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         if self._guildRosterService then
             if self._guildRosterService.requestRosterUpdate then
                 self._guildRosterService:requestRosterUpdate()
@@ -165,23 +167,24 @@ function SettingsController:setupCallbacks()
                 local count = self._guildRosterService:scanRoster()
                 local stats = service:getGuildStats()
                 view:renderSettings(service:getSettings(), stats)
-                local msg = string.format("Varredura concluída! %d membros atualizados.", count)
+                local msg = string.format(curL["SETTINGS_FORCE_SCAN_SUCCESS_FMT"] or "Varredura concluída! %d membros atualizados.", count)
                 print("|cff00ff00[GuildManager]|r " .. msg)
                 view:showStatus(msg, false)
                 return
             end
         end
-        view:showStatus("Varredura solicitada ao servidor da Blizzard.", false)
+        view:showStatus(curL["SETTINGS_FORCE_SCAN_REQUESTED"] or "Varredura solicitada ao servidor da Blizzard.", false)
     end)
 
     view:setOnForceSyncCallback(function()
+        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         if _G.GM and _G.GM.syncService and _G.GM.syncService.forceSyncAll then
             local count = _G.GM.syncService:forceSyncAll()
             local status = _G.GM.syncService:getStatus()
-            local msg = string.format("Sincronização P2P iniciada! %d membro(s) para %d colega(s) online.", count, status.activePeerCount)
+            local msg = string.format(curL["SETTINGS_FORCE_SYNC_MSG_FMT"] or "Sincronização P2P iniciada! %d membro(s) para %d colega(s) online.", count, status.activePeerCount)
             view:showStatus(msg, false)
         else
-            view:showStatus("Serviço de sincronização não disponível.", true)
+            view:showStatus(curL["SETTINGS_FORCE_SYNC_UNAVAILABLE"] or "Serviço de sincronização não disponível.", true)
         end
     end)
 end

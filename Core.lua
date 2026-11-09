@@ -155,6 +155,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                 if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
                 if professionView and professionView.updateLocale then professionView:updateLocale() end
                 if introView and introView.updateLocale then introView:updateLocale() end
+                if chatMentionView and chatMentionView.updateLocale then chatMentionView:updateLocale() end
             end)
         end
 
@@ -173,9 +174,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         if minimapButton and minimapButton.updateLocale then minimapButton:updateLocale() end
         if professionView and professionView.updateLocale then professionView:updateLocale() end
         if introView and introView.updateLocale then introView:updateLocale() end
+        if chatMentionView and chatMentionView.updateLocale then chatMentionView:updateLocale() end
 
         SLASH_GUILDMANAGER_LOC1 = "/gmloc"
         SlashCmdList["GUILDMANAGER_LOC"] = function(msg)
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
             local arg = (msg or ""):lower():match("^%s*(.-)%s*$")
             if arg == "test" or arg == "peer" then
                 if locationService then
@@ -184,16 +187,16 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             elseif arg == "login" then
                 if minimapButton and minimapButton.flashPeerLogin then
                     minimapButton:flashPeerLogin()
-                    print("|cff00ffff[GuildManager]|r Teste visual: Pulso de LOGIN (azul) no botão do minimapa.")
+                    print(curL["GMLOC_TEST_LOGIN"] or "|cff00ffff[GuildManager]|r Visual test: LOGIN pulse (blue) on minimap button.")
                 end
             elseif arg == "logout" then
                 if minimapButton and minimapButton.flashPeerLogout then
                     minimapButton:flashPeerLogout()
-                    print("|cffff2020[GuildManager]|r Teste visual: Pulso de LOGOUT (vermelho) no botão do minimapa.")
+                    print(curL["GMLOC_TEST_LOGOUT"] or "|cffff2020[GuildManager]|r Visual test: LOGOUT pulse (red) on minimap button.")
                 end
             else
                 local count = locationService and locationService:getPeerCount() or 0
-                print(string.format("|cff00ff00[GuildManager]|r Posições em tempo real ativas. Membros conectados: |cffffff00%d|r. Digite |cffffff00/gmloc test|r para alternar um membro simulado, ou |cffffff00/gmloc login|r / |cffffff00/gmloc logout|r para testar as animações.", count))
+                print(string.format(curL["GMLOC_INFO_FMT"] or "|cff00ff00[GuildManager]|r Real-time tracking active. Connected members: |cffffff00%d|r. Type |cffffff00/gmloc test|r to toggle simulated member, or |cffffff00/gmloc login|r / |cffffff00/gmloc logout|r to test pulses.", count))
             end
         end
 
@@ -231,10 +234,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
                     end
                 end
             elseif arg == "help" or arg == "ajuda" then
-                print("|cff00ff00[GuildManager]|r Comandos de Sincronização:")
-                print("  |cffffff00/gmsync|r ou |cffffff00/gm sync|r : Força a sincronização manual de todos os dados customizados.")
-                print("  |cffffff00/gmsync status|r : Exibe o status da fila e membros online com o Addon.")
-                print("  |cffffff00/gmsync test|r : Simula confirmação de recebimento (ACK) de teste.")
+                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+                print(curL["GMSYNC_HELP_HEADER"] or "|cff00ff00[GuildManager]|r Sync Commands:")
+                print(curL["GMSYNC_HELP_SYNC"] or "  |cffffff00/gmsync|r or |cffffff00/gm sync|r : Forces manual sync of all custom data.")
+                print(curL["GMSYNC_HELP_STATUS"] or "  |cffffff00/gmsync status|r : Displays queue status and online members with Addon.")
+                print(curL["GMSYNC_HELP_TEST"] or "  |cffffff00/gmsync test|r : Simulates a test ACK confirmation.")
             else
                 if syncService then
                     syncService:forceSyncAll()

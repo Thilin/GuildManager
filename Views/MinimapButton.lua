@@ -210,11 +210,11 @@ function MinimapButton:createUI()
         GameTooltip:ClearLines()
         local title = (L and L["MINIMAP_TOOLTIP_TITLE"]) or "Guild Manager"
         GameTooltip:AddLine("|cffffd200" .. title .. "|r")
-        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_LCLICK"] or "Clique-Esq: Abrir Guild Manager")
-        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_RCLICK"] or "Clique-Dir: Configurações")
-        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_CMDS"] or "Comandos: /gm, /gmloc, /gmsync")
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_LCLICK"] or "|cffffff00Left-Click:|r Open Default Window")
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_RCLICK"] or "|cffffff00Right-Click:|r Settings & Options")
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_CMDS"] or "|cffaaaaaaCommands: /gm, /gmaudit, /gmlogs, /gmgrupos, /gmagenda|r")
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_DRAG"] or "Arrastar: Mover ícone pelo minimapa", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["MINIMAP_TOOLTIP_DRAG"] or "|cff888888Drag: Move button around minimap|r", 0.8, 0.8, 0.8, true)
 
         -- Seção informativa dos membros conectados com o Addon (exibida exclusivamente no mouseover)
         local locService = _G.GM and _G.GM.locationService
@@ -223,23 +223,24 @@ function MinimapButton:createUI()
 
         GameTooltip:AddLine(" ")
         if peerCount > 0 then
-            GameTooltip:AddLine(string.format(L["MAP_BADGE_TOOLTIP_TITLE"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cff20ff20Membros com o Addon (%d)|r", peerCount), 1, 1, 1)
+            GameTooltip:AddLine(string.format(L["MAP_BADGE_TOOLTIP_TITLE"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cff20ff20Members with GuildManager (%d)|r", peerCount), 1, 1, 1)
             for name, p in pairs(peers) do
                 if not (locService and locService.isSelf and locService:isSelf(p.name)) then
                     local cls = (p.classFile or p.class or "WARRIOR"):upper()
                     local cHex = getClassColor(cls)
                     local zoneStr = p.zoneName or "Azeroth"
                     local coordsStr = (p.x and p.y and p.x > 0) and string.format(" (%.1f, %.1f)", p.x * 100, p.y * 100) or ""
+                    local lvlStr = string.format(L["LEVEL_ABBR_FMT"] or "(Lvl %d)", p.level or 1)
                     GameTooltip:AddDoubleLine(
-                        string.format("  • %s%s|r (Nv %d)", cHex, p.name or name, p.level or 1),
+                        string.format("  • %s%s|r %s", cHex, p.name or name, lvlStr),
                         string.format("|cffffd200%s|r%s", zoneStr, coordsStr),
                         1, 1, 1, 0.85, 0.85, 0.85
                     )
                 end
             end
         else
-            GameTooltip:AddLine(string.format("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffaaaaaa" .. (L["MAP_BADGE_NO_MEMBERS"] or "Nenhum outro membro com o Addon conectado.") .. "|r"), 0.7, 0.7, 0.7)
-            GameTooltip:AddLine(L["MAP_BADGE_TIP_SIMULATE"] or "|cff55ff55Dica: Use /gmloc test para simular um membro!|r", 0.3, 0.8, 0.3)
+            GameTooltip:AddLine(string.format("|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffaaaaaa" .. (L["MAP_BADGE_NO_MEMBERS"] or "No other member online right now.") .. "|r"), 0.7, 0.7, 0.7)
+            GameTooltip:AddLine(L["MAP_BADGE_TIP_SIMULATE"] or "|cff55ff55Tip: Use /gmloc test to simulate a member on map!|r", 0.3, 0.8, 0.3)
         end
 
         GameTooltip:Show()

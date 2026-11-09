@@ -926,15 +926,14 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
 
         GameTooltip:SetOwner(p, "ANCHOR_RIGHT")
         GameTooltip:ClearLines()
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         local displayName = d.displayName or d.fullName or d.name
-        local selfTag = d.isSelf and " |cff00ff00(Você)|r" or ""
+        local selfTag = d.isSelf and (curL["MAP_YOU_TAG"] or " |cff00ff00(You)|r") or ""
         GameTooltip:AddLine(string.format("%s%s|r%s", c.hex, displayName, selfTag), 1, 1, 1)
 
         if d.guild and d.guild ~= "" then
             GameTooltip:AddLine(string.format("|cff20ff20<%s>|r", d.guild), 0.2, 1, 0.2)
         end
-
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
         GameTooltip:AddDoubleLine(curL["MAP_PIN_LEVEL_CLASS"] or "Level & Class:", string.format("|cffffffff%d %s %s|r", d.level or 1, d.race or "", cls), 1, 0.82, 0, 1, 1, 1)
         GameTooltip:AddDoubleLine(curL["MAP_PIN_REGION"] or "Region:", string.format("|cffffd200%s|r (%.1f, %.1f)", d.zoneName or "Azeroth", (d.x or 0) * 100, (d.y or 0) * 100), 1, 0.82, 0, 1, 1, 1)
 
@@ -1040,8 +1039,10 @@ function WorldMapView:ensureRealtimeBadge()
                 local isHere = (p.mapID == viewMapID)
                 local statusStr = isHere and (cL["MAP_BADGE_IN_THIS_ZONE"] or "|cff20ff20In This Zone|r") or string.format("|cffffd200%s|r", p.zoneName or "Azeroth")
 
+                local lvlFmt = string.format(cL["LEVEL_ABBR_FMT"] or "(Lvl %d)", p.level or 1)
+                local raceStr = (p.race and p.race ~= "") and (" " .. p.race) or ""
                 GameTooltip:AddDoubleLine(
-                    string.format("%s%s|r (Nv %d %s)", c.hex, pFull, p.level or 1, p.race or ""),
+                    string.format("%s%s|r %s%s", c.hex, pFull, lvlFmt, raceStr),
                     string.format("%s (%.1f, %.1f)", statusStr, (p.x or 0) * 100, (p.y or 0) * 100),
                     1, 1, 1, 1, 1, 1
                 )
@@ -1645,7 +1646,7 @@ function WorldMapView:initWorldMapUI()
                 end
                 if data.isAddonUser then
                     local coordStr = (data.x and data.y and (data.x > 0 or data.y > 0)) and string.format(" (%.1f, %.1f)", data.x * 100, data.y * 100) or ""
-                    GameTooltip:AddLine("|cff00ff00" .. (curL["MAP_PIN_SIGNAL"] or "AddOn Conectado: PosiÃ§Ã£o sincronizada") .. coordStr .. "|r", 0.2, 1.0, 0.2)
+                    GameTooltip:AddLine("|cff00ff00" .. (curL["MAP_GPS_SYNC_NOTE"] or "Synced via GPS AddOn") .. coordStr .. "|r", 0.2, 1.0, 0.2)
                 end
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine(curL["MAP_ROW_WHISPER_HINT"] or "|cff00ff00Click to whisper player.|r", 0.8, 0.8, 0.8)
@@ -1913,6 +1914,7 @@ end
 
 --- Atualiza as linhas da tabela de membros no painel lateral.
 function WorldMapView:refreshVisibleRows()
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
     local total = #self._membersData
     local offset = self._scrollOffset or 0
 
@@ -1931,8 +1933,8 @@ function WorldMapView:refreshVisibleRows()
 
     if self._panel and self._panel.emptyMsg then
         if total == 0 then
-            local emptyScope = self._isWorldView and "no mundo" or (self._isContinentView and "neste continente" or "nesta região")
-            self._panel.emptyMsg:SetText(string.format("Nenhum membro da guilda\nencontrado %s.", emptyScope))
+            local emptyScope = self._isWorldView and (curL["MAP_EMPTY_WORLD_SCOPE"] or "in the world") or (self._isContinentView and (curL["MAP_EMPTY_CONT_SCOPE"] or "on this continent") or (curL["MAP_EMPTY_ZONE_SCOPE"] or "in this region"))
+            self._panel.emptyMsg:SetText(string.format(curL["MAP_EMPTY_ZONE_FMT"] or "No guild members\nfound %s.", emptyScope))
             self._panel.emptyMsg:Show()
         else
             self._panel.emptyMsg:Hide()
@@ -1947,7 +1949,7 @@ function WorldMapView:refreshVisibleRows()
         if data and row then
             row.memberData = data
             local cHex = (data.class and CLASS_COLORS[data.class] and CLASS_COLORS[data.class].hex) or "|cffffffff"
-            local nameStr = cHex .. (data.name or "Membro") .. "|r"
+            local nameStr = cHex .. (data.name or (curL["MEMBER_DEFAULT_RANK"] or "Member")) .. "|r"
 
             -- Ícone da classe
             local coords = data.class and CLASS_ICON_COORDS[data.class]
@@ -1960,15 +1962,16 @@ function WorldMapView:refreshVisibleRows()
             end
 
             -- Linha 1: Nome do personagem (com indicador de GPS AddOn)
-            local addonTag = data.isAddonUser and " |cff00ff00â€¢ GPS|r" or ""
+            local addonTag = data.isAddonUser and " |cff00ff00• GPS|r" or ""
             row.nameText:SetText(nameStr .. addonTag)
 
             -- Linha 2: Nível e Cargo (e Zona se estiver em visualização de Continente ou Mundo)
             local rankStr = data.rankName and data.rankName ~= "" and (" • |cffffff00" .. data.rankName .. "|r") or ""
+            local lvlLabel = curL["COL_LEVEL"] or "Lvl"
             if (self._isContinentView or self._isWorldView) and data.zone and data.zone ~= "" then
-                row.subText:SetText(string.format("Lvl %d%s • |cff00e5ff%s|r", data.level or 1, rankStr, data.zone))
+                row.subText:SetText(string.format("%s %d%s • |cff00e5ff%s|r", lvlLabel, data.level or 1, rankStr, data.zone))
             else
-                row.subText:SetText(string.format("Lvl %d%s", data.level or 1, rankStr))
+                row.subText:SetText(string.format("%s %d%s", lvlLabel, data.level or 1, rankStr))
             end
             row:Show()
         elseif row then
@@ -2046,6 +2049,10 @@ function WorldMapView:updateLocale()
     end
 
     self:updateRealtimeBadge()
+
+    if self._pinScaleControl and self._pinScaleControl.title then
+        self._pinScaleControl.title:SetText(curL["MAP_SLIDER_LABEL"] or "|cffffd200Pins:|r")
+    end
 
     if self._isPanelOpen then
         self:refreshVisibleRows()

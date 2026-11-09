@@ -109,7 +109,10 @@ end
 ---@return string
 function CraftOrder:getFormattedTip()
     local copper = self._tipCopper or 0
-    if copper <= 0 then return "|cff888888Sem gorjeta|r" end
+    if copper <= 0 then
+        local curL = (_G.GM and _G.GM.L) or _G.L
+        return (curL and curL["PROF_NO_TIP"]) or "|cff888888Sem gorjeta|r"
+    end
     local gold = math.floor(copper / 10000)
     local silver = math.floor((copper % 10000) / 100)
     local cop = copper % 100

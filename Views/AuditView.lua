@@ -121,24 +121,34 @@ local function normalizeRace(raceStr, isEn)
     if not raceStr or raceStr == "" then return isEn and "Unknown" or "Desconhecido" end
     local clean = raceStr:match("^%s*(.-)%s*$") or raceStr
     local lower = clean:lower()
-    if lower:find("^an") or lower:find("^dwarf") then
+    if lower:find("celonat") or lower:find("highborne") or lower:find("alta ordem") then
+        return isEn and "Highborne" or "Celonato da Alta Ordem"
+    elseif lower:find("high elf") or lower:find("elf[oa] superior") or lower:find("altonat") or lower:find("quel'dorei") then
+        return isEn and "High Elf" or "Elfo Superior"
+    elseif lower:find("blood elf") or lower:find("elf[oa] sangrent") or lower:find("sin'dorei") then
+        return isEn and "Blood Elf" or "Elfo Sangrento"
+    elseif lower:find("^an") or lower:find("^dwarf") then
         return isEn and "Dwarf" or "Anão"
-    elseif lower:find("elf") or lower:find("night") then
+    elseif lower:find("noturn") or lower:find("night") or lower:find("elf") then
         return isEn and "Night Elf" or "Elfo Noturno"
     elseif lower:find("^hum") then
         return isEn and "Human" or "Humano"
     elseif lower:find("^gnom") then
         return isEn and "Gnome" or "Gnomo"
-    elseif lower:find("^orc") then
+    elseif lower:find("^orc") or lower:find("^orq") then
         return isEn and "Orc" or "Orc"
-    elseif lower:find("^troll") then
+    elseif lower:find("^trol") then
         return isEn and "Troll" or "Troll"
     elseif lower:find("^taur") then
         return isEn and "Tauren" or "Tauren"
-    elseif lower:find("^mort") or lower:find("undead") or lower:find("renegad") then
+    elseif lower:find("^mort") or lower:find("undead") or lower:find("renegad") or lower:find("forsaken") then
         return isEn and "Undead" or "Morto-vivo"
-    elseif lower:find("celonat") then
-        return "Celonato da Alta Ordem"
+    elseif lower:find("draenei") then
+        return "Draenei"
+    elseif lower:find("goblin") then
+        return "Goblin"
+    elseif lower:find("worgen") then
+        return "Worgen"
     else
         return clean
     end
@@ -544,7 +554,8 @@ function AuditView:createUI()
 
         tabBtn:SetScript("OnClick", function()
             if tabData.id == "NO_OFFICER_NOTE" and not self:isPlayerOfficerOrLeader() then
-                print("|cffff8800[GuildManager]|r O filtro de Nota de Oficial é exclusivo para Oficiais e o Líder da Guilda.")
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
+                print("|cffff8800[GuildManager]|r " .. (curL["AUDIT_FILTER_OFFICER_WARN"] or "Only Officers can filter by Officer Note."))
                 return
             end
             if tabData.id == "ALL" then
@@ -565,9 +576,10 @@ function AuditView:createUI()
         tabBtn:SetScript("OnEnter", function(btn)
             if tabData.id == "NO_OFFICER_NOTE" and not self:isPlayerOfficerOrLeader() then
                 if GameTooltip then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or L
                     GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                    GameTooltip:AddLine(L[tabData.key] or tabData.label, 1, 0.82, 0)
-                    GameTooltip:AddLine("|cffff4444SOMENTE OFICIAIS|r", 0.8, 0.8, 0.8, true)
+                    GameTooltip:AddLine(curL[tabData.key] or tabData.label, 1, 0.82, 0)
+                    GameTooltip:AddLine(curL["OFFICERS_ONLY_TAG"] or "|cffff4444OFFICERS ONLY|r", 0.8, 0.8, 0.8, true)
                     GameTooltip:Show()
                 end
             end
@@ -812,7 +824,7 @@ function AuditView:createUI()
     -- Mensagem de aviso caso lista vazia
     local emptyNotice = tableInset:CreateFontString(nil, "OVERLAY", "GameFontDisable")
     emptyNotice:SetPoint("CENTER", tableInset, "CENTER", 0, -10)
-    emptyNotice:SetText("Nenhum membro encontrado nos critérios selecionados.")
+    emptyNotice:SetText(L["AUDIT_EMPTY_FILTER_MSG"] or "No members found matching the selected filters.")
     emptyNotice:Hide()
     self._emptyNotice = emptyNotice
 
@@ -934,14 +946,28 @@ function AuditView:createUI()
 
             cellBtn:SetScript("OnEnter", function(btn)
                 if row.rowData and row.rowData.member then
+                    local curL = (_G.GM and _G.GM.L) or _G.L or L
+                    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+                    local locLabel = label
+                    if colId == "role" then
+                        locLabel = curL["COL_ROLE"] or (isEn and "Role" or "Função")
+                    elseif colId == "dateJoin" then
+                        locLabel = curL["COL_JOIN_DATE"] or (isEn and "Join Date" or "Data de Entrada")
+                    elseif colId == "recruiter" then
+                        locLabel = curL["COL_RECRUITER"] or (isEn and "Recruiter" or "Recrutador")
+                    elseif colId == "birthday" then
+                        locLabel = curL["COL_BIRTHDAY"] or (isEn and "Birthday" or "Aniversário")
+                    elseif colId == "customNote" then
+                        locLabel = curL["COL_CUSTOM_NOTE"] or (isEn and "Internal Note" or "Nota Interna")
+                    end
                     GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                    GameTooltip:AddLine(string.format("|cffffd200%s|r", label), 1, 1, 1)
+                    GameTooltip:AddLine(string.format("|cffffd200%s|r", locLabel), 1, 1, 1)
                     local currentVal = cellTxt:GetText() or ""
-                    GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", currentVal), 0.85, 0.85, 0.85, true)
+                    GameTooltip:AddLine(string.format((isEn and "Current value: |cffffffff%s|r" or "Valor atual: |cffffffff%s|r"), currentVal), 0.85, 0.85, 0.85, true)
                     GameTooltip:AddLine(" ")
                     if colId == "role" then
-                        GameTooltip:AddLine("|cff00ff00Clique com botão esquerdo para alternar (TANK -> HEALER -> DPS)|r", 0.2, 1.0, 0.2)
-                        GameTooltip:AddLine("|cffaaaaaaClique com botão direito para abrir a janela de edição|r", 0.7, 0.7, 0.7)
+                        GameTooltip:AddLine(isEn and "|cff00ff00Left-Click to cycle (TANK -> HEALER -> DPS)|r" or "|cff00ff00Clique com botão esquerdo para alternar (TANK -> HEALER -> DPS)|r", 0.2, 1.0, 0.2)
+                        GameTooltip:AddLine(isEn and "|cffaaaaaaRight-Click to open the edit modal|r" or "|cffaaaaaaClique com botão direito para abrir a janela de edição|r", 0.7, 0.7, 0.7)
                     elseif (colId == "dateJoin" or colId == "recruiter") then
                         local canOfficer = false
                         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
@@ -952,12 +978,12 @@ function AuditView:createUI()
                             canOfficer = true
                         end
                         if not canOfficer then
-                            GameTooltip:AddLine("|cffff4444(Apenas Oficiais ou o Líder da Guilda podem editar)|r", 1, 0.3, 0.3)
+                            GameTooltip:AddLine(isEn and "|cffff4444(Only Officers or the Guild Master can edit)|r" or "|cffff4444(Apenas Oficiais ou o Líder da Guilda podem editar)|r", 1, 0.3, 0.3)
                         else
-                            GameTooltip:AddLine("|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
+                            GameTooltip:AddLine(isEn and "|cff00ff00Click to open the edit modal|r" or "|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
                         end
                     else
-                        GameTooltip:AddLine("|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
+                        GameTooltip:AddLine(isEn and "|cff00ff00Click to open the edit modal|r" or "|cff00ff00Clique para abrir a janela de edição|r", 0.2, 1.0, 0.2)
                     end
                     GameTooltip:Show()
                 end
@@ -1056,17 +1082,22 @@ function AuditView:createUI()
         row:SetScript("OnEnter", function(r)
             if r.rowData and r.rowData.member then
                 local m = r.rowData.member
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
+                local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
                 GameTooltip:SetOwner(r, "ANCHOR_RIGHT")
 
                 local coloredName = self:formatColoredName(m:getName(), m:getGuid(), m:getClass())
-                local rank = m:getRankName() ~= "" and m:getRankName() or "Membro"
+                local rank = m:getRankName() ~= "" and m:getRankName() or (curL["MEMBER_DEFAULT_RANK"] or "Member")
                 local lvl = m:getLevel() or 1
-                local race = m:getRace() ~= "" and m:getRace() or "Desconhecido"
-                local classDisp = m:getClassDisplayName() ~= "" and m:getClassDisplayName() or m:getClass()
+                local rawRace = m:getRace() ~= "" and m:getRace() or (curL["UNKNOWN"] or "Unknown")
+                local race = normalizeRace(rawRace, isEn)
+                local cKey = (m:getClass() or ""):upper()
+                local classMap = isEn and CLASS_NAMES_MAP.enUS or CLASS_NAMES_MAP.ptBR
+                local classDisp = (classMap and classMap[cKey]) or (m:getClassDisplayName() ~= "" and m:getClassDisplayName() or m:getClass())
 
-                local tag = r.rowData.isAlt and ("|cff00e5ff[ALT de " .. (r.rowData.mainName or "") .. "]|r") or "|cffffd200[MAIN]|r"
-                GameTooltip:AddLine(string.format("%s %s (Nível %d %s %s)", tag, coloredName, lvl, race, classDisp), 1, 1, 1)
-                GameTooltip:AddLine(string.format("Cargo: |cffffd200%s|r", rank), 0.9, 0.8, 0.5)
+                local tag = r.rowData.isAlt and (isEn and ("|cff00e5ff[ALT of " .. (r.rowData.mainName or "") .. "]|r") or ("|cff00e5ff[ALT de " .. (r.rowData.mainName or "") .. "]|r")) or "|cffffd200[MAIN]|r"
+                GameTooltip:AddLine(string.format(isEn and "%s %s (Level %d %s %s)" or "%s %s (Nível %d %s %s)", tag, coloredName, lvl, race, classDisp), 1, 1, 1)
+                GameTooltip:AddLine(string.format((isEn and "Rank: |cffffd200%s|r" or "Cargo: |cffffd200%s|r"), rank), 0.9, 0.8, 0.5)
 
                 -- Status de Conexão no Tooltip
                 local isOnline = m:isOnline()
@@ -1083,7 +1114,7 @@ function AuditView:createUI()
                 else
                     local lo = m:getLastOnline()
                     if lo and lo ~= "" then
-                        statusStr = string.format("|cff888888Offline (Visto por último: %s)|r", lo)
+                        statusStr = string.format(isEn and "|cff888888Offline (Last seen: %s)|r" or "|cff888888Offline (Visto por último: %s)|r", lo)
                     else
                         statusStr = "|cff888888Offline|r"
                     end
@@ -1091,39 +1122,42 @@ function AuditView:createUI()
                 GameTooltip:AddLine("Status: " .. statusStr, 0.9, 0.9, 0.9)
 
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cffffd200Informações Nativas da Blizzard (Somente Leitura):|r")
-                GameTooltip:AddLine(string.format("Nota Pública: |cffffffff%s|r", m:getPublicNote() ~= "" and m:getPublicNote() or "(Nenhuma)"), 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine(isEn and "|cffffd200Blizzard Native Info (Read-Only):|r" or "|cffffd200Informações Nativas da Blizzard (Somente Leitura):|r")
+                local noneFem = isEn and "(None)" or "(Nenhuma)"
+                GameTooltip:AddLine(string.format((isEn and "Public Note: |cffffffff%s|r" or "Nota Pública: |cffffffff%s|r"), m:getPublicNote() ~= "" and m:getPublicNote() or noneFem), 0.8, 0.8, 0.8, true)
                 if self:isPlayerOfficerOrLeader() then
-                    GameTooltip:AddLine(string.format("Nota de Oficial: |cffffffff%s|r", m:getOfficerNote() ~= "" and m:getOfficerNote() or "(Nenhuma)"), 0.8, 0.8, 0.8, true)
+                    GameTooltip:AddLine(string.format((isEn and "Officer Note: |cffffffff%s|r" or "Nota de Oficial: |cffffffff%s|r"), m:getOfficerNote() ~= "" and m:getOfficerNote() or noneFem), 0.8, 0.8, 0.8, true)
                 else
-                    GameTooltip:AddLine("Nota de Oficial: |cffff4444SOMENTE OFICIAIS|r", 0.8, 0.8, 0.8, true)
+                    GameTooltip:AddLine((isEn and "Officer Note: " or "Nota de Oficial: ") .. (curL["OFFICERS_ONLY_TAG"] or "|cffff4444OFFICERS ONLY|r"), 0.8, 0.8, 0.8, true)
                 end
 
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cffffd200Informações de Gestão (Clique nos campos para editar):|r")
-                GameTooltip:AddLine(string.format("Data de Entrada: |cffffffff%s|r", m:getDateJoin() ~= "" and m:getDateJoin() or "(Não informada)"), 0.8, 0.8, 0.8)
+                GameTooltip:AddLine(isEn and "|cffffd200Management Info (Click fields to edit):|r" or "|cffffd200Informações de Gestão (Clique nos campos para editar):|r")
+                local notInf = isEn and "(Not specified)" or "(Não informado)"
+                GameTooltip:AddLine(string.format((isEn and "Join Date: |cffffffff%s|r" or "Data de Entrada: |cffffffff%s|r"), m:getDateJoin() ~= "" and m:getDateJoin() or notInf), 0.8, 0.8, 0.8)
 
                 local rec = m:getRecruiter()
-                local coloredRec = (rec and rec ~= "" and rec ~= "Desconhecido") and self:formatColoredName(rec) or "|cff888888Desconhecido|r"
-                GameTooltip:AddLine("Recrutador: " .. coloredRec, 0.8, 0.8, 0.8)
+                local unkStr = curL["UNKNOWN"] or (isEn and "Unknown" or "Desconhecido")
+                local coloredRec = (rec and rec ~= "" and rec ~= "Desconhecido" and rec ~= "Unknown") and self:formatColoredName(rec) or ("|cff888888" .. unkStr .. "|r")
+                GameTooltip:AddLine((isEn and "Recruiter: " or "Recrutador: ") .. coloredRec, 0.8, 0.8, 0.8)
 
                 local bday = m:getBirthday()
-                GameTooltip:AddLine(string.format("Aniversário: |cffffffff%s|r", bday ~= "" and bday or "(Não informado)"), 0.8, 0.8, 0.8)
+                GameTooltip:AddLine(string.format((isEn and "Birthday: |cffffffff%s|r" or "Aniversário: |cffffffff%s|r"), bday ~= "" and bday or notInf), 0.8, 0.8, 0.8)
 
                 local cNote = m:getCustomNote()
-                GameTooltip:AddLine(string.format("Nota Interna: |cffffffff%s|r", cNote ~= "" and cNote or "(Nenhuma)"), 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine(string.format((isEn and "Internal Note: |cffffffff%s|r" or "Nota Interna: |cffffffff%s|r"), cNote ~= "" and cNote or noneFem), 0.8, 0.8, 0.8, true)
 
                 if r.rowData.altList and #r.rowData.altList > 0 then
                     GameTooltip:AddLine(" ")
-                    GameTooltip:AddLine(string.format("|cffffd200Alts Vinculados (%d):|r", #r.rowData.altList))
+                    GameTooltip:AddLine(string.format(isEn and "|cffffd200Linked Alts (%d):|r" or "|cffffd200Alts Vinculados (%d):|r", #r.rowData.altList))
                     for _, altName in ipairs(r.rowData.altList) do
                         GameTooltip:AddLine("  • " .. self:formatColoredName(altName), 0.8, 0.8, 0.8)
                     end
                 end
 
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddLine("|cff00ff00Clique no personagem para abrir a ficha completa|r", 0.2, 1.0, 0.2)
-                GameTooltip:AddLine("|cffffd200Dica: Segure SHIFT + Roda do Mouse para rolar horizontalmente|r", 0.9, 0.8, 0.3)
+                GameTooltip:AddLine(isEn and "|cff00ff00Click the character to open the full profile|r" or "|cff00ff00Clique no personagem para abrir a ficha completa|r", 0.2, 1.0, 0.2)
+                GameTooltip:AddLine(isEn and "|cffffd200Tip: Hold SHIFT + Mouse Wheel to scroll horizontally|r" or "|cffffd200Dica: Segure SHIFT + Roda do Mouse para rolar horizontalmente|r", 0.9, 0.8, 0.3)
                 GameTooltip:Show()
             end
         end)
@@ -1140,7 +1174,7 @@ function AuditView:createUI()
     -- =========================================================================
     local footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     footerText:SetPoint("BOTTOMLEFT", tableInset, "BOTTOMLEFT", 0, -26)
-    footerText:SetText("|cffaaaaaaTotal de membros na guilda: 0|r")
+    footerText:SetText(string.format(L["AUDIT_FOOTER_TOTAL"] or "|cffaaaaaaTotal in guild: %d members (%d Mains, %d Alts)|r", 0, 0, 0))
     self._footerText = footerText
 
     -- Controles de Paginação (40 membros por página, centralizados no rodapé)
@@ -1159,7 +1193,7 @@ function AuditView:createUI()
 
     local pageText = paginationFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     pageText:SetPoint("CENTER", paginationFrame, "CENTER", 0, 0)
-    pageText:SetText("|cffffd200Página 1 de 1|r")
+    pageText:SetText("|cffffd200Page 1 of 1|r")
     self._pageText = pageText
 
     local prevPageBtn = CreateFrame("Button", "GM_AuditPrevPageBtn", paginationFrame, "UIPanelButtonTemplate")
@@ -1171,9 +1205,10 @@ function AuditView:createUI()
     end)
     prevPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Página Anterior", 1, 0.82, 0)
-            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(curL["PAGINATION_PREV_PAGE"] or "Previous Page", 1, 0.82, 0)
+            GameTooltip:AddLine(curL["PAGINATION_PREV_PAGE_DESC"] or "", 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end
     end)
@@ -1191,8 +1226,9 @@ function AuditView:createUI()
     end)
     firstPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Primeira Página", 1, 0.82, 0)
+            GameTooltip:AddLine(curL["PAGINATION_FIRST_PAGE"] or "First Page", 1, 0.82, 0)
             GameTooltip:Show()
         end
     end)
@@ -1210,9 +1246,10 @@ function AuditView:createUI()
     end)
     nextPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Próxima Página", 1, 0.82, 0)
-            GameTooltip:AddLine("Clique ou use a roda do mouse para navegar", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(curL["PAGINATION_NEXT_PAGE"] or "Next Page", 1, 0.82, 0)
+            GameTooltip:AddLine(curL["PAGINATION_NEXT_PAGE_DESC"] or "", 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
         end
     end)
@@ -1230,8 +1267,9 @@ function AuditView:createUI()
     end)
     lastPageBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine("Última Página", 1, 0.82, 0)
+            GameTooltip:AddLine(curL["PAGINATION_LAST_PAGE"] or "Last Page", 1, 0.82, 0)
             GameTooltip:Show()
         end
     end)
@@ -1838,11 +1876,13 @@ function AuditView:createEditModal()
     local dateJoinTodayBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     dateJoinTodayBtn:SetPoint("LEFT", dateJoinEB, "RIGHT", 6, 0)
     dateJoinTodayBtn:SetSize(64, 22)
-    dateJoinTodayBtn:SetText("Hoje")
+    dateJoinTodayBtn:SetText(L["AUDIT_BTN_TODAY"] or "Today")
     dateJoinTodayBtn:SetScript("OnEnter", function(btn)
         if not GameTooltip then return end
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
         GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-        GameTooltip:AddLine("|cffffd200Definir Data de Hoje|r", 1, 1, 1)
+        GameTooltip:AddLine("|cffffd200" .. (curL["AUDIT_BTN_TODAY_TIP"] or "Fill Today's Date") .. "|r", 1, 1, 1)
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1852,9 +1892,9 @@ function AuditView:createEditModal()
             canOfficer = true
         end
         if not canOfficer then
-            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.|r", 1, 0.3, 0.3, true)
+            GameTooltip:AddLine(isEn and "|cffff4444Only Officers or the Guild Master can change the Join Date.|r" or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.|r", 1, 0.3, 0.3, true)
         else
-            GameTooltip:AddLine("|cff00ff00Clique para preencher com a data de hoje.|r", 0.2, 1.0, 0.2)
+            GameTooltip:AddLine("|cff00ff00" .. (curL["AUDIT_BTN_TODAY_TIP_DESC"] or "Click to fill with today's date.") .. "|r", 0.2, 1.0, 0.2)
         end
         GameTooltip:Show()
     end)
@@ -1869,7 +1909,8 @@ function AuditView:createEditModal()
             canOfficer = true
         end
         if not canOfficer then
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar a Data de Entrada.")
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
+            print("|cffff4444[GuildManager]|r " .. (curL["MEMBER_DATE_WARN_NO_PERM"] or "Only Officers or the Guild Master can change the Join Date."))
             return
         end
         dateJoinEB:SetText(getTodayString())
@@ -1890,10 +1931,13 @@ function AuditView:createEditModal()
 
     local function showRecruiterModalTooltip(target)
         if not GameTooltip then return end
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
         GameTooltip:SetOwner(target, "ANCHOR_TOP")
-        GameTooltip:AddLine("|cffffd200Recrutador|r", 1, 1, 1)
+        GameTooltip:AddLine("|cffffd200" .. (curL["COL_RECRUITER"] or "Recruiter") .. "|r", 1, 1, 1)
         local curVal = recruiterEB:GetText() or ""
-        GameTooltip:AddLine(string.format("Valor atual: |cffffffff%s|r", curVal ~= "" and curVal or "(Não informado)"), 0.85, 0.85, 0.85)
+        local notInf = isEn and "(Not specified)" or "(Não informado)"
+        GameTooltip:AddLine(string.format((isEn and "Current value: |cffffffff%s|r" or "Valor atual: |cffffffff%s|r"), curVal ~= "" and curVal or notInf), 0.85, 0.85, 0.85)
         GameTooltip:AddLine(" ")
 
         local canOfficer = false
@@ -1906,9 +1950,9 @@ function AuditView:createEditModal()
         end
 
         if not canOfficer then
-            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar este campo.|r", 1, 0.3, 0.3, true)
+            GameTooltip:AddLine(isEn and "|cffff4444Only Officers or the Guild Master can change this field.|r" or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar este campo.|r", 1, 0.3, 0.3, true)
         else
-            GameTooltip:AddLine("|cff00ff00Clique para digitar o nome do recrutador.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
+            GameTooltip:AddLine(isEn and "|cff00ff00Click to type the recruiter's name.|r\n|cffaaaaaa(Officer/Leader permission active)|r" or "|cff00ff00Clique para digitar o nome do recrutador.|r\n|cffaaaaaa(Permissão de Oficial/Líder ativa)|r", 0.2, 1.0, 0.2)
         end
         GameTooltip:Show()
     end
@@ -1926,18 +1970,21 @@ function AuditView:createEditModal()
         end
         if not canOfficer then
             eb:ClearFocus()
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.")
+            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+            print("|cffff4444[GuildManager]|r " .. (isEn and "Only Officers or the Guild Master can change the recruiter." or "Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador."))
         end
     end)
 
     local recruiterSelfBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
     recruiterSelfBtn:SetPoint("LEFT", recruiterEB, "RIGHT", 6, 0)
     recruiterSelfBtn:SetSize(64, 22)
-    recruiterSelfBtn:SetText("Eu")
+    recruiterSelfBtn:SetText(L["AUDIT_BTN_SELF"] or "Me")
     recruiterSelfBtn:SetScript("OnEnter", function(btn)
         if not GameTooltip then return end
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
         GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-        GameTooltip:AddLine("|cffffd200Definir Meu Nome|r", 1, 1, 1)
+        GameTooltip:AddLine("|cffffd200" .. (curL["AUDIT_BTN_SELF_TIP"] or "Set Yourself as Recruiter") .. "|r", 1, 1, 1)
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
             canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
@@ -1947,9 +1994,9 @@ function AuditView:createEditModal()
             canOfficer = true
         end
         if not canOfficer then
-            GameTooltip:AddLine("|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.|r", 1, 0.3, 0.3, true)
+            GameTooltip:AddLine(isEn and "|cffff4444Only Officers or the Guild Master can change the recruiter.|r" or "|cffff4444Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.|r", 1, 0.3, 0.3, true)
         else
-            GameTooltip:AddLine("|cff00ff00Clique para preencher com o seu nome.|r", 0.2, 1.0, 0.2)
+            GameTooltip:AddLine("|cff00ff00" .. (curL["AUDIT_BTN_SELF_TIP_DESC"] or "Click to fill with your character's name.") .. "|r", 0.2, 1.0, 0.2)
         end
         GameTooltip:Show()
     end)
@@ -1964,7 +2011,8 @@ function AuditView:createEditModal()
             canOfficer = true
         end
         if not canOfficer then
-            print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador.")
+            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
+            print("|cffff4444[GuildManager]|r " .. (isEn and "Only Officers or the Guild Master can change the recruiter." or "Apenas Oficiais ou o Líder da Guilda podem alterar o recrutador."))
             return
         end
         recruiterEB:SetText(getPlayerName())
@@ -1985,7 +2033,8 @@ function AuditView:createEditModal()
 
     local birthdayHint = modal:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     birthdayHint:SetPoint("LEFT", birthdayEB, "RIGHT", 8, 0)
-    birthdayHint:SetText("|cff888888Exemplo: 15/07|r")
+    birthdayHint:SetText(L["AUDIT_BDAY_EXAMPLE"] or "|cff888888Example: 07/15|r")
+    modal.birthdayHint = birthdayHint
 
     -- CAMPO: FUNÇÃO / ROLE
     local roleModalLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -2124,11 +2173,16 @@ function AuditView:openEditModal(member, fieldToFocus)
     local mainTag = isMain and "|cffffd200[MAIN]|r" or "|cff00e5ff[ALT]|r"
     modal.memberHeader:SetText(string.format("%s %s", mainTag, coloredName))
 
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     local lvl = member:getLevel() or 1
-    local race = member:getRace() ~= "" and member:getRace() or "Desconhecido"
-    local classDisp = member:getClassDisplayName() ~= "" and member:getClassDisplayName() or member:getClass()
-    local rank = member:getRankName() ~= "" and member:getRankName() or "Membro"
-    modal.memberSubHeader:SetText(string.format("Nível %d %s %s • Cargo: |cffffd200%s|r", lvl, race, classDisp, rank))
+    local rawRace = member:getRace() ~= "" and member:getRace() or (curL["UNKNOWN"] or "Unknown")
+    local race = normalizeRace(rawRace, isEn)
+    local cKey = (member:getClass() or ""):upper()
+    local classMap = isEn and CLASS_NAMES_MAP.enUS or CLASS_NAMES_MAP.ptBR
+    local classDisp = (classMap and classMap[cKey]) or (member:getClassDisplayName() ~= "" and member:getClassDisplayName() or member:getClass())
+    local rank = member:getRankName() ~= "" and member:getRankName() or (curL["MEMBER_DEFAULT_RANK"] or "Member")
+    modal.memberSubHeader:SetText(string.format(curL["AUDIT_MODAL_SUB_INFO"] or "Level %d %s %s • Rank: |cffffffff%s|r", lvl, race, classDisp, rank))
 
     modal.dateJoinEB:SetText(member:getDateJoin() or "")
     modal.recruiterEB:SetText(member:getRecruiter() or "")
@@ -2270,7 +2324,8 @@ function AuditView:saveModalChanges()
         self:applyFilters()
     end
 
-    print(string.format("|cff00ff00[GuildManager]|r Informações de |cffffff00%s|r atualizadas com sucesso.", member:getName()))
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    print("|cff00ff00[GuildManager]|r " .. string.format(curL["AUDIT_MODAL_SAVED_MSG"] or "Audit data saved for |cffffd200%s|r.", member:getName()))
     modal:Hide()
 end
 
@@ -2821,8 +2876,9 @@ function AuditView:applyFilters()
     end
 
     if self._footerText then
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
         self._footerText:SetText(string.format(
-            "|cffaaaaaaTotal na guilda: %d membros (%d Mains, %d Alts)|r",
+            curL["AUDIT_FOOTER_TOTAL"] or "|cffaaaaaaTotal in guild: %d members (%d Mains, %d Alts)|r",
             #self._members, self._totalMainsCount or 0, self._totalAltsCount or 0
         ))
     end
@@ -2953,6 +3009,7 @@ function AuditView:renderRows()
             end
 
             -- Coluna 6: Nota de Oficial (Blizzard - Exclusiva para Oficiais e Líder)
+            local curL = (_G.GM and _G.GM.L) or _G.L or L
             if isOfficer then
                 local oNote = m:getOfficerNote()
                 if oNote and oNote ~= "" then
@@ -2961,7 +3018,7 @@ function AuditView:renderRows()
                     row.officerNoteTxt:SetText("|cff555555-|r")
                 end
             else
-                row.officerNoteTxt:SetText("|cffff4444SOMENTE OFICIAIS|r")
+                row.officerNoteTxt:SetText(curL["OFFICERS_ONLY_TAG"] or "|cffff4444OFFICERS ONLY|r")
             end
 
             -- Coluna 7: Data de Entrada (Editável ao clicar)
@@ -2969,15 +3026,15 @@ function AuditView:renderRows()
             if dJoin and dJoin ~= "" then
                 row.dateJoinTxt:SetText("|cffe0e0e0" .. dJoin .. "|r")
             else
-                row.dateJoinTxt:SetText("|cff777777(definir)|r")
+                row.dateJoinTxt:SetText(curL["AUDIT_PLACEHOLDER_SET"] or "|cff777777(set)|r")
             end
 
             -- Coluna 8: Recrutador (Editável ao clicar)
             local rec = m:getRecruiter()
-            if rec and rec ~= "" and rec ~= "Desconhecido" then
+            if rec and rec ~= "" and rec ~= "Desconhecido" and rec ~= "Unknown" then
                 row.recruiterTxt:SetText(self:formatColoredName(rec))
             else
-                row.recruiterTxt:SetText("|cff777777(definir)|r")
+                row.recruiterTxt:SetText(curL["AUDIT_PLACEHOLDER_SET"] or "|cff777777(set)|r")
             end
 
             -- Coluna 9: Aniversário (Editável ao clicar)
@@ -2985,7 +3042,7 @@ function AuditView:renderRows()
             if bday and bday ~= "" then
                 row.birthdayTxt:SetText("|cffffd200" .. bday .. "|r")
             else
-                row.birthdayTxt:SetText("|cff777777(definir)|r")
+                row.birthdayTxt:SetText(curL["AUDIT_PLACEHOLDER_SET"] or "|cff777777(set)|r")
             end
 
             -- Coluna 10: Nota Interna (Editável ao clicar)
@@ -2993,7 +3050,7 @@ function AuditView:renderRows()
             if cNote and cNote ~= "" then
                 row.customNoteTxt:SetText("|cffffea88" .. cNote .. "|r")
             else
-                row.customNoteTxt:SetText("|cff777777(adicionar)|r")
+                row.customNoteTxt:SetText(curL["AUDIT_PLACEHOLDER_ADD"] or "|cff777777(add)|r")
             end
 
             row:Show()
@@ -3190,7 +3247,7 @@ function AuditView:updateLocale(skipRender)
         self._refreshBtn:SetText(curL["REFRESH"] or "Atualizar")
     end
     if self._emptyNotice then
-        self._emptyNotice:SetText(curL["AUDIT_EMPTY_NOTICE"] or "Nenhum membro encontrado nos critérios selecionados.")
+        self._emptyNotice:SetText(curL["AUDIT_EMPTY_NOTICE"] or "No members found matching the selected criteria.")
     end
 
     -- Atualiza colunas do cabeçalho
@@ -3246,6 +3303,9 @@ function AuditView:updateLocale(skipRender)
         if self._editModal.birthdayLabel then self._editModal.birthdayLabel:SetText("|cffffd200" .. (curL["EDIT_BIRTHDAY_LABEL"] or "Aniversário:") .. "|r") end
         if self._editModal.roleLabel then self._editModal.roleLabel:SetText("|cffffd200" .. (curL["EDIT_ROLE_LABEL"] or "Função:") .. "|r") end
         if self._editModal.customNoteLabel then self._editModal.customNoteLabel:SetText("|cffffd200" .. (curL["EDIT_CUSTOM_NOTE_LABEL"] or "Nota Interna:") .. "|r") end
+        if self._editModal.dateJoinTodayBtn then self._editModal.dateJoinTodayBtn:SetText(curL["AUDIT_BTN_TODAY"] or "Today") end
+        if self._editModal.recruiterSelfBtn then self._editModal.recruiterSelfBtn:SetText(curL["AUDIT_BTN_SELF"] or "Me") end
+        if self._editModal.birthdayHint then self._editModal.birthdayHint:SetText(curL["AUDIT_BDAY_EXAMPLE"] or "|cff888888Example: 07/15|r") end
         if self._editModal.saveBtn then self._editModal.saveBtn:SetText(curL["SAVE"] or "Salvar") end
         if self._editModal.cancelBtn then self._editModal.cancelBtn:SetText(curL["CANCEL"] or "Cancelar") end
     end
@@ -3253,7 +3313,7 @@ function AuditView:updateLocale(skipRender)
     -- Atualiza rodapé
     if self._footerText and self._members then
         self._footerText:SetText(string.format(
-            "|cffaaaaaaTotal na guilda: %d membros (%d Mains, %d Alts)|r",
+            curL["AUDIT_FOOTER_TOTAL"] or "|cffaaaaaaTotal in guild: %d members (%d Mains, %d Alts)|r",
             #self._members, self._totalMainsCount or 0, self._totalAltsCount or 0
         ))
     end
@@ -3356,9 +3416,13 @@ function AuditView:buildStatsTooltipMembers(statsFilter, isEn)
         elseif cat == "RACE" then
             local rawRace = m.getRace and m:getRace() or ""
             local rName = normalizeRace(rawRace, isEn)
-            matched = (rName == key)
+            local rNamePt = normalizeRace(rawRace, false)
+            local rNameEn = normalizeRace(rawRace, true)
+            matched = (rName == key or rNamePt == key or rNameEn == key)
             if matched and totalMatched < maxShow then
-                local cDisp = m.getClassDisplayName and m:getClassDisplayName() or m:getClass()
+                local cKey = (m.getClass and m:getClass() or ""):upper()
+                local classMap = isEn and CLASS_NAMES_MAP.enUS or CLASS_NAMES_MAP.ptBR
+                local cDisp = (classMap and classMap[cKey]) or (m.getClassDisplayName and m:getClassDisplayName() or m:getClass())
                 local lvl = m.getLevel and m:getLevel() or 1
                 detail = string.format("Lvl %d %s", lvl, cDisp)
             end
@@ -3371,7 +3435,8 @@ function AuditView:buildStatsTooltipMembers(statsFilter, isEn)
                         if totalMatched < maxShow then
                             local rank = (type(pData) == "table" and pData.rank) or 0
                             local maxRank = (type(pData) == "table" and pData.maxRank) or 300
-                            detail = (rank > 0) and string.format("%d/%d", rank, maxRank) or "Aprendiz"
+                            local curL = (_G.GM and _G.GM.L) or _G.L or L
+                            detail = (rank > 0) and string.format("%d/%d", rank, maxRank) or (curL["AUDIT_APPRENTICE"] or "Apprentice")
                         end
                         break
                     end
@@ -3467,7 +3532,8 @@ function AuditView:getStatsRow(index)
                     end
                     if totalMatched > maxShow then
                         local rem = totalMatched - maxShow
-                        GameTooltip:AddLine(string.format("|cffaaaaaa... e mais %d membros|r", rem), 0.7, 0.7, 0.7)
+                        local curL = (_G.GM and _G.GM.L) or _G.L or L
+                        GameTooltip:AddLine(string.format(curL["AUDIT_STATS_MORE_MEMBERS"] or "|cffaaaaaa... and %d more members|r", rem), 0.7, 0.7, 0.7)
                     end
                 else
                     GameTooltip:AddLine(" ")
@@ -3624,8 +3690,8 @@ function AuditView:renderGuildStats()
     for _, rDef in ipairs(rolesDef) do
         local count = roleCounts[rDef.id] or 0
         local tt = {
-            title = string.format("Função: |cff%s%s|r", rDef.hex, rDef.name),
-            subtitle = string.format("%d de %d membros na guilda", count, total),
+            title = string.format((isEn and "Role: |cff%s%s|r" or "Função: |cff%s%s|r"), rDef.hex, rDef.name),
+            subtitle = string.format(curL["AUDIT_STATS_COUNT_OF_TOTAL"] or "%d of %d members in the guild", count, total),
             header = isEn and "Members with this role:" or "Membros com esta função:",
         }
         local sf = { category = "ROLE", key = rDef.id, label = rDef.name }
@@ -3665,7 +3731,7 @@ function AuditView:renderGuildStats()
         end
         local tt = {
             title = string.format("%s%s|r (%d)", hex, c.name, c.count),
-            subtitle = string.format("%d de %d membros na guilda", c.count, total),
+            subtitle = string.format(curL["AUDIT_STATS_COUNT_OF_TOTAL"] or "%d of %d members in the guild", c.count, total),
             header = isEn and "Guild members of this class:" or "Membros desta classe na guilda:",
         }
         local sf = { category = "CLASS", key = c.key, label = c.name }
@@ -3697,7 +3763,7 @@ function AuditView:renderGuildStats()
     for _, r in ipairs(raceList) do
         local tt = {
             title = string.format("|cffffffff%s|r (%d)", r.name, r.count),
-            subtitle = string.format("%d de %d membros na guilda", r.count, total),
+            subtitle = string.format(curL["AUDIT_STATS_COUNT_OF_TOTAL"] or "%d of %d members in the guild", r.count, total),
             header = isEn and "Guild members of this race:" or "Membros desta raça na guilda:",
         }
         local sf = { category = "RACE", key = r.name, label = r.name }
@@ -3737,7 +3803,7 @@ function AuditView:renderGuildStats()
         if p.count > 0 or p.key == "ALCHEMY" or p.key == "TAILORING" or p.key == "LEATHERWORKING" or p.key == "ENCHANTING" or p.key == "BLACKSMITHING" or p.key == "ENGINEERING" or p.key == "MINING" or p.key == "HERBALISM" or p.key == "SKINNING" then
             local tt = {
                 title = string.format("|cffffffff%s|r (%d)", p.name, p.count),
-                subtitle = string.format("%d artesão(ãos) com esta profissão na guilda", p.count),
+                subtitle = string.format(curL["AUDIT_STATS_CRAFTER_COUNT"] or "%d crafter(s) with this profession in the guild", p.count),
                 header = isEn and "Crafters in guild:" or "Artesãos na guilda:",
             }
             local color = (p.count > 0) and { 0.3, 0.9, 0.4 } or { 0.4, 0.4, 0.4 }

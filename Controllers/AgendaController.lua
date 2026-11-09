@@ -51,10 +51,14 @@ function AgendaController:initHooks()
             end
 
             if not canOfficer then
-                return false, "Apenas Oficiais ou o Líder da Guilda têm permissão para criar eventos da agenda."
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                return false, L["AGENDA_NO_PERM_CREATE"] or "Apenas Oficiais ou o Líder da Guilda têm permissão para criar eventos da agenda."
             end
 
-            if not self._eventService then return false, "Serviço de agenda indisponível." end
+            if not self._eventService then
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                return false, L["AGENDA_SERVICE_UNAVAILABLE"] or "Serviço de agenda indisponível."
+            end
             local event, err = self._eventService:createEvent(title, eventType, dateStr, timeStr, desc)
             if event then
                 self:refreshAgenda(true)
@@ -77,10 +81,14 @@ function AgendaController:initHooks()
             end
 
             if not canOfficer then
-                return false, "Apenas Oficiais ou o Líder da Guilda têm permissão para editar eventos da agenda."
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                return false, L["AGENDA_NO_PERM_EDIT"] or "Apenas Oficiais ou o Líder da Guilda têm permissão para editar eventos da agenda."
             end
 
-            if not self._eventService then return false, "Serviço de agenda indisponível." end
+            if not self._eventService then
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                return false, L["AGENDA_SERVICE_UNAVAILABLE"] or "Serviço de agenda indisponível."
+            end
             local event, err = self._eventService:updateEvent(id, title, eventType, dateStr, timeStr, desc)
             if event then
                 self:refreshAgenda(true)
@@ -103,7 +111,8 @@ function AgendaController:initHooks()
             end
 
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir eventos da agenda.")
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                print(L["AGENDA_NO_PERM_DELETE_MSG"] or "|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem excluir eventos da agenda.")
                 return false
             end
 
@@ -119,7 +128,10 @@ function AgendaController:initHooks()
     -- Callback de adicionar convidado ao evento
     if self._agendaView.setOnAddInviteeCallback then
         self._agendaView:setOnAddInviteeCallback(function(eventId, memberName)
-            if not self._eventService then return false, "Serviço de agenda indisponível." end
+            if not self._eventService then
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                return false, L["AGENDA_SERVICE_UNAVAILABLE"] or "Serviço de agenda indisponível."
+            end
             local ok, err = self._eventService:addInvitee(eventId, memberName)
             if ok then
                 self:refreshAgenda(true)
@@ -144,7 +156,10 @@ function AgendaController:initHooks()
     -- Callback de convite individual in-game (grupo WoW)
     if self._agendaView.setOnInviteMemberInGameCallback then
         self._agendaView:setOnInviteMemberInGameCallback(function(memberName)
-            if not self._eventService then return false, "Serviço de agenda indisponível." end
+            if not self._eventService then
+                local L = (_G.GM and _G.GM.L) or _G.L or {}
+                return false, L["AGENDA_SERVICE_UNAVAILABLE"] or "Serviço de agenda indisponível."
+            end
             return self._eventService:inviteMemberInGame(memberName)
         end)
     end
@@ -169,18 +184,19 @@ function AgendaController:initHooks()
                 canOfficer = true
             end
 
+            local L = (_G.GM and _G.GM.L) or _G.L or {}
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos de aniversário na agenda.")
+                print(L["AGENDA_NO_PERM_BDAY_MSG"] or "|cffff4444[GuildManager]|r Apenas Oficiais ou o Líder da Guilda podem criar eventos de aniversário na agenda.")
                 return
             end
 
             if not self._eventService then return end
             local event, err = self._eventService:createBirthdayEventForMember(member)
             if event then
-                print(string.format("|cff00ff00[GuildManager]|r Evento de comemoração criado com sucesso para |cffffd200%s|r!", member:getName()))
+                print(string.format(L["AGENDA_BDAY_CREATED_MSG_FMT"] or "|cff00ff00[GuildManager]|r Evento de comemoração criado com sucesso para |cffffd200%s|r!", member:getName()))
                 self:refreshAgenda(true)
             else
-                print(string.format("|cffff4444[GuildManager]|r %s", err or "Falha ao criar evento de aniversário."))
+                print(string.format("|cffff4444[GuildManager]|r %s", err or (L["AGENDA_BDAY_CREATE_ERR"] or "Falha ao criar evento de aniversário.")))
             end
         end)
     end
@@ -197,15 +213,16 @@ function AgendaController:initHooks()
                 canOfficer = true
             end
 
+            local L = (_G.GM and _G.GM.L) or _G.L or {}
             if not canOfficer then
-                print("|cffff4444[GuildManager]|r Você não tem permissão para promover membros na guilda.")
+                print(L["AGENDA_PROMOTE_NO_PERM_MSG"] or "|cffff4444[GuildManager]|r Você não tem permissão para promover membros na guilda.")
                 return false
             end
 
             local cleanName = memberName and memberName:match("^[^-]+") or memberName
             if cleanName and GuildPromote then
                 GuildPromote(cleanName)
-                print(string.format("|cff00ff00[GuildManager]|r Comando de promoção enviado para |cffffd200%s|r (%s).", cleanName, targetRank or ""))
+                print(string.format(L["AGENDA_PROMOTE_SENT_MSG_FMT"] or "|cff00ff00[GuildManager]|r Comando de promoção enviado para |cffffd200%s|r (%s).", cleanName, targetRank or ""))
                 if C_Timer and C_Timer.After then
                     C_Timer.After(1.5, function()
                         if self._eventService and self._eventService.invalidateCache then
@@ -258,7 +275,8 @@ function AgendaController:checkLoginNotifications()
             end
         end
         if #todayList > 0 then
-            print(string.format("|cff00ff00[GuildManager]|r |cffffd200Aniversário Hoje:|r %s está fazendo aniversário! Dê os parabéns!", table.concat(todayList, ", ")))
+            local L = (_G.GM and _G.GM.L) or _G.L or {}
+            print(string.format(L["AGENDA_LOGIN_BDAY_TODAY_FMT"] or "|cff00ff00[GuildManager]|r |cffffd200Aniversário Hoje:|r %s está fazendo aniversário! Dê os parabéns!", table.concat(todayList, ", ")))
         end
     end
 
@@ -268,14 +286,16 @@ function AgendaController:checkLoginNotifications()
         local curDate = (date and date("*t")) or (os and os.date and os.date("*t")) or { year = 2026, month = 10, day = 6 }
         local todayStr = string.format("%02d/%02d/%04d", curDate.day or 1, curDate.month or 1, curDate.year or 2026)
         local todayEvents = {}
+        local L = (_G.GM and _G.GM.L) or _G.L or {}
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
         for _, ev in ipairs(allEvents) do
             if ev:getDate() == todayStr then
-                local timeDisplay = ev:getTime() and ev:getTime() ~= "" and (" às " .. ev:getTime()) or ""
-                table.insert(todayEvents, string.format("|cffffd200%s|r (%s%s)", ev:getTitle(), ev:getType() or "Evento", timeDisplay))
+                local timeDisplay = ev:getTime() and ev:getTime() ~= "" and ((L["AGENDA_LOGIN_EVENT_AT"] or " às ") .. ev:getTime()) or ""
+                table.insert(todayEvents, string.format("|cffffd200%s|r (%s%s)", ev:getTitle(), ev:getType() or (isEn and "Event" or "Evento"), timeDisplay))
             end
         end
         if #todayEvents > 0 then
-            print(string.format("|cff00ff00[GuildManager]|r 📅 |cffffd200Eventos da Guilda Hoje:|r %s", table.concat(todayEvents, ", ")))
+            print(string.format(L["AGENDA_LOGIN_EVENTS_TODAY_FMT"] or "|cff00ff00[GuildManager]|r 📅 |cffffd200Eventos da Guilda Hoje:|r %s", table.concat(todayEvents, ", ")))
         end
     end
 end
@@ -350,7 +370,8 @@ end
 --- Abre a janela da agenda da guilda.
 function AgendaController:show()
     if not IsInGuild or not IsInGuild() then
-        print("|cffff0000[GuildManager]|r Você não está em uma guilda.")
+        local L = (_G.GM and _G.GM.L) or _G.L or {}
+        print("|cffff0000[GuildManager]|r " .. (L["NOT_IN_GUILD"] or "You are not in a guild."))
         return
     end
 

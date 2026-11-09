@@ -244,7 +244,8 @@ end
 --- Abre a tela de auditoria e recarrega os dados.
 function AuditController:show()
     if not IsInGuild or not IsInGuild() then
-        print("|cffff0000[GuildManager]|r Você não está em uma guilda.")
+        local curL = (_G.GM and _G.GM.L) or _G.L or L
+        print("|cffff0000[GuildManager]|r " .. (curL and curL["NOT_IN_GUILD"] or "You are not in a guild."))
         return
     end
 

@@ -99,9 +99,11 @@ function ChatMentionView:createPickerUI()
     end
 
     -- Título da Janela
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local title = picker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", picker, "TOPLEFT", 14, -12)
-    title:SetText("|cffffd200Mencionar Membro (@)|r")
+    title:SetText(curL["MENTION_POPUP_TITLE"] or "|cffffd200Mention Guild Member|r")
+    self._title = title
 
     -- Botão Fechar ("X")
     local closeBtn = CreateFrame("Button", nil, picker, "UIPanelCloseButton")
@@ -147,7 +149,7 @@ function ChatMentionView:createPickerUI()
 
     local searchHint = searchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     searchHint:SetPoint("LEFT", searchEB, "LEFT", 8, 0)
-    searchHint:SetText("|cffaaaaaaDigite o nome do membro...|r")
+    searchHint:SetText(curL["GROUP_PICK_LEADER_SEARCH"] or "|cffaaaaaaSearch member...|r")
     searchEB.hint = searchHint
 
     searchEB:SetScript("OnTextChanged", function(box)
@@ -232,7 +234,7 @@ function ChatMentionView:createPickerUI()
     -- Mensagem de "Nenhum membro encontrado"
     local emptyLabel = picker:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyLabel:SetPoint("CENTER", picker, "CENTER", 0, -30)
-    emptyLabel:SetText("|cff888888Nenhum membro encontrado|r")
+    emptyLabel:SetText(curL["MENTION_POPUP_EMPTY"] or "|cff888888No members found|r")
     emptyLabel:Hide()
     self._emptyLabel = emptyLabel
 
@@ -327,11 +329,14 @@ function ChatMentionView:createFlashOverlay()
         badge:SetBackdropColor(0.08, 0.04, 0.01, 0.95)
         badge:SetBackdropBorderColor(PALETTE.FLASH_BORDER[1], PALETTE.FLASH_BORDER[2], PALETTE.FLASH_BORDER[3], 1.0)
     end
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local badgeText = badge:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     badgeText:SetPoint("CENTER", badge, "CENTER", 0, 0)
-    badgeText:SetText("|cffffd200VOCÊ FOI MENCIONADO NO CHAT DA GUILDA|r")
+    badgeText:SetText(curL["MENTION_ALERT_TITLE"] or "|cffffd200[GUILD] YOU WERE MENTIONED!|r")
     badgeText:SetTextColor(1.0, 0.85, 0.2, 1.0)
+    badge.text = badgeText
     overlay.badge = badge
+    self._flashOverlay = overlay
 end
 
 --- Exibe a janela de menção ancorada logo acima da EditBox do chat ativa.
@@ -510,7 +515,9 @@ function ChatMentionView:renderRows()
             btn.nameText:SetText(item.coloredName or item.name or "")
 
             -- Info adicional (Lv / Rank)
-            local levelStr = item.level and item.level > 0 and string.format("|cffffd200Lv %d|r", item.level) or ""
+            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+            local lvlLabel = curL["COL_LEVEL"] or "Lv"
+            local levelStr = item.level and item.level > 0 and string.format("|cffffd200%s %d|r", lvlLabel, item.level) or ""
             local rankStr = item.rank and item.rank ~= "" and string.format("|cff777777%s|r", item.rank) or ""
             local fullInfo = levelStr
             if rankStr ~= "" then
@@ -706,4 +713,24 @@ function ChatMentionView:playMentionSound()
     end
 
     pcall(PlaySound, soundId, "Master")
+end
+
+--- Atualiza dinamicamente os textos da interface de menção de acordo com o idioma ativo
+function ChatMentionView:updateLocale()
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if self._title then
+        self._title:SetText(curL["MENTION_POPUP_TITLE"] or "|cffffd200Mention Guild Member|r")
+    end
+    if self._searchEB and self._searchEB.hint then
+        self._searchEB.hint:SetText(curL["GROUP_PICK_LEADER_SEARCH"] or "|cffaaaaaaSearch member...|r")
+    end
+    if self._emptyLabel then
+        self._emptyLabel:SetText(curL["MENTION_POPUP_EMPTY"] or "|cff888888No members found|r")
+    end
+    if self._flashOverlay and self._flashOverlay.badge and self._flashOverlay.badge.text then
+        self._flashOverlay.badge.text:SetText(curL["MENTION_ALERT_TITLE"] or "|cffffd200[GUILD] YOU WERE MENTIONED!|r")
+    end
+    if self._pickerFrame and self._pickerFrame:IsShown() then
+        self:renderRows()
+    end
 end

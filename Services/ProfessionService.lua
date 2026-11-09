@@ -1094,7 +1094,7 @@ function ProfessionService:acceptOrder(orderId, crafterName)
     local myFullName = (self._memberService and self._memberService.resolvePlayerFullName and self._memberService:resolvePlayerFullName()) or ""
     local req = order:getRequester() or ""
     if req ~= "" and (cleanPlayerName(req):lower() == myName:lower() or (myFullName ~= "" and cleanPlayerName(req):lower() == cleanPlayerName(myFullName):lower())) then
-        print("|cffff0000[GuildManager]|r Você não pode aceitar seu próprio pedido.")
+        print("|cffff0000[GuildManager]|r " .. (L["ORDER_CANNOT_ACCEPT_OWN"] or "You cannot accept your own order."))
         return false
     end
 
