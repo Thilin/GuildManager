@@ -2807,8 +2807,8 @@ function AuditView:applyFilters()
                 local mProfs = m.getProfessions and m:getProfessions()
                 local hasProf = false
                 if type(mProfs) == "table" then
-                    for pKey, _ in pairs(mProfs) do
-                        if tostring(pKey):upper() == key then
+                    for pKey, pData in pairs(mProfs) do
+                        if tostring(pKey):upper() == key and ((type(pData) == "table" and (tonumber(pData.rank) or 0) > 0) or pData == true) then
                             hasProf = true
                             break
                         end
@@ -3430,10 +3430,10 @@ function AuditView:buildStatsTooltipMembers(statsFilter, isEn)
             local mProfs = m.getProfessions and m:getProfessions()
             if type(mProfs) == "table" then
                 for pKey, pData in pairs(mProfs) do
-                    if tostring(pKey):upper() == key then
+                    local rank = (type(pData) == "table" and (tonumber(pData.rank) or 0)) or 0
+                    if tostring(pKey):upper() == key and (rank > 0 or pData == true) then
                         matched = true
                         if totalMatched < maxShow then
-                            local rank = (type(pData) == "table" and pData.rank) or 0
                             local maxRank = (type(pData) == "table" and pData.maxRank) or 300
                             local curL = (_G.GM and _G.GM.L) or _G.L or L
                             detail = (rank > 0) and string.format("%d/%d", rank, maxRank) or (curL["AUDIT_APPRENTICE"] or "Apprentice")
@@ -3782,12 +3782,14 @@ function AuditView:renderGuildStats()
     for _, m in ipairs(members) do
         local mProfs = m.getProfessions and m:getProfessions()
         if type(mProfs) == "table" then
-            for pKey, _ in pairs(mProfs) do
-                local uKey = tostring(pKey):upper()
-                if not profMap[uKey] then
-                    profMap[uKey] = { key = uKey, name = uKey, icon = nil, count = 0 }
+            for pKey, pData in pairs(mProfs) do
+                if (type(pData) == "table" and (tonumber(pData.rank) or 0) > 0) or pData == true then
+                    local uKey = tostring(pKey):upper()
+                    if not profMap[uKey] then
+                        profMap[uKey] = { key = uKey, name = uKey, icon = nil, count = 0 }
+                    end
+                    profMap[uKey].count = profMap[uKey].count + 1
                 end
-                profMap[uKey].count = profMap[uKey].count + 1
             end
         end
     end

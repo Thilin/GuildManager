@@ -662,7 +662,7 @@ function Member:setProfessions(professions)
 end
 
 --- Define ou atualiza uma profissão específica do membro
----@param profKey string @"ALCHEMY", "TAILORING", "LEATHERWORKING", "ENCHANTING", "BLACKSMITHING", "ENGINEERING"
+---@param profKey string @"ALCHEMY", "TAILORING", "LEATHERWORKING", "ENCHANTING", "BLACKSMITHING", "ENGINEERING", "MINING", "HERBALISM", "SKINNING", "COOKING", "FIRST_AID", "FISHING"
 ---@param rank number|nil
 ---@param maxRank number|nil
 ---@param recipes table|nil
@@ -672,9 +672,24 @@ function Member:setProfession(profKey, rank, maxRank, recipes, updatedAt)
     if type(self._professions) ~= "table" then
         self._professions = {}
     end
-    self._professions[profKey] = self._professions[profKey] or {}
-    local prof = self._professions[profKey]
-    if rank ~= nil then prof.rank = tonumber(rank) or 0 end
+
+    local uKey = tostring(profKey):upper()
+    local r = tonumber(rank)
+
+    -- Se o rank for 0 ou negativo, a profissão foi desaprendida: remove completamente!
+    if r and r <= 0 then
+        self:removeProfession(profKey)
+        return
+    end
+
+    -- Normaliza para a chave em caixa alta
+    self._professions[uKey] = self._professions[uKey] or self._professions[profKey] or {}
+    local prof = self._professions[uKey]
+    if uKey ~= profKey then
+        self._professions[profKey] = nil
+    end
+
+    if r ~= nil then prof.rank = r end
     if maxRank ~= nil then prof.maxRank = tonumber(maxRank) or 300 end
     if type(recipes) == "table" then
         prof.recipes = prof.recipes or {}
@@ -700,21 +715,37 @@ function Member:setProfession(profKey, rank, maxRank, recipes, updatedAt)
     end
 end
 
+--- Remove completamente uma profissão do membro (desaprendida ou substituída)
+---@param profKey string
+function Member:removeProfession(profKey)
+    if not profKey or type(self._professions) ~= "table" then return end
+    local uKey = tostring(profKey):upper()
+    local lKey = tostring(profKey):lower()
+    self._professions[profKey] = nil
+    self._professions[uKey] = nil
+    self._professions[lKey] = nil
+    local ts = (GetServerTime and GetServerTime()) or (time and time()) or 0
+    if ts > 0 and (self._professionsTimestamp or 0) < ts then
+        self._professionsTimestamp = ts
+    end
+end
+
 --- Retorna os dados de uma profissão específica
 ---@param profKey string
 ---@return table|nil
 function Member:getProfession(profKey)
     if not profKey or type(self._professions) ~= "table" then return nil end
-    return self._professions[profKey]
+    local uKey = tostring(profKey):upper()
+    local lKey = tostring(profKey):lower()
+    return self._professions[uKey] or self._professions[profKey] or self._professions[lKey]
 end
 
---- Verifica se o membro possui uma determinada profissão primária
+--- Verifica se o membro possui uma determinada profissão primária ou secundária
 ---@param profKey string
 ---@return boolean
 function Member:hasProfession(profKey)
-    if not profKey or type(self._professions) ~= "table" then return false end
-    local prof = self._professions[profKey]
-    return prof ~= nil and (prof.rank or 0) > 0
+    local prof = self:getProfession(profKey)
+    return prof ~= nil and (tonumber(prof.rank) or 0) > 0
 end
 
 --- Verifica se o membro conhece uma receita específica

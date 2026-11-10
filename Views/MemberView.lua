@@ -1206,16 +1206,34 @@ function MemberView:showMember(member, isLocked)
     end
 
     -- Se o membro exibido for o jogador local, garante scan imediato das perícias (coleta e fabricação)
-    if _G.GM and _G.GM.professionService and _G.GM.professionService.scanPlayerSkills then
+    local isLocalPlayer = false
+    local myGUID = UnitGUID and UnitGUID("player")
+    if myGUID and member and member.getGuid and member:getGuid() == myGUID then
+        isLocalPlayer = true
+    else
         local pName = UnitName and UnitName("player")
         if pName and member and member.getName then
             local mName = member:getName() or ""
             local cleanM = (mName:match("^[^-]+") or mName):lower():gsub("%s+", "")
             local cleanP = (pName:match("^[^-]+") or pName):lower():gsub("%s+", "")
             if cleanM == cleanP then
-                pcall(function() _G.GM.professionService:scanPlayerSkills(member) end)
+                isLocalPlayer = true
+            else
+                local firstM = (mName:match("^(%S+)") or mName):lower()
+                local firstP = (pName:match("^(%S+)") or pName):lower()
+                if firstM == firstP then
+                    isLocalPlayer = true
+                end
             end
         end
+    end
+
+    if isLocalPlayer and _G.GM and _G.GM.professionService then
+        pcall(function()
+            if _G.GM.professionService.scanPlayerSkills then
+                _G.GM.professionService:scanPlayerSkills(member)
+            end
+        end)
     end
 
     local function getFactionTexture(m)
@@ -2991,40 +3009,64 @@ function MemberView:updateProfessionsVisual(member)
         -- 1. Coleta prioritariamente as 9 Profissões Primárias (Fabricação + Coleta)
         for _, pKey in ipairs(PRIMARY_PROF_ORDER) do
             local pData = profs[pKey] or profs[pKey:lower()] or profs[pKey:sub(1,1):upper() .. pKey:sub(2):lower()]
-            if pData and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
+            local rank = (pData and tonumber(pData.rank)) or 0
+            if pData and rank > 0 then
                 seen[pKey:upper()] = true
                 local pName = getLocalizedProfName(pKey, pData.name)
-                table.insert(primaryList, { key = pKey, name = pName, rank = pData.rank or 0, maxRank = pData.maxRank or 300 })
+                local uTs = tonumber(pData.updatedAt) or 0
+                table.insert(primaryList, { key = pKey:upper(), name = pName, rank = rank, maxRank = pData.maxRank or 300, updatedAt = uTs })
             end
         end
 
-        -- 2. Coleta as Profissões Secundárias
-        for _, pKey in ipairs(SECONDARY_PROF_ORDER) do
-            local pData = profs[pKey] or profs[pKey:lower()] or profs[pKey:sub(1,1):upper() .. pKey:sub(2):lower()]
-            if pData and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
-                seen[pKey:upper()] = true
-                local pName = getLocalizedProfName(pKey, pData.name)
-                table.insert(secondaryList, { key = pKey, name = pName, rank = pData.rank or 0, maxRank = pData.maxRank or 300 })
-            end
-        end
-
-        -- 3. Qualquer outra profissão não capturada
+        -- 2. Qualquer outra profissão primária não capturada
         for pKey, pData in pairs(profs) do
             local uKey = tostring(pKey):upper()
-            if not seen[uKey] and type(pData) == "table" and ((pData.rank and pData.rank > 0) or (pData.recipes and next(pData.recipes))) then
-                seen[uKey] = true
+            local rank = (type(pData) == "table" and tonumber(pData.rank)) or 0
+            if not seen[uKey] and rank > 0 then
+                local isSec = false
+                for _, sKey in ipairs(SECONDARY_PROF_ORDER) do
+                    if sKey == uKey then isSec = true break end
+                end
+                if not isSec then
+                    seen[uKey] = true
+                    local pName = getLocalizedProfName(pKey, pData.name)
+                    local uTs = tonumber(pData.updatedAt) or 0
+                    table.insert(primaryList, { key = uKey, name = pName, rank = rank, maxRank = pData.maxRank or 300, updatedAt = uTs })
+                end
+            end
+        end
+
+        -- Em WoW Classic, um personagem possui no MÁXIMO 2 profissões primárias!
+        -- Se houver mais de 2 salvas no banco (ex: profissão antiga desaprendida e substituída),
+        -- ordena pelas mais recentemente atualizadas e remove as obsoletas!
+        if #primaryList > 2 then
+            table.sort(primaryList, function(a, b) return (a.updatedAt or 0) > (b.updatedAt or 0) end)
+            for i = 3, #primaryList do
+                if member.removeProfession then
+                    member:removeProfession(primaryList[i].key)
+                end
+                primaryList[i] = nil
+            end
+        end
+
+        -- 3. Coleta as Profissões Secundárias (Culinária, Primeiros Socorros, Pescaria)
+        for _, pKey in ipairs(SECONDARY_PROF_ORDER) do
+            local pData = profs[pKey] or profs[pKey:lower()] or profs[pKey:sub(1,1):upper() .. pKey:sub(2):lower()]
+            local rank = (pData and tonumber(pData.rank)) or 0
+            if pData and rank > 0 then
                 local pName = getLocalizedProfName(pKey, pData.name)
-                table.insert(primaryList, { key = pKey, name = pName, rank = pData.rank or 0, maxRank = pData.maxRank or 300 })
+                table.insert(secondaryList, { key = pKey:upper(), name = pName, rank = rank, maxRank = pData.maxRank or 300 })
             end
         end
     end
 
-    -- Preenche a lista com as profissões primárias (as duas profissões do player, incluindo coleta)
+    -- Preenche a lista com as profissões primárias ativas (as duas profissões do personagem)
     local list = {}
     for _, p in ipairs(primaryList) do
         table.insert(list, p)
+        if #list == 2 then break end
     end
-    -- Se tiver menos de 2 primárias, completa com secundárias para exibir se houver
+    -- Apenas se o membro tiver menos de 2 primárias ativas, completa com secundárias para exibir se houver
     if #list < 2 then
         for _, p in ipairs(secondaryList) do
             table.insert(list, p)

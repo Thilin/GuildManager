@@ -1338,6 +1338,32 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         local appliedTs = (timestamp > 0) and timestamp or getCurrentTimestamp()
         member:setProfession(profKey, rank, maxRank, currentRecipes, appliedTs)
 
+        -- Se for uma profissão primária com rank > 0, assegura a regra de no máximo 2 primárias no WoW Classic
+        local isPrimary = false
+        local uProfKey = tostring(profKey):upper()
+        if ProfessionData and ProfessionData.PRIMARY_KEYS then
+            for _, pk in ipairs(ProfessionData.PRIMARY_KEYS) do
+                if pk == uProfKey then isPrimary = true break end
+            end
+        end
+
+        if isPrimary and rank > 0 and ProfessionData and ProfessionData.PRIMARY_KEYS then
+            local activePrimaries = {}
+            for _, pk in ipairs(ProfessionData.PRIMARY_KEYS) do
+                local p = member:getProfession(pk)
+                if p and (tonumber(p.rank) or 0) > 0 then
+                    table.insert(activePrimaries, { key = pk, updatedAt = tonumber(p.updatedAt) or 0 })
+                end
+            end
+            if #activePrimaries > 2 then
+                -- Mais de 2 primárias ativas detectadas! Mantém as 2 mais recentes e purga as antigas
+                table.sort(activePrimaries, function(a, b) return (a.updatedAt or 0) > (b.updatedAt or 0) end)
+                for i = 3, #activePrimaries do
+                    member:removeProfession(activePrimaries[i].key)
+                end
+            end
+        end
+
         if self._memberService then
             self._memberService:saveMember(member, true)
         end
@@ -1647,9 +1673,29 @@ function SyncService:broadcastMemberProfessions(member, specificProfKey, force)
     local enqueuedAny = false
     local memberLower = memberName:lower()
 
+    -- Garante que o membro possua no máximo 2 profissões primárias ativas (WoW Classic)
+    if ProfessionData and ProfessionData.PRIMARY_KEYS then
+        local activePrimaries = {}
+        for _, pk in ipairs(ProfessionData.PRIMARY_KEYS) do
+            local p = member:getProfession(pk)
+            if p and (tonumber(p.rank) or 0) > 0 then
+                table.insert(activePrimaries, { key = pk, updatedAt = tonumber(p.updatedAt) or 0 })
+            end
+        end
+        if #activePrimaries > 2 then
+            table.sort(activePrimaries, function(a, b) return (a.updatedAt or 0) > (b.updatedAt or 0) end)
+            for i = 3, #activePrimaries do
+                member:removeProfession(activePrimaries[i].key)
+            end
+            if self._memberService then
+                self._memberService:saveMember(member, true)
+            end
+        end
+    end
+
     for profKey, profData in pairs(profs) do
         if not specificProfKey or specificProfKey == profKey then
-            local rank = profData.rank or 0
+            local rank = tonumber(profData.rank) or 0
             local maxRank = profData.maxRank or 300
             local recipeIds = {}
             if member.getCanonicalRecipeIds then
@@ -1667,7 +1713,7 @@ function SyncService:broadcastMemberProfessions(member, specificProfKey, force)
                 end
             end
 
-            if rank > 0 or #recipeIds > 0 then
+            if rank > 0 then
                 local profTimestamp = profData.updatedAt or (member.getProfessionsTimestamp and member:getProfessionsTimestamp()) or 0
                 if profTimestamp == 0 then
                     profTimestamp = getCurrentTimestamp()

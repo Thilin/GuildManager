@@ -215,6 +215,7 @@ function ProfessionService:scanFromProfessionsAPI(member)
     if not member then return 0 end
     if GetProfessions and GetProfessionInfo then
         local profs = { GetProfessions() }
+        local foundAPI = {}
         for i = 1, #profs do
             local idx = profs[i]
             if idx then
@@ -222,10 +223,21 @@ function ProfessionService:scanFromProfessionsAPI(member)
                 if name and name ~= "" then
                     local pKey = ProfessionData.getProfessionKey(name)
                     if pKey then
-                        local existing = member:getProfession(pKey) or {}
-                        member:setProfession(pKey, tonumber(skillLevel) or existing.rank or 1, tonumber(maxSkillLevel) or existing.maxRank or 300, existing.recipes or {})
+                        local uKey = pKey:upper()
+                        foundAPI[uKey] = true
+                        local existing = member:getProfession(uKey) or {}
+                        member:setProfession(uKey, tonumber(skillLevel) or existing.rank or 1, tonumber(maxSkillLevel) or existing.maxRank or 300, existing.recipes or {})
                         count = count + 1
                     end
+                end
+            end
+        end
+        -- Se a API moderna retornou dados de profissões primárias (slots 1 e 2)
+        if count > 0 and (profs[1] or profs[2]) and ProfessionData and ProfessionData.PRIMARY_KEYS then
+            for _, pKey in ipairs(ProfessionData.PRIMARY_KEYS) do
+                local uKey = pKey:upper()
+                if not foundAPI[uKey] and member:hasProfession(uKey) then
+                    member:removeProfession(uKey)
                 end
             end
         end
@@ -306,37 +318,47 @@ function ProfessionService:scanPlayerSkills(member)
 
     local detectedCount = 0
     local foundPrimary = {}
+    local anySkillLinesFound = 0
 
     if GetNumSkillLines and GetSkillLineInfo then
         local numSkills = GetNumSkillLines()
-        for i = 1, numSkills do
-            local skillName, isHeader, isExpanded, skillRank, numTempPoints, skillModifier, skillMaxRank = GetSkillLineInfo(i)
-            -- No WoW Classic C API, isHeader pode retornar 0 (número) que é truthy em Lua!
-            -- Por isso comparamos explicitamente com 1 ou true.
-            local isH = (isHeader == 1 or isHeader == true or isHeader == "1")
-            if not isH and skillName and skillName ~= "" then
-                local profKey = ProfessionData.getProfessionKey(skillName)
-                if profKey then
-                    foundPrimary[profKey] = true
-                    local existing = member:getProfession(profKey) or {}
-                    local currentRecipes = existing.recipes or {}
-                    member:setProfession(profKey, tonumber(skillRank) or existing.rank or 1, tonumber(skillMaxRank) or existing.maxRank or 300, currentRecipes)
-                    detectedCount = detectedCount + 1
+        if numSkills and numSkills > 0 then
+            anySkillLinesFound = numSkills
+            for i = 1, numSkills do
+                local skillName, isHeader, isExpanded, skillRank, numTempPoints, skillModifier, skillMaxRank = GetSkillLineInfo(i)
+                -- No WoW Classic C API, isHeader pode retornar 0 (número) que é truthy em Lua!
+                -- Por isso comparamos explicitamente com 1 ou true.
+                local isH = (isHeader == 1 or isHeader == true or isHeader == "1")
+                if not isH and skillName and skillName ~= "" then
+                    local profKey = ProfessionData.getProfessionKey(skillName)
+                    if profKey then
+                        local uKey = profKey:upper()
+                        foundPrimary[uKey] = true
+                        local existing = member:getProfession(uKey) or {}
+                        local currentRecipes = existing.recipes or {}
+                        local r = tonumber(skillRank) or existing.rank or 1
+                        local mr = tonumber(skillMaxRank) or existing.maxRank or 300
+                        member:setProfession(uKey, r, mr, currentRecipes)
+                        detectedCount = detectedCount + 1
+                    end
                 end
             end
         end
     end
 
     -- Limpa profissões primárias que o jogador possa ter desaprendido
-    if detectedCount > 0 and ProfessionData and ProfessionData.PRIMARY_KEYS then
+    -- Todo personagem de WoW Classic possui no mínimo perícias de armas/classe (>= 3 linhas).
+    -- Se a lista de perícias foi lida, qualquer profissão primária ausente foi desaprendida!
+    if anySkillLinesFound >= 3 and ProfessionData and ProfessionData.PRIMARY_KEYS then
         for _, pKey in ipairs(ProfessionData.PRIMARY_KEYS) do
-            if not foundPrimary[pKey] and member:hasProfession(pKey) then
-                member:setProfession(pKey, 0, 0, {})
+            local uKey = pKey:upper()
+            if not foundPrimary[uKey] and member:hasProfession(uKey) then
+                member:removeProfession(uKey)
             end
         end
     end
 
-    if detectedCount > 0 and self._memberService then
+    if self._memberService then
         self._memberService:saveMember(member, true)
     end
 

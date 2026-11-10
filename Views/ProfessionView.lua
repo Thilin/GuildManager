@@ -3020,10 +3020,11 @@ function ProfessionView:refreshMyProfessions()
     local profs = member:getProfessions()
     local parts = {}
 
-    for _, profKey in ipairs(ProfessionData.ORDER) do
-        local pData = profs[profKey]
+    local profOrder = (ProfessionData and ProfessionData.PRIMARY_KEYS) or (ProfessionData and ProfessionData.ORDER) or {}
+    for _, profKey in ipairs(profOrder) do
+        local pData = profs[profKey] or profs[profKey:upper()] or profs[profKey:lower()]
         if pData and (pData.rank or 0) > 0 then
-            local def = ProfessionData.PROFESSIONS[profKey]
+            local def = ProfessionData and ProfessionData.PROFESSIONS and ProfessionData.PROFESSIONS[profKey:upper()]
             local recipeCount = 0
             if type(pData.recipes) == "table" then
                 local counted = {}
@@ -3041,9 +3042,15 @@ function ProfessionView:refreshMyProfessions()
                     end
                 end
             end
-            local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or def.name
-            table.insert(parts, string.format(curL["PROF_MY_DETECTED_LINE_FMT"] or "• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
-                def.icon, pName, pData.rank or 0, pData.maxRank or 300, recipeCount))
+            local icon = def and def.icon or "Interface\\Icons\\Trade_Engineering"
+            local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or (def and def.name) or profKey
+            if recipeCount > 0 then
+                table.insert(parts, string.format(curL["PROF_MY_DETECTED_LINE_FMT"] or "• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
+                    icon, pName, pData.rank or 0, pData.maxRank or 300, recipeCount))
+            else
+                table.insert(parts, string.format("• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r",
+                    icon, pName, pData.rank or 0, pData.maxRank or 300))
+            end
         end
     end
 
@@ -3053,10 +3060,10 @@ function ProfessionView:refreshMyProfessions()
         local detected = pService:scanAll()
         if detected > 0 then
             profs = member:getProfessions()
-            for _, profKey in ipairs(ProfessionData.ORDER) do
-                local pData = profs[profKey]
+            for _, profKey in ipairs(profOrder) do
+                local pData = profs[profKey] or profs[profKey:upper()] or profs[profKey:lower()]
                 if pData and (pData.rank or 0) > 0 then
-                    local def = ProfessionData.PROFESSIONS[profKey]
+                    local def = ProfessionData and ProfessionData.PROFESSIONS and ProfessionData.PROFESSIONS[profKey:upper()]
                     local recipeCount = 0
                     if type(pData.recipes) == "table" then
                         local counted = {}
@@ -3074,9 +3081,15 @@ function ProfessionView:refreshMyProfessions()
                             end
                         end
                     end
-                    local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or def.name
-                    table.insert(parts, string.format(curL["PROF_MY_DETECTED_LINE_FMT"] or "• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
-                        def.icon, pName, pData.rank or 0, pData.maxRank or 300, recipeCount))
+                    local icon = def and def.icon or "Interface\\Icons\\Trade_Engineering"
+                    local pName = (ProfessionData.getProfessionName and ProfessionData.getProfessionName(profKey)) or (def and def.name) or profKey
+                    if recipeCount > 0 then
+                        table.insert(parts, string.format(curL["PROF_MY_DETECTED_LINE_FMT"] or "• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r — |cff00ff00%d receita(s) aprendida(s)|r",
+                            icon, pName, pData.rank or 0, pData.maxRank or 300, recipeCount))
+                    else
+                        table.insert(parts, string.format("• |T%s:20:20:0:0|t |cffffd200%s:|r Perícia |cffffff00%d / %d|r",
+                            icon, pName, pData.rank or 0, pData.maxRank or 300))
+                    end
                 end
             end
         end
