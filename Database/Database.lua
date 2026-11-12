@@ -3,7 +3,7 @@
 Database = {}
 Database.__index = Database
 
-local DEFAULT_DB_VERSION = "1.0"
+local DEFAULT_DB_VERSION = "1.2"
 
 ---@param version string|nil @Versão opcional para o esquema do banco de dados
 ---@return Database @Retorna uma nova instancia da classe Database
@@ -65,9 +65,7 @@ function Database:init()
         _G.GM_DB.professions = {}
     end
 
-    if not _G.GM_DB.version then
-        _G.GM_DB.version = self._version
-    end
+    _G.GM_DB.version = self._version
 
     -- Tenta inicializar com a guilda atual do jogador se já estiver disponível
     local guildKey = self:getGuildKey()

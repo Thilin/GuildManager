@@ -347,6 +347,11 @@ function MemberController:initHooks()
                 _G.GM.introController:showTutorial(false)
                 return
             end
+        elseif arg == "changelog" or arg == "novidades" or arg == "whatsnew" or arg == "update" or arg == "patchnotes" then
+            if _G.GM and _G.GM.changelogView then
+                _G.GM.changelogView:show()
+                return
+            end
         end
 
         if IsInGuild and IsInGuild() then

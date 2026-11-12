@@ -113,6 +113,8 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local introView = IntroView:new()
         local introController = IntroController:new(introView, memberService, guildRosterService, settingsService, syncService)
 
+        local changelogView = ChangelogView:new()
+
         GM.database = databaseManager
         GM.logRepository = logRepository
         GM.logService = logService
@@ -152,6 +154,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.introView = introView
         GM.introController = introController
         GM.syncConflictView = syncConflictView
+        GM.changelogView = changelogView
 
         locationService:initHooks()
         syncService:initHooks()
@@ -289,8 +292,16 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             logRepository:cleanDuplicateKickAndLeaveLogs(memberService)
         end
 
+        SLASH_GUILDMANAGER_CHANGELOG1 = "/gmchangelog"
+        SLASH_GUILDMANAGER_CHANGELOG2 = "/gmnovidades"
+        SlashCmdList["GUILDMANAGER_CHANGELOG"] = function()
+            if GM.changelogView then
+                GM.changelogView:show()
+            end
+        end
+
         local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        local welcomeMsg = curL["WELCOME_LOADED"] or "AddOn loaded successfully! Type |cffffff00/gm|r, |cffffff00/gmcraft|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r or |cffffff00/gmconfig|r to open."
+        local welcomeMsg = curL["WELCOME_LOADED"] or "AddOn loaded successfully! Type |cffffff00/gm|r, |cffffff00/gmchangelog|r, |cffffff00/gmcraft|r, |cffffff00/gmsync|r, |cffffff00/gmloc|r, |cffffff00/gmlogs|r, |cffffff00/gmaudit|r, |cffffff00/gmgrupos|r, |cffffff00/gmagenda|r or |cffffff00/gmconfig|r to open."
         print("|cff00ff00[GuildManager]|r " .. welcomeMsg)
 
         -- Desregistra o evento ADDON_LOADED pois o ciclo de inicialização já foi concluído
@@ -379,5 +390,26 @@ guildWatchFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
 guildWatchFrame:SetScript("OnEvent", function(_, event)
     if GM.switchActiveGuild then
         GM.switchActiveGuild()
+    end
+    if event == "PLAYER_ENTERING_WORLD" then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(3.0, function()
+                if GM.changelogView and GM.changelogView.checkVersionOnLogin then
+                    if GM.introView and GM.introView.isShown and GM.introView:isShown() then
+                        C_Timer.After(10.0, function()
+                            if GM.changelogView and GM.changelogView.checkVersionOnLogin then
+                                GM.changelogView:checkVersionOnLogin(_G.GM_DB)
+                            end
+                        end)
+                    else
+                        GM.changelogView:checkVersionOnLogin(_G.GM_DB)
+                    end
+                end
+            end)
+        else
+            if GM.changelogView and GM.changelogView.checkVersionOnLogin then
+                GM.changelogView:checkVersionOnLogin(_G.GM_DB)
+            end
+        end
     end
 end)

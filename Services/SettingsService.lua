@@ -179,7 +179,7 @@ function SettingsService:getGuildStats()
         totalMembers = totalMembers,
         totalGroups = totalGroups,
         totalLogs = totalLogs,
-        version = (self._db and self._db.version) or "1.0",
+        version = (self._db and self._db.version) or "1.2",
     }
 end
 

@@ -2,7 +2,7 @@
 ## Title: Guild Manager Forever
 ## Notes: Gerenciador de guilda com rastreamento avançado de membros, notas e histórico.
 ## Author: Thilin
-## Version: 1.0
+## Version: 1.2
 ## SavedVariables: GM_DB
 
 Libs/ChatThrottleLib/ChatThrottleLib.lua
@@ -49,6 +49,7 @@ Views/WorldMapView.lua
 Views/ChatMentionView.lua
 Views/IntroView.lua
 Views/SyncConflictView.lua
+Views/ChangelogView.lua
 
 Controllers/MemberController.lua
 Controllers/LogController.lua

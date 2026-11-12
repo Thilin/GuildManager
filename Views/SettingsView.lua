@@ -933,7 +933,7 @@ function SettingsView:createSettingsColumns()
 
     local rChild = CreateFrame("Frame", nil, rScroll)
     rChild:SetWidth(colWidth - 30)
-    rChild:SetHeight(1050)
+    rChild:SetHeight(1080)
     rScroll:SetScrollChild(rChild)
 
     -- --- SEÇÃO 5: AGENDA & EVENTOS DA GUILDA ---
@@ -1255,6 +1255,17 @@ function SettingsView:createSettingsColumns()
         end
     end)
     self._widgets.tutorialBtn = tutorialBtn
+
+    local changelogBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
+    changelogBtn:SetSize(350, 24)
+    changelogBtn:SetPoint("TOPLEFT", tutorialBtn, "BOTTOMLEFT", 0, -6)
+    changelogBtn:SetText(L["CHANGELOG_BUTTON"] or "Ver Novidades da Versão (Changelog)")
+    changelogBtn:SetScript("OnClick", function()
+        if _G.GM and _G.GM.changelogView then
+            _G.GM.changelogView:show()
+        end
+    end)
+    self._widgets.changelogBtn = changelogBtn
 end
 
 --- Cria o rodapé com ações de salvar e fechar.
@@ -1532,6 +1543,7 @@ function SettingsView:updateLocale()
     if self._widgets.resetAllBtn then self._widgets.resetAllBtn:SetText(curL["SETTINGS_RESET_DEFAULTS_BTN"]) end
     if self._widgets.forceSyncBtn then self._widgets.forceSyncBtn:SetText(curL["SETTINGS_FORCE_SYNC_BTN"]) end
     if self._widgets.tutorialBtn then self._widgets.tutorialBtn:SetText(curL["INTRO_REOPEN_BUTTON"] or "Rever Tutorial / Introdução") end
+    if self._widgets.changelogBtn then self._widgets.changelogBtn:SetText(curL["CHANGELOG_BUTTON"] or "Ver Novidades da Versão (Changelog)") end
 
     -- Rodapé
     if self._widgets.footerHint then self._widgets.footerHint:SetText("|cff666666" .. (curL["SETTINGS_FOOTER_HINT"] or "GuildManager") .. "|r") end
@@ -1541,7 +1553,7 @@ function SettingsView:updateLocale()
     if self._lastStats and self._widgets.gStatsText then
         self._widgets.gStatsText:SetText(string.format(
             curL["SETTINGS_STATS_FORMAT"] or "|cffaaaaaaMembers: |cffffff00%d|r  •  Groups: |cffffff00%d|r  •  Logs: |cffffff00%d|r  •  v%s|r",
-            self._lastStats.totalMembers or 0, self._lastStats.totalGroups or 0, self._lastStats.totalLogs or 0, self._lastStats.version or "1.0"
+            self._lastStats.totalMembers or 0, self._lastStats.totalGroups or 0, self._lastStats.totalLogs or 0, self._lastStats.version or "1.2"
         ))
     end
 
