@@ -1814,6 +1814,7 @@ function AuditView:openEditModal(member, fieldToFocus)
     modal.memberSubHeader:SetText(string.format(curL["AUDIT_MODAL_SUB_INFO"] or "Level %d %s %s • Rank: |cffffffff%s|r", lvl, race, classDisp, rank))
 
     modal.dateJoinEB:SetText(member:getDateJoin() or "")
+    if modal.dateJoinEB.SetCursorPosition then modal.dateJoinEB:SetCursorPosition(0) end
     modal.recruiterEB:SetText(member:getRecruiter() or "")
     modal.birthdayEB:SetText(member:getBirthday() or "")
     modal.customNoteEB:SetText(member:getCustomNote() or "")
@@ -1909,7 +1910,8 @@ function AuditView:saveModalChanges()
 
     local newDateJoin = origDateJoin
     if canOfficer then
-        newDateJoin = (modal.dateJoinEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
+        local rawDate = (modal.dateJoinEB:GetText() or ""):match("^%s*(.-)%s*$") or ""
+        newDateJoin = (_G.GM and _G.GM.normalizeJoinDate and _G.GM.normalizeJoinDate(rawDate)) or rawDate
     end
 
     local newRecruiter = origRecruiter

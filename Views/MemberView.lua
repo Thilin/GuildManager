@@ -559,19 +559,31 @@ function MemberView:createUI()
     dateJoinLabel:SetText("|cffffd200" .. L["MEMBER_JOIN_DATE"] .. "|r")
     self._dateJoinLabel = dateJoinLabel
     local dateJoinEB = CreateFrame("EditBox", nil, inset1, template)
-    dateJoinEB:SetPoint("LEFT", dateJoinLabel, "RIGHT", 5, 0)
-    dateJoinEB:SetSize(76, 18)
+    dateJoinEB:SetPoint("LEFT", dateJoinLabel, "RIGHT", 4, 0)
+    dateJoinEB:SetSize(98, 20)
+    dateJoinEB:SetMaxLetters(10)
     styleEditBox(dateJoinEB, nil)
+    dateJoinEB:SetTextInsets(4, 4, 1, 1)
+    dateJoinEB:HookScript("OnEditFocusLost", function(eb)
+        local raw = eb:GetText() or ""
+        local norm = (_G.GM and _G.GM.normalizeJoinDate and _G.GM.normalizeJoinDate(raw)) or raw
+        if norm ~= raw then
+            eb:SetText(norm)
+            if eb.SetCursorPosition then eb:SetCursorPosition(0) end
+        end
+    end)
     self._dateJoinEB = dateJoinEB
 
     local function showDateJoinTooltip(target)
         if not GameTooltip then return end
         local curL = (_G.GM and _G.GM.L) or _G.L or L
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
         GameTooltip:SetOwner(target, "ANCHOR_TOP")
-        GameTooltip:AddLine(curL["MEMBER_JOIN_DATE_TT_TITLE"], 1, 1, 1)
+        GameTooltip:AddLine(curL["MEMBER_JOIN_DATE_TT_TITLE"] or (isEn and "Join Date (YYYY-MM-DD)" or "Data de Entrada (AAAA-MM-DD)"), 1, 1, 1)
         local curVal = dateJoinEB:GetText() or ""
-        GameTooltip:AddLine(string.format(curL["MEMBER_CURRENT_VAL_FMT"], curVal ~= "" and curVal or curL["MEMBER_NOT_INFORMED"]), 0.85, 0.85, 0.85)
+        GameTooltip:AddLine(string.format(curL["MEMBER_CURRENT_VAL_FMT"] or (isEn and "Current: %s" or "Valor atual: %s"), curVal ~= "" and curVal or (curL["MEMBER_NOT_INFORMED"] or "(Não informado)")), 0.85, 0.85, 0.85)
         GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("|cffaaaaaa" .. (curL["MEMBER_JOIN_DATE_FORMAT_HINT"] or (isEn and "Format: YYYY-MM-DD or MM/DD/YYYY" or "Formato: AAAA-MM-DD ou DD/MM/AAAA")) .. "|r", 0.7, 0.7, 0.7)
 
         local canOfficer = false
         if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
@@ -614,8 +626,8 @@ function MemberView:createUI()
     dateJoinHit:SetScript("OnEnter", function() showDateJoinTooltip(dateJoinEB) end)
     dateJoinHit:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
-    -- Coluna Direita do Inset 1 (posicionada em X=192 para espaçamento generoso e zero sobreposição):
-    local RIGHT_COL_X = 192
+    -- Coluna Direita do Inset 1 (posicionada em X=208 para espaçamento generoso e zero sobreposição):
+    local RIGHT_COL_X = 208
 
     -- Status
     local statusLabel = inset1:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -1065,7 +1077,12 @@ function MemberView:saveCurrentMember()
 
     local dateJoinVal = origDateJoin
     if canOfficer and self._dateJoinEB and self._dateJoinEB.GetText then
-        dateJoinVal = self._dateJoinEB:GetText() or ""
+        local rawDate = self._dateJoinEB:GetText() or ""
+        dateJoinVal = (_G.GM and _G.GM.normalizeJoinDate and _G.GM.normalizeJoinDate(rawDate)) or rawDate
+        if dateJoinVal ~= rawDate then
+            self._dateJoinEB:SetText(dateJoinVal)
+            if self._dateJoinEB.SetCursorPosition then self._dateJoinEB:SetCursorPosition(0) end
+        end
     end
 
     local recruiterVal = origRecruiter
@@ -1440,8 +1457,12 @@ function MemberView:showMember(member, isLocked)
     self._selectedRole = (member.getRole and member:getRole() or ""):upper()
     self:updateRoleButtonVisual(self._selectedRole)
         self._birthdayEB:SetText(member:getBirthday() or "")
-    self._dateJoinEB:SetText(member:getDateJoin() or "")
+        if self._birthdayEB.SetCursorPosition then self._birthdayEB:SetCursorPosition(0) end
+    local dJoin = member:getDateJoin() or ""
+    self._dateJoinEB:SetText(dJoin)
+    if self._dateJoinEB.SetCursorPosition then self._dateJoinEB:SetCursorPosition(0) end
     self._customNoteEB:SetText(member:getCustomNote() or "")
+    if self._customNoteEB.SetCursorPosition then self._customNoteEB:SetCursorPosition(0) end
 
     -- Oculta o painel de detalhes nativo do WoW Classic para não vazar textos ou botões sob a janela do GuildManager
     if GuildMemberDetailFrame and GuildMemberDetailFrame.Hide then

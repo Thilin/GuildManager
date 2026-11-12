@@ -55,6 +55,32 @@ function _G.GM.hookWindowDrag(frame)
     end)
 end
 
+--- Normaliza formatos comuns de data (YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, etc.) para o padrão ISO YYYY-MM-DD.
+---@param val string|nil
+---@return string
+function _G.GM.normalizeJoinDate(val)
+    if not val or val == "" then return "" end
+    val = val:match("^%s*(.-)%s*$")
+    -- Formato: YYYY-MM-DD ou YYYY/MM/DD
+    local y, m, d = val:match("^(%d%d%d%d)[%-%/%.](%d%d?)[%-%/%.](%d%d?)$")
+    if y and m and d then
+        return string.format("%04d-%02d-%02d", tonumber(y), tonumber(m), tonumber(d))
+    end
+    -- Formato: DD/MM/YYYY ou DD-MM-YYYY
+    d, m, y = val:match("^(%d%d?)[%-%/%.](%d%d?)[%-%/%.](%d%d%d%d)$")
+    if d and m and y then
+        return string.format("%04d-%02d-%02d", tonumber(y), tonumber(m), tonumber(d))
+    end
+    -- Formato: DD/MM/YY (ano de 2 dígitos)
+    d, m, y = val:match("^(%d%d?)[%-%/%.](%d%d?)[%-%/%.](%d%d)$")
+    if d and m and y then
+        local numY = tonumber(y)
+        local fullY = (numY < 50) and (2000 + numY) or (1900 + numY)
+        return string.format("%04d-%02d-%02d", fullY, tonumber(m), tonumber(d))
+    end
+    return val
+end
+
 local NAV_TABS = {
     {
         id = "audit",
