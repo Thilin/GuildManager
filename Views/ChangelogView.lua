@@ -69,6 +69,7 @@ local CHANGELOG_DATA = {
                     "Lista completa de Alts vinculados no popup do membro e na auditoria.",
                     "Sincronização automática de dados para membros que conectam depois.",
                     "Filtro de mensagens no chat suprimindo avisos de limite de envio da Blizzard.",
+                    "Fixação do histórico de mensagens no chat (desativando o sumiço automático em 2-3s).",
                 }
             }
         }

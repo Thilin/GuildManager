@@ -181,16 +181,68 @@ function ChatMentionController:initHooks()
         end)
     end
 
-    -- 5. Garante tempo de visibilidade adequado para as mensagens no chat (120s padrão Blizzard)
-    -- evitando que mensagens da guilda desapareçam em poucos segundos
+    -- 5. Desativa permanentemente o desvanecimento automático (fading) do chat da Blizzard,
+    -- impedindo que mensagens sumam da tela após 2 a 3 segundos e mantendo todo o histórico visível.
+    local shouldDisable = true
+    if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.disableChatFading == false then
+        shouldDisable = false
+    end
+    self:disableChatFading(shouldDisable)
+
+    -- 6. Hook para reaplicar sempre que a Blizzard restaurar/recarregar o layout das janelas de chat
+    if hooksecurefunc and type(_G.FCF_RestorePositionAndDimensions) == "function" then
+        hooksecurefunc("FCF_RestorePositionAndDimensions", function(chatFrame)
+            local disable = true
+            if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.disableChatFading == false then
+                disable = false
+            end
+            if disable and chatFrame then
+                if not chatFrame.oldAlpha then chatFrame.oldAlpha = 1.0 end
+                if chatFrame.SetFading then pcall(chatFrame.SetFading, chatFrame, false) end
+                if chatFrame.SetTimeVisible then pcall(chatFrame.SetTimeVisible, chatFrame, 300) end
+            end
+        end)
+    end
+end
+
+--- Configura o desvanecimento automático de mensagens nas janelas de chat.
+--- Quando enabled == true (padrão), desativa o fading com SetFading(false) e define SetTimeVisible(300),
+--- impedindo que as mensagens sumam da tela após 2 a 3 segundos.
+---@param enabled boolean|nil
+function ChatMentionController:disableChatFading(enabled)
+    local shouldDisable = (enabled ~= false)
     local maxFrames = NUM_CHAT_WINDOWS or 10
     for i = 1, maxFrames do
         local cf = _G["ChatFrame" .. i]
-        if cf and cf.SetTimeVisible then
-            local currTime = cf.GetTimeVisible and cf:GetTimeVisible() or 0
-            if currTime and currTime < 60 then
-                pcall(cf.SetTimeVisible, cf, 120)
+        if cf then
+            -- Previne erro nil oldAlpha da Blizzard no FCF_FadeOutChatFrame
+            if not cf.oldAlpha then
+                cf.oldAlpha = 1.0
             end
+
+            if shouldDisable then
+                -- Desativa o desvanecimento automático
+                if cf.SetFading then
+                    pcall(cf.SetFading, cf, false)
+                end
+                -- Tempo de visibilidade alto como camada dupla de segurança
+                if cf.SetTimeVisible then
+                    pcall(cf.SetTimeVisible, cf, 300)
+                end
+            else
+                -- Reativa o comportamento padrão da Blizzard
+                if cf.SetFading then
+                    pcall(cf.SetFading, cf, true)
+                end
+                if cf.SetTimeVisible then
+                    pcall(cf.SetTimeVisible, cf, 120)
+                end
+            end
+        end
+
+        local tab = _G["ChatFrame" .. i .. "Tab"]
+        if tab and not tab.oldAlpha then
+            tab.oldAlpha = 1.0
         end
     end
 end

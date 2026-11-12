@@ -12,6 +12,7 @@ local DEFAULTS = {
     enableMentionSound = true,   -- Tocar alerta sonoro ao ser mencionado
     enableMentionFlash = true,   -- Piscar a aba de chat ao receber menção
     mentionSoundChoice = "whisper", -- "whisper", "raid", "ready", "coin"
+    disableChatFading = true,    -- Desativar desvanecimento do chat (mantém histórico sempre visível)
     showMinimapButton = true,    -- Exibir ícone do GuildManager no minimapa
     minimapPos = 215,            -- Ângulo de posição no minimapa
     showMinimapPins = true,      -- Exibir marcadores dos colegas no minimapa
@@ -84,6 +85,7 @@ function GMSettings:isChatMentionsEnabled() return self._enableChatMentions ~= f
 function GMSettings:isMentionSoundEnabled() return self._enableMentionSound ~= false end
 function GMSettings:isMentionFlashEnabled() return self._enableMentionFlash ~= false end
 function GMSettings:getMentionSoundChoice() return self._mentionSoundChoice or "whisper" end
+function GMSettings:isDisableChatFading() return self._disableChatFading ~= false end
 function GMSettings:isShowMinimapButton() return self._showMinimapButton ~= false end
 function GMSettings:getMinimapPos() return tonumber(self._minimapPos) or 215 end
 function GMSettings:isAutoScanRoster() return self._autoScanRoster ~= false end
@@ -136,6 +138,7 @@ function GMSettings:setChatMentionsEnabled(val) self._enableChatMentions = (val 
 function GMSettings:setMentionSoundEnabled(val) self._enableMentionSound = (val == true) end
 function GMSettings:setMentionFlashEnabled(val) self._enableMentionFlash = (val == true) end
 function GMSettings:setMentionSoundChoice(val) self._mentionSoundChoice = tostring(val or "whisper") end
+function GMSettings:setDisableChatFading(val) self._disableChatFading = (val == true) end
 function GMSettings:setShowMinimapButton(val) self._showMinimapButton = (val == true) end
 function GMSettings:setMinimapPos(val) self._minimapPos = tonumber(val) or 215 end
 function GMSettings:setShowMinimapPins(val) self._showMinimapPins = (val == true) end

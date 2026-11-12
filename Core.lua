@@ -392,6 +392,21 @@ guildWatchFrame:SetScript("OnEvent", function(_, event)
         GM.switchActiveGuild()
     end
     if event == "PLAYER_ENTERING_WORLD" then
+        local shouldDisable = true
+        if _G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.disableChatFading == false then
+            shouldDisable = false
+        end
+        if GM.chatMentionController and GM.chatMentionController.disableChatFading then
+            GM.chatMentionController:disableChatFading(shouldDisable)
+        end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(1.5, function()
+                if GM.chatMentionController and GM.chatMentionController.disableChatFading then
+                    GM.chatMentionController:disableChatFading(shouldDisable)
+                end
+            end)
+        end
+
         if C_Timer and C_Timer.After then
             C_Timer.After(3.0, function()
                 if GM.changelogView and GM.changelogView.checkVersionOnLogin then

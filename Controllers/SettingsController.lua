@@ -69,6 +69,11 @@ function SettingsController:setupCallbacks()
             end
         end
 
+        -- Aplica fixação permanente do chat se configurado
+        if _G.GM and _G.GM.chatMentionController and _G.GM.chatMentionController.disableChatFading then
+            _G.GM.chatMentionController:disableChatFading(formData.disableChatFading ~= false)
+        end
+
         -- Notifica no chat do jogador
         local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
         local savedMsg = curL["SETTINGS_STATUS_SAVED"] or "Settings saved and applied successfully!"
@@ -110,6 +115,10 @@ function SettingsController:setupCallbacks()
 
         if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView._mapButton then
             _G.GM.worldMapView._mapButton:Show()
+        end
+
+        if _G.GM and _G.GM.chatMentionController and _G.GM.chatMentionController.disableChatFading then
+            _G.GM.chatMentionController:disableChatFading(true)
         end
 
         local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })

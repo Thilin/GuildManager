@@ -676,7 +676,7 @@ function SettingsView:createSettingsColumns()
 
     local lChild = CreateFrame("Frame", nil, lScroll)
     lChild:SetWidth(colWidth - 30)
-    lChild:SetHeight(520)
+    lChild:SetHeight(550)
     lScroll:SetScrollChild(lChild)
 
     -- --- SEÇÃO 1: APRESENTAÇÃO, IDIOMA & INTERFACE ---
@@ -788,8 +788,12 @@ function SettingsView:createSettingsColumns()
     cbMentionFlash:SetPoint("TOPLEFT", cbMentionSound, "BOTTOMLEFT", 0, -2)
     self._widgets.enableMentionFlash = cbMentionFlash
 
+    local cbDisableChatFading = createCheckbox(lChild, L["SETTINGS_DISABLE_CHAT_FADING"], L["SETTINGS_DISABLE_CHAT_FADING_TIP_TITLE"], L["SETTINGS_DISABLE_CHAT_FADING_TIP_DESC"])
+    cbDisableChatFading:SetPoint("TOPLEFT", cbMentionFlash, "BOTTOMLEFT", 0, -2)
+    self._widgets.disableChatFading = cbDisableChatFading
+
     local soundLabel = lChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    soundLabel:SetPoint("TOPLEFT", cbMentionFlash, "BOTTOMLEFT", 4, -6)
+    soundLabel:SetPoint("TOPLEFT", cbDisableChatFading, "BOTTOMLEFT", 4, -6)
     soundLabel:SetText(L["SETTINGS_SOUND_CHOICE_LABEL"])
     self._widgets.soundLabel = soundLabel
 
@@ -1413,6 +1417,9 @@ function SettingsView:updateLocale()
     if self._widgets.enableMentionFlash then
         self._widgets.enableMentionFlash:updateTexts(curL["SETTINGS_MENTION_FLASH"], curL["SETTINGS_MENTION_FLASH_TIP_TITLE"], curL["SETTINGS_MENTION_FLASH_TIP_DESC"])
     end
+    if self._widgets.disableChatFading then
+        self._widgets.disableChatFading:updateTexts(curL["SETTINGS_DISABLE_CHAT_FADING"], curL["SETTINGS_DISABLE_CHAT_FADING_TIP_TITLE"], curL["SETTINGS_DISABLE_CHAT_FADING_TIP_DESC"])
+    end
     if self._widgets.soundLabel then self._widgets.soundLabel:SetText(curL["SETTINGS_SOUND_CHOICE_LABEL"]) end
     if self._widgets.soundButtons then
         local sndKeys = { whisper = "SOUND_WHISPER", raid = "SOUND_RAID", ready = "SOUND_READY", coin = "SOUND_COIN" }
@@ -1597,6 +1604,9 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.enableChatMentions:SetChecked(settings:isChatMentionsEnabled())
     self._widgets.enableMentionSound:SetChecked(settings:isMentionSoundEnabled())
     self._widgets.enableMentionFlash:SetChecked(settings:isMentionFlashEnabled())
+    if self._widgets.disableChatFading then
+        self._widgets.disableChatFading:SetChecked(settings:isDisableChatFading())
+    end
     self._widgets.selectedMentionSound = settings:getMentionSoundChoice() or "whisper"
     self:updateSoundButtons(self._widgets.soundButtons, self._widgets.selectedMentionSound)
 
@@ -1791,6 +1801,7 @@ function SettingsView:gatherFormData()
         enableChatMentions = w.enableChatMentions:GetChecked() == true,
         enableMentionSound = w.enableMentionSound:GetChecked() == true,
         enableMentionFlash = w.enableMentionFlash:GetChecked() == true,
+        disableChatFading = (w.disableChatFading and w.disableChatFading:GetChecked() == true),
         mentionSoundChoice = w.selectedMentionSound or "whisper",
         showMinimapButton = w.showMinimapButton:GetChecked() == true,
         minimapPos = math.floor(w.minimapSlider:GetValue()),
