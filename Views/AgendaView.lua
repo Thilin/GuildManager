@@ -648,6 +648,49 @@ function AgendaView:createUI()
     closeBtn:SetSize(28, 28)
     closeBtn:SetScript("OnClick", function() frame:Hide() end)
 
+    -- Botão Discord Contato / Bugs / Feedback (Canto Superior Direito)
+    local discordBtn = CreateFrame("Button", nil, frame, template)
+    discordBtn:SetSize(125, 20)
+    discordBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
+    if discordBtn.SetBackdrop then
+        discordBtn:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = false, tileSize = 0, edgeSize = 10,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 }
+        })
+        discordBtn:SetBackdropColor(0.08, 0.08, 0.14, 0.90)
+        discordBtn:SetBackdropBorderColor(0.35, 0.40, 0.95, 0.75)
+    end
+    local discText = discordBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    discText:SetPoint("CENTER", discordBtn, "CENTER", 0, 0)
+    discText:SetText("|cff5865f2Discord:|r |cffffffffthillin_|r")
+
+    discordBtn:SetScript("OnEnter", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.55, 0.65, 1.0, 1.0)
+            btn:SetBackdropColor(0.12, 0.12, 0.22, 0.95)
+        end
+        GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+        GameTooltip:AddLine("|cff5865f2Discord:|r |cffffffffthillin_|r")
+        GameTooltip:AddLine("Contato direto para dúvidas, sugestões, bugs e feedback.", 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine("|cffffd200Clique para copiar no chat.|r", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+    end)
+    discordBtn:SetScript("OnLeave", function(btn)
+        if btn.SetBackdropBorderColor then
+            btn:SetBackdropBorderColor(0.35, 0.40, 0.95, 0.75)
+            btn:SetBackdropColor(0.08, 0.08, 0.14, 0.90)
+        end
+        GameTooltip:Hide()
+    end)
+    discordBtn:SetScript("OnClick", function()
+        if ChatFrame_OpenChat then
+            ChatFrame_OpenChat("thillin_")
+        end
+        print("|cff5865f2[GuildManager]|r Discord para contato, bugs e feedback: |cffffffffthillin_|r (Copiado para o chat!)")
+    end)
+
     -- Ícone da Facção
     local factionIcon = frame:CreateTexture(nil, "ARTWORK")
     factionIcon:SetSize(26, 26)
