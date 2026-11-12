@@ -381,7 +381,7 @@ function GroupView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerGroupFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(946, 594)
+    frame:SetSize(1180, 614)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -825,7 +825,7 @@ function GroupView:createThreeColumns()
             subtitle = "10 / 25 / 40 Jogadores",
             titleColor = "|cffff8000",
             icon = "Interface\\Icons\\INV_Helmet_06",
-            x = 324,
+            x = 402,
         },
         {
             type = GroupType.MISC,
@@ -835,7 +835,7 @@ function GroupView:createThreeColumns()
             subtitle = "PvP / Farm / Eventos",
             titleColor = "|cff00ff88",
             icon = "Interface\\Icons\\INV_Misc_GroupLooking",
-            x = 632,
+            x = 788,
         },
     }
 
@@ -843,7 +843,7 @@ function GroupView:createThreeColumns()
 
     for _, def in ipairs(columnDefs) do
         local col = CreateFrame("Frame", "GM_GroupCol_" .. def.type, frame, template)
-        col:SetSize(298, 534)
+        col:SetSize(376, 554)
         col:SetPoint("TOPLEFT", frame, "TOPLEFT", def.x, -50)
 
         if col.SetBackdrop then
@@ -935,7 +935,7 @@ function GroupView:createThreeColumns()
         scrollFrame:SetPoint("BOTTOMRIGHT", col, "BOTTOMRIGHT", -22, 6)
 
         local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-        scrollChild:SetWidth(270)
+        scrollChild:SetWidth(348)
         scrollChild:SetHeight(1)
         scrollFrame:SetScrollChild(scrollChild)
 
@@ -947,7 +947,7 @@ function GroupView:createThreeColumns()
 
         local emptyText = col:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         emptyText:SetPoint("CENTER", col, "CENTER", 0, -10)
-        emptyText:SetWidth(240)
+        emptyText:SetWidth(300)
         emptyText:SetJustifyH("CENTER")
         emptyText:SetText(L["GROUP_EMPTY_COL"])
         emptyText:Hide()
@@ -1024,7 +1024,7 @@ function GroupView:getOrCreateCard(colData, index)
 
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local card = CreateFrame("Button", nil, colData.scrollChild, template)
-    card:SetWidth(268)
+    card:SetWidth(346)
     card:SetHeight(74) -- Altura fixa e compacta para exibir Nome, Nota e Líder
 
     if card.SetBackdrop then

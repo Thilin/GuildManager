@@ -581,7 +581,7 @@ function AgendaView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerAgendaFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(946, 594)
+    frame:SetSize(1180, 614)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -1002,7 +1002,7 @@ function AgendaView:createLeftPanel()
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
     local leftPanel = CreateFrame("Frame", "GM_AgendaLeftPanel", frame, template)
-    leftPanel:SetSize(612, 530)
+    leftPanel:SetSize(750, 552)
     leftPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -48)
     if leftPanel.SetBackdrop then
         leftPanel:SetBackdrop(CONTAINER_BACKDROP)
@@ -1189,11 +1189,11 @@ function AgendaView:createLeftPanel()
 
     -- Cabeçalhos dos Dias da Semana (DOM - SÁB)
     local weekdayBar = CreateFrame("Frame", nil, calendarCard)
-    weekdayBar:SetPoint("TOPLEFT", navBar, "BOTTOMLEFT", 4, -2)
+    weekdayBar:SetPoint("TOPLEFT", navBar, "BOTTOMLEFT", 6, -2)
     weekdayBar:SetPoint("TOPRIGHT", navBar, "BOTTOMRIGHT", -4, -2)
     weekdayBar:SetHeight(18)
 
-    local colWidth = 84
+    local colWidth = 102
     local colGap = 2
     local weekdayLabels = {}
     local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
@@ -1224,7 +1224,7 @@ function AgendaView:createLeftPanel()
         local col = (i - 1) % 7
         local cell = CreateFrame("Button", "GM_AgendaDayCell_" .. i, calendarCard, template)
         cell:SetSize(colWidth, rowHeight)
-        cell:SetPoint("TOPLEFT", calendarCard, "TOPLEFT", 8 + col * (colWidth + colGap), -(gridTopOffset + row * (rowHeight + rowGap)))
+        cell:SetPoint("TOPLEFT", calendarCard, "TOPLEFT", 10 + col * (colWidth + colGap), -(gridTopOffset + row * (rowHeight + rowGap)))
 
         if cell.SetBackdrop then
             cell:SetBackdrop(SIDE_TAB_BACKDROP)
@@ -1414,7 +1414,7 @@ function AgendaView:createLeftPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", selectedSection, "BOTTOMRIGHT", -22, 4)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetWidth(572)
+    scrollChild:SetWidth(708)
     scrollChild:SetHeight(1)
     scrollFrame:SetScrollChild(scrollChild)
     self._eventsScrollChild = scrollChild
@@ -1465,8 +1465,8 @@ function AgendaView:createRightPanel()
     local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
     local rightPanel = CreateFrame("Frame", "GM_AgendaRightPanel", frame, template)
-    rightPanel:SetSize(294, 530)
-    rightPanel:SetPoint("TOPLEFT", self._leftPanel, "TOPRIGHT", 8, 0)
+    rightPanel:SetSize(388, 552)
+    rightPanel:SetPoint("TOPLEFT", self._leftPanel, "TOPRIGHT", 10, 0)
     if rightPanel.SetBackdrop then
         rightPanel:SetBackdrop(CONTAINER_BACKDROP)
         rightPanel:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
@@ -1508,7 +1508,7 @@ function AgendaView:createRightPanel()
     scrollFrame:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -24, 6)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetWidth(262)
+    scrollChild:SetWidth(356)
     scrollChild:SetHeight(1)
     scrollFrame:SetScrollChild(scrollChild)
     self._birthdaysScrollChild = scrollChild
@@ -1521,7 +1521,7 @@ function AgendaView:createRightPanel()
 
     local emptyBirthdaysText = rightPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyBirthdaysText:SetPoint("CENTER", rightPanel, "CENTER", 0, -20)
-    emptyBirthdaysText:SetWidth(250)
+    emptyBirthdaysText:SetWidth(330)
     emptyBirthdaysText:SetJustifyH("CENTER")
     emptyBirthdaysText:SetText(L["AGENDA_NO_UPCOMING"] or "No upcoming events, birthdays or promotions.")
     emptyBirthdaysText:Hide()
@@ -2049,7 +2049,7 @@ function AgendaView:renderSelectedDayEvents()
         local card = self._selectedDayCardPool[idx]
         if not card then
             card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
-            card:SetSize(566, eventCardHeight)
+            card:SetSize(704, eventCardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.85)
@@ -2194,7 +2194,7 @@ function AgendaView:renderSelectedDayEvents()
         local card = self._selectedDayBirthdayPool[bIdx]
         if not card then
             card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
-            card:SetSize(566, bdayCardHeight)
+            card:SetSize(704, bdayCardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(0.12, 0.08, 0.02, 0.90)
@@ -2290,7 +2290,7 @@ function AgendaView:renderSelectedDayEvents()
         local card = self._selectedDayPromoPool[pIdx]
         if not card then
             card = CreateFrame("Frame", nil, self._eventsScrollChild, template)
-            card:SetSize(566, promoCardHeight)
+            card:SetSize(704, promoCardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(0.03, 0.08, 0.12, 0.90)
@@ -2516,7 +2516,7 @@ function AgendaView:renderUpcomingFeed()
         local card = self._upcomingFeedCardPool[idx]
         if not card then
             card = CreateFrame("Frame", nil, self._birthdaysScrollChild, template)
-            card:SetSize(258, cardHeight)
+            card:SetSize(352, cardHeight)
             if card.SetBackdrop then
                 card:SetBackdrop(SUB_CONTAINER_BACKDROP)
                 card:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.85)

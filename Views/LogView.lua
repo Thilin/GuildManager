@@ -86,7 +86,7 @@ function LogView:new()
     instance._rows = {}
     instance._filterText = ""
     instance._activeEventFilter = "ALL"
-    instance._numVisibleRows = 18
+    instance._numVisibleRows = 20
     instance._rowHeight = 23
     instance._onRefreshCallback = nil
 
@@ -121,7 +121,7 @@ function LogView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerLogFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(946, 594)
+    frame:SetSize(1180, 614)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)

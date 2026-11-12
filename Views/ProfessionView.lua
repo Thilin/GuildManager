@@ -408,7 +408,7 @@ function ProfessionView:createUI()
     local frame = CreateFrame("Frame", "GuildManagerProfessionFrame", UIParent, template)
     self._frame = frame
 
-    frame:SetSize(946, 594)
+    frame:SetSize(1180, 614)
     frame:SetFrameStrata("DIALOG")
     frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
@@ -640,7 +640,7 @@ function ProfessionView:createBrowserContainer()
     local profListInset = CreateFrame("Frame", nil, container, template)
     profListInset:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
     profListInset:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, 0)
-    profListInset:SetWidth(185)
+    profListInset:SetWidth(200)
     if profListInset.SetBackdrop then
         profListInset:SetBackdrop(CONTAINER_BACKDROP)
         profListInset:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
@@ -664,7 +664,7 @@ function ProfessionView:createBrowserContainer()
     for _, profKey in ipairs(ProfessionData.ORDER) do
         local def = ProfessionData.PROFESSIONS[profKey]
         local btn = CreateFrame("Button", nil, profListInset, template)
-        btn:SetSize(170, 48)
+        btn:SetSize(184, 48)
         if not prevProfBtn then
             btn:SetPoint("TOPLEFT", pSep, "BOTTOMLEFT", 0, -6)
         else
@@ -710,7 +710,7 @@ function ProfessionView:createBrowserContainer()
     local centerInset = CreateFrame("Frame", nil, container, template)
     centerInset:SetPoint("TOPLEFT", profListInset, "TOPRIGHT", 6, 0)
     centerInset:SetPoint("BOTTOMLEFT", profListInset, "BOTTOMRIGHT", 6, 0)
-    centerInset:SetWidth(400)
+    centerInset:SetWidth(480)
     if centerInset.SetBackdrop then
         centerInset:SetBackdrop(CONTAINER_BACKDROP)
         centerInset:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
@@ -814,13 +814,13 @@ function ProfessionView:createBrowserContainer()
     end)
     self._recipeScrollBar = recipeScrollBar
 
-    -- Linhas de receitas visíveis (10 linhas)
+    -- Linhas de receitas visíveis (11 linhas)
     self._recipeRows = {}
-    local NUM_RECIPE_ROWS = 10
+    local NUM_RECIPE_ROWS = 11
     local ROW_HEIGHT = 34
     for i = 1, NUM_RECIPE_ROWS do
         local row = CreateFrame("Button", nil, centerInset, template)
-        row:SetSize(370, ROW_HEIGHT)
+        row:SetSize(450, ROW_HEIGHT)
         row:SetPoint("TOPLEFT", recipeScroll, "TOPLEFT", 0, -(i - 1) * (ROW_HEIGHT + 2))
         if row.SetBackdrop then
             row:SetBackdrop(SUB_CONTAINER_BACKDROP)
@@ -1168,7 +1168,8 @@ end
 --- Rola a lista de receitas
 ---@param delta number
 function ProfessionView:scrollRecipes(delta)
-    local maxOffset = math.max(0, #self._filteredRecipes - 10)
+    local numVisible = #self._recipeRows > 0 and #self._recipeRows or 11
+    local maxOffset = math.max(0, #self._filteredRecipes - numVisible)
     local newOffset = math.max(0, math.min(maxOffset, (self._recipeOffset or 0) + delta))
     if newOffset ~= self._recipeOffset then
         self._recipeOffset = newOffset
@@ -1216,7 +1217,8 @@ function ProfessionView:refreshRecipeList()
     -- Lista de receitas filtradas
     self._filteredRecipes = pService:getRecipes(profKey, self._recipeSearchText, nil, self._onlyGuildCrafters)
 
-    local maxOffset = math.max(0, #self._filteredRecipes - 10)
+    local numVisible = #self._recipeRows > 0 and #self._recipeRows or 11
+    local maxOffset = math.max(0, #self._filteredRecipes - numVisible)
     self._recipeOffset = math.max(0, math.min(self._recipeOffset or 0, maxOffset))
     if self._recipeScrollBar then
         self._recipeScrollBar:SetMinMaxValues(0, maxOffset)
@@ -1252,7 +1254,7 @@ end
 function ProfessionView:renderRecipeRows()
     local curL = (_G.GM and _G.GM.L) or _G.L or L
     local startIdx = self._recipeOffset or 0
-    for i = 1, 10 do
+    for i = 1, #self._recipeRows do
         local row = self._recipeRows[i]
         local data = self._filteredRecipes[startIdx + i]
         if data and data.recipe then
@@ -1856,14 +1858,14 @@ function ProfessionView:createOrdersContainer()
 
     -- Cabeçalhos das Colunas da Tabela
     local cols = {
-        { key = "ORDER_COL_RECIPE",    default = "Receita / Item",     x = 10,  width = 220 },
-        { key = "ORDER_COL_REQUESTER", default = "Solicitante",        x = 235, width = 110 },
-        { key = "ORDER_COL_CRAFTER",   default = "Artesão",            x = 350, width = 110 },
-        { key = "ORDER_COL_QTY",       default = "Qtd",                x = 465, width = 45 },
-        { key = "ORDER_COL_TIP",       default = "Gorjeta / Comissão", x = 515, width = 100 },
-        { key = "ORDER_COL_STATUS",    default = "Status",             x = 620, width = 90 },
-        { key = "ORDER_COL_NOTES",     default = "Observações",        x = 715, width = 110 },
-        { key = "ORDER_COL_ACTIONS",   default = "Ações",              x = 830, width = 80 },
+        { key = "ORDER_COL_RECIPE",    default = "Receita / Item",     x = 10,   width = 270 },
+        { key = "ORDER_COL_REQUESTER", default = "Solicitante",        x = 290,  width = 130 },
+        { key = "ORDER_COL_CRAFTER",   default = "Artesão",            x = 430,  width = 130 },
+        { key = "ORDER_COL_QTY",       default = "Qtd",                x = 570,  width = 45 },
+        { key = "ORDER_COL_TIP",       default = "Gorjeta / Comissão", x = 625,  width = 120 },
+        { key = "ORDER_COL_STATUS",    default = "Status",             x = 755,  width = 100 },
+        { key = "ORDER_COL_NOTES",     default = "Observações",        x = 865,  width = 180 },
+        { key = "ORDER_COL_ACTIONS",   default = "Ações",              x = 1055, width = 80 },
     }
     self._orderColHeaders = {}
     for _, c in ipairs(cols) do
@@ -1885,8 +1887,9 @@ function ProfessionView:createOrdersContainer()
     local ORDER_ROW_H = 34
     for i = 1, NUM_ORDER_ROWS do
         local row = CreateFrame("Frame", nil, tableInset, template)
-        row:SetSize(900, ORDER_ROW_H)
         row:SetPoint("TOPLEFT", tableInset, "TOPLEFT", 6, -30 - (i - 1) * (ORDER_ROW_H + 2))
+        row:SetPoint("RIGHT", tableInset, "RIGHT", -22, 0)
+        row:SetHeight(ORDER_ROW_H)
         if row.SetBackdrop then
             row:SetBackdrop(SUB_CONTAINER_BACKDROP)
             row:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.8)
@@ -1901,43 +1904,43 @@ function ProfessionView:createOrdersContainer()
 
         local rName = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         rName:SetPoint("LEFT", oIcon, "RIGHT", 6, 0)
-        rName:SetWidth(185)
+        rName:SetWidth(240)
         rName:SetJustifyH("LEFT")
         row.recipeName = rName
 
         local reqTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        reqTxt:SetPoint("LEFT", row, "LEFT", 230, 0)
-        reqTxt:SetWidth(105)
+        reqTxt:SetPoint("LEFT", row, "LEFT", 285, 0)
+        reqTxt:SetWidth(125)
         reqTxt:SetJustifyH("LEFT")
         row.requesterTxt = reqTxt
 
         local crfTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        crfTxt:SetPoint("LEFT", row, "LEFT", 345, 0)
-        crfTxt:SetWidth(105)
+        crfTxt:SetPoint("LEFT", row, "LEFT", 425, 0)
+        crfTxt:SetWidth(125)
         crfTxt:SetJustifyH("LEFT")
         row.crafterTxt = crfTxt
 
         local qtyTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        qtyTxt:SetPoint("LEFT", row, "LEFT", 460, 0)
-        qtyTxt:SetWidth(40)
+        qtyTxt:SetPoint("LEFT", row, "LEFT", 565, 0)
+        qtyTxt:SetWidth(45)
         qtyTxt:SetJustifyH("CENTER")
         row.qtyTxt = qtyTxt
 
         local tipTxt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tipTxt:SetPoint("LEFT", row, "LEFT", 510, 0)
-        tipTxt:SetWidth(95)
+        tipTxt:SetPoint("LEFT", row, "LEFT", 620, 0)
+        tipTxt:SetWidth(115)
         tipTxt:SetJustifyH("LEFT")
         row.tipTxt = tipTxt
 
         local statusTxt = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        statusTxt:SetPoint("LEFT", row, "LEFT", 615, 0)
-        statusTxt:SetWidth(85)
+        statusTxt:SetPoint("LEFT", row, "LEFT", 750, 0)
+        statusTxt:SetWidth(95)
         statusTxt:SetJustifyH("LEFT")
         row.statusTxt = statusTxt
 
         local notesTxt = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        notesTxt:SetPoint("LEFT", row, "LEFT", 710, 0)
-        notesTxt:SetWidth(105)
+        notesTxt:SetPoint("LEFT", row, "LEFT", 860, 0)
+        notesTxt:SetWidth(175)
         notesTxt:SetJustifyH("LEFT")
         row.notesTxt = notesTxt
 
