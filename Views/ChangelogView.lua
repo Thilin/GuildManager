@@ -70,6 +70,7 @@ local CHANGELOG_DATA = {
                         "Correção para casos de 'Nenhum jogador de nome encontrado' ou limite de mensagens enviadas.",
                         "Correção de ícones da barra lateral.",
                         "Correção em que o chat desaparecia rapidamente em alguns casos.",
+                        "Correção de erro de interface (Lua) na rolagem de estatísticas da tela de Auditoria.",
                     }
                 },
                 {
@@ -102,6 +103,7 @@ local CHANGELOG_DATA = {
                         "Fix for 'No player named found' or message rate limit issues.",
                         "Fix of side navigation bar icons across all screens.",
                         "Fix where chat messages were disappearing rapidly in some cases.",
+                        "Fix for Lua script error on the statistics scroll bar in the Audit window.",
                     }
                 },
                 {
