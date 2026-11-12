@@ -1075,10 +1075,9 @@ function MemberView:toggleMainTag()
 
     local newState = not self._isMain
     local memberService = _G.GM and _G.GM.memberService
-    local alts = self._currentMember:getAlts() or {}
+    local family = memberService and memberService.getAltFamily and memberService:getAltFamily(self._currentMember) or {}
 
-    if #alts > 0 and memberService then
-        local family = memberService:getAltFamily(self._currentMember)
+    if #family > 1 and memberService then
         local familyNames = {}
         for _, m in ipairs(family) do
             table.insert(familyNames, m:getName())
@@ -2043,16 +2042,34 @@ function MemberView:updateAltsVisual()
         return
     end
 
-    local alts = self._currentMember:getAlts() or {}
-    if #alts == 0 then
-        self._altsVal:SetText("|cff666666" .. curL["MEMBER_NONE_ALTS"] .. "|r")
-        return
-    end
+    local memberService = _G.GM and _G.GM.memberService
+    local family = memberService and memberService.getAltFamily and memberService:getAltFamily(self._currentMember) or {}
+    local myNameLower = (self._currentMember:getName() or ""):lower()
 
     local formattedAlts = {}
-    for _, altName in ipairs(alts) do
-        local colored = self:formatColoredMemberName(altName)
-        table.insert(formattedAlts, colored)
+    for _, m in ipairs(family) do
+        local mName = m:getName()
+        if mName and mName ~= "" and mName:lower() ~= myNameLower then
+            local colored = self:formatColoredMemberName(mName)
+            if m.isMain and m:isMain() then
+                colored = colored .. " |cffffd200[MAIN]|r"
+            end
+            table.insert(formattedAlts, colored)
+        end
+    end
+
+    if #formattedAlts == 0 then
+        -- Fallback direto para getAlts()
+        for _, altName in ipairs(self._currentMember:getAlts() or {}) do
+            if altName and altName ~= "" and altName:lower() ~= myNameLower then
+                table.insert(formattedAlts, self:formatColoredMemberName(altName))
+            end
+        end
+    end
+
+    if #formattedAlts == 0 then
+        self._altsVal:SetText("|cff666666" .. curL["MEMBER_NONE_ALTS"] .. "|r")
+        return
     end
 
     self._altsVal:SetText(table.concat(formattedAlts, ", "))
@@ -2643,10 +2660,12 @@ function MemberView:refreshAvailableAltsList(filterText)
     -- 1. Cria mapa com todos os membros já pertencentes à família para excluí-los da busca
     local familyNamesMap = {}
     if self._currentMember then
-        familyNamesMap[(self._currentMember:getName() or ""):lower()] = true
-        for _, alt in ipairs(self._currentMember:getAlts() or {}) do
-            familyNamesMap[alt:lower()] = true
+        local memberService = _G.GM and _G.GM.memberService
+        local family = memberService and memberService.getAltFamily and memberService:getAltFamily(self._currentMember) or {}
+        for _, m in ipairs(family) do
+            familyNamesMap[(m:getName() or ""):lower()] = true
         end
+        familyNamesMap[(self._currentMember:getName() or ""):lower()] = true
     end
 
     -- 2. Coleta todos os membros da guilda através do provedor

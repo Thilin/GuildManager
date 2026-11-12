@@ -984,42 +984,274 @@ function MemberService:saveMember(member, shouldSync)
 end
 
 --- Retorna todas as entidades Member pertencentes ao mesmo grupo de alts do membro fornecido (incluindo o próprio membro).
+--- Constrói o grafo bidirecional e simétrico a partir de todos os membros conhecidos, garantindo que
+--- conexões reflexivas ou indiretas sejam encontradas via busca em largura (BFS).
 ---@param member Member
 ---@return Member[]
 function MemberService:getAltFamily(member)
     if not member then return {} end
-    local rootMember = self._repository:findByName(member:getName()) or member
-    local familyMap = {}
-    local familyList = {}
+    local rootName = member:getName()
+    if not rootName or rootName == "" then return {} end
+    local rootClean = (rootName:match("^[^-]+") or rootName):match("^%s*(.-)%s*$") or rootName
+    local rootLower = rootClean:lower()
 
-    local function addMemberToFamily(m)
-        if not m then return end
-        local nameLower = (m:getName() or ""):lower()
-        if nameLower ~= "" and not familyMap[nameLower] then
-            familyMap[nameLower] = m
-            table.insert(familyList, m)
-            for _, altName in ipairs(m:getAlts() or {}) do
-                local altMember = self._repository:findByName(altName)
-                if not altMember then
-                    for _, ex in ipairs(self._repository:findAll()) do
-                        if (ex:getName() or ""):lower() == altName:lower() then
-                            altMember = ex
-                            break
+    local allMembers = (self._repository and self._repository:findAll()) or {}
+    local memberByName = {}
+    local firstNameMap = {}
+    local adj = {}
+
+    for _, m in ipairs(allMembers) do
+        local mName = m:getName()
+        if mName and mName ~= "" then
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            local mLower = mClean:lower()
+            memberByName[mLower] = m
+            local firstName = (mClean:match("^(%S+)") or mClean):lower()
+            if not firstNameMap[firstName] then
+                firstNameMap[firstName] = mLower
+            end
+        end
+    end
+
+    if not memberByName[rootLower] then
+        local first = (rootClean:match("^(%S+)") or rootClean):lower()
+        if firstNameMap[first] then
+            rootLower = firstNameMap[first]
+        else
+            memberByName[rootLower] = member
+        end
+    end
+
+    -- Constrói o grafo bidirecional e simétrico
+    for _, m in ipairs(allMembers) do
+        local mName = m:getName()
+        if mName and mName ~= "" then
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            local mLower = mClean:lower()
+            local alts = m:getAlts()
+            if alts and #alts > 0 then
+                for _, altName in ipairs(alts) do
+                    if type(altName) == "string" and altName ~= "" then
+                        local aClean = (altName:match("^[^-]+") or altName):match("^%s*(.-)%s*$") or altName
+                        local aLower = aClean:lower()
+                        local targetLower = memberByName[aLower] and aLower or (firstNameMap[aLower] or nil)
+                        if targetLower and targetLower ~= mLower then
+                            adj[mLower] = adj[mLower] or {}
+                            adj[mLower][targetLower] = true
+                            adj[targetLower] = adj[targetLower] or {}
+                            adj[targetLower][mLower] = true
                         end
                     end
-                end
-                if not altMember then
-                    altMember = Member:new({ name = altName, isMain = false })
-                end
-                if altMember and not familyMap[(altMember:getName() or ""):lower()] then
-                    addMemberToFamily(altMember)
                 end
             end
         end
     end
 
-    addMemberToFamily(rootMember)
+    -- BFS a partir de rootLower
+    local visited = {}
+    local familyList = {}
+    local queue = { rootLower }
+    visited[rootLower] = true
+
+    while #queue > 0 do
+        local curr = table.remove(queue, 1)
+        local mem = memberByName[curr]
+        if not mem and self._repository then
+            mem = self._repository:findByName(curr)
+        end
+        if not mem then
+            mem = Member:new({ name = curr, isMain = false })
+        end
+        table.insert(familyList, mem)
+
+        if adj[curr] then
+            for neighbor, _ in pairs(adj[curr]) do
+                if not visited[neighbor] then
+                    visited[neighbor] = true
+                    table.insert(queue, neighbor)
+                end
+            end
+        end
+    end
+
+    -- Ordena a família: Main primeiro, seguido de alts por nível/nome
+    table.sort(familyList, function(a, b)
+        local aMain = a:isMain() and 1 or 0
+        local bMain = b:isMain() and 1 or 0
+        if aMain ~= bMain then
+            return aMain > bMain
+        end
+        local lvlA = a.getLevel and a:getLevel() or 0
+        local lvlB = b.getLevel and b:getLevel() or 0
+        if lvlA ~= lvlB then
+            return lvlA > lvlB
+        end
+        return (a:getName() or "") < (b:getName() or "")
+    end)
+
     return familyList
+end
+
+--- Harmoniza a consistência bidirecional de todos os grupos de alts no banco de dados.
+--- Garante que se A aponta para B, B também aponte para A, e que todos os membros da família
+--- possuam a lista completa e idêntica de alts, com exatamente 1 Main por família.
+function MemberService:healAltFamilyConsistency()
+    if not self._repository then return end
+
+    local allMembers = self._repository:findAll() or {}
+    if #allMembers == 0 then return end
+
+    local memberByName = {}
+    local firstNameMap = {}
+    local adj = {}
+
+    for _, m in ipairs(allMembers) do
+        local mName = m:getName()
+        if mName and mName ~= "" then
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            local mLower = mClean:lower()
+            memberByName[mLower] = m
+            local firstName = (mClean:match("^(%S+)") or mClean):lower()
+            if not firstNameMap[firstName] then
+                firstNameMap[firstName] = mLower
+            end
+        end
+    end
+
+    -- 1. Constrói grafo simétrico bidirecional
+    for _, m in ipairs(allMembers) do
+        local mName = m:getName()
+        if mName and mName ~= "" then
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            local mLower = mClean:lower()
+            local alts = m:getAlts()
+            if alts and #alts > 0 then
+                for _, altName in ipairs(alts) do
+                    if type(altName) == "string" and altName ~= "" then
+                        local aClean = (altName:match("^[^-]+") or altName):match("^%s*(.-)%s*$") or altName
+                        local aLower = aClean:lower()
+                        local targetLower = memberByName[aLower] and aLower or (firstNameMap[aLower] or nil)
+                        if targetLower and targetLower ~= mLower then
+                            adj[mLower] = adj[mLower] or {}
+                            adj[mLower][targetLower] = true
+                            adj[targetLower] = adj[targetLower] or {}
+                            adj[targetLower][mLower] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2. Encontra componentes conexos
+    local visited = {}
+    for _, m in ipairs(allMembers) do
+        local mName = m:getName()
+        if mName and mName ~= "" then
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            local mLower = mClean:lower()
+            if not visited[mLower] and adj[mLower] then
+                local component = {}
+                local queue = { mLower }
+                visited[mLower] = true
+
+                while #queue > 0 do
+                    local curr = table.remove(queue, 1)
+                    local mem = memberByName[curr]
+                    if mem then
+                        table.insert(component, mem)
+                    end
+                    if adj[curr] then
+                        for neighbor, _ in pairs(adj[curr]) do
+                            if not visited[neighbor] then
+                                visited[neighbor] = true
+                                table.insert(queue, neighbor)
+                            end
+                        end
+                    end
+                end
+
+                -- Se a família possui mais de 1 membro, harmoniza
+                if #component > 1 then
+                    -- Determina o Main único
+                    local mainMember = nil
+                    for _, mem in ipairs(component) do
+                        if mem:isMain() then
+                            if not mainMember then
+                                mainMember = mem
+                            else
+                                local curRank = mem:getRankIndex() or 99
+                                local mainRank = mainMember:getRankIndex() or 99
+                                if curRank < mainRank or (curRank == mainRank and (mem:getLevel() or 0) > (mainMember:getLevel() or 0)) then
+                                    mainMember = mem
+                                end
+                            end
+                        end
+                    end
+
+                    if not mainMember then
+                        table.sort(component, function(a, b)
+                            local curRankA = a:getRankIndex() or 99
+                            local curRankB = b:getRankIndex() or 99
+                            if curRankA ~= curRankB then return curRankA < curRankB end
+                            return (a:getLevel() or 0) > (b:getLevel() or 0)
+                        end)
+                        mainMember = component[1]
+                    end
+
+                    local mainNameLower = (mainMember:getName() or ""):lower()
+
+                    -- Lista completa com os nomes reais de todos da família
+                    local allNames = {}
+                    for _, mem in ipairs(component) do
+                        table.insert(allNames, mem:getName())
+                    end
+
+                    -- Atualiza cada membro da família
+                    for _, mem in ipairs(component) do
+                        local memNameLower = (mem:getName() or ""):lower()
+                        local shouldBeMain = (memNameLower == mainNameLower)
+                        local changed = false
+
+                        if mem:isMain() ~= shouldBeMain then
+                            mem:setMain(shouldBeMain)
+                            changed = true
+                        end
+
+                        -- Constrói lista de alts (todos os outros membros)
+                        local targetAlts = {}
+                        local currentAltsMap = {}
+                        for _, aName in ipairs(mem:getAlts() or {}) do
+                            currentAltsMap[aName:lower()] = true
+                        end
+
+                        local needsAltUpdate = false
+                        for _, otherName in ipairs(allNames) do
+                            if otherName:lower() ~= memNameLower then
+                                table.insert(targetAlts, otherName)
+                                if not currentAltsMap[otherName:lower()] then
+                                    needsAltUpdate = true
+                                end
+                            end
+                        end
+
+                        if #targetAlts ~= #(mem:getAlts() or {}) then
+                            needsAltUpdate = true
+                        end
+
+                        if needsAltUpdate then
+                            mem:setAlts(targetAlts)
+                            changed = true
+                        end
+
+                        if changed then
+                            self._repository:save(mem)
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 --- Sincroniza o grupo de alts vinculados garantindo:

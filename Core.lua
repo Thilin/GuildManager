@@ -169,6 +169,11 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
             logService:cleanDuplicateAndSpuriousLogs(memberService)
         end
 
+        -- Harmoniza a consistência bidirecional de famílias de alts no banco de dados
+        if memberService and memberService.healAltFamilyConsistency then
+            memberService:healAltFamilyConsistency()
+        end
+
         if minimapButton and minimapButton.initLocationListener then
             minimapButton:initLocationListener(locationService)
         end
