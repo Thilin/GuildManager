@@ -216,6 +216,9 @@ function GroupView:isShown() return self._frame and self._frame:IsShown() end
 
 function GroupView:show()
     if self._frame then
+        if _G.GM and _G.GM.restoreWindowPosition then
+            _G.GM.restoreWindowPosition(self._frame)
+        end
         self._frame:Show()
         self:renderLFGDashboard()
         self:renderCreatedGroups()
@@ -384,6 +387,12 @@ function GroupView:createUI()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    if _G.GM and _G.GM.hookWindowDrag then
+        _G.GM.hookWindowDrag(frame)
+    end
+    if _G.GM and _G.GM.restoreWindowPosition then
+        _G.GM.restoreWindowPosition(frame)
+    end
     frame:SetClampedToScreen(true)
     frame:SetFrameStrata("HIGH")
     frame:Hide()
@@ -516,99 +525,9 @@ end
 function GroupView:createSideTabs()
     local frame = self._frame
     if not frame then return end
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-
-    local function setupTab(btn, iconPath, tooltipTitle, tooltipDesc, onClickFn, isActive)
-        btn:SetSize(36, 36)
-        if btn.SetBackdrop then
-            btn:SetBackdrop(SIDE_TAB_BACKDROP)
-            if isActive then
-                btn:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
-                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
-            else
-                btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            end
-        end
-
-        local icon = btn:CreateTexture(nil, "ARTWORK")
-        icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 4, -4)
-        icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -4, 4)
-        icon:SetTexture(iconPath)
-        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        icon:SetVertexColor(isActive and 1.0 or 0.65, isActive and 1.0 or 0.65, isActive and 1.0 or 0.65)
-
-        btn:SetScript("OnEnter", function(b)
-            if not isActive and b.SetBackdropBorderColor then
-                b:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-                b:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-                icon:SetVertexColor(1, 1, 1)
-            end
-            GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("|cffffd200" .. tooltipTitle .. "|r")
-            if isActive then
-                GameTooltip:AddLine("|cff888888Aba atual|r")
-            end
-            GameTooltip:AddLine(tooltipDesc, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        btn:SetScript("OnLeave", function(b)
-            if not isActive and b.SetBackdropBorderColor then
-                b:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-                b:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-                icon:SetVertexColor(0.65, 0.65, 0.65)
-            end
-            GameTooltip:Hide()
-        end)
-        if onClickFn then
-            btn:SetScript("OnClick", onClickFn)
-        end
+    if _G.GM and _G.GM.createNavigationSideTabs then
+        self._sideTabs = _G.GM.createNavigationSideTabs(frame, 'groups', self)
     end
-
-    -- Aba 1: Auditoria
-    local tabAudit = CreateFrame("Button", "GM_GroupTab_Audit", frame, template)
-    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -44)
-    setupTab(tabAudit, "Interface\\Icons\\INV_Misc_Book_09", "Auditoria da Guilda", "Painel de controle e lista de membros da guilda.", function()
-        frame:Hide()
-        if _G.GM and _G.GM.auditController then _G.GM.auditController:show() end
-    end, false)
-
-    -- Aba 2: Logs
-    local tabLogs = CreateFrame("Button", "GM_GroupTab_Logs", frame, template)
-    tabLogs:SetPoint("TOPLEFT", tabAudit, "BOTTOMLEFT", 0, -8)
-    setupTab(tabLogs, "Interface\\Icons\\Spell_Holy_PrayerOfHealing", "Histórico de Logs", "Visualiza alterações cadastrais, entradas e saídas.", function()
-        frame:Hide()
-        if _G.GM and _G.GM.logController then _G.GM.logController:show() end
-    end, false)
-
-    -- Aba 3: Grupos (Ativa)
-    local tabGroups = CreateFrame("Button", "GM_GroupTab_Groups", frame, template)
-    tabGroups:SetPoint("TOPLEFT", tabLogs, "BOTTOMLEFT", 0, -8)
-    setupTab(tabGroups, "Interface\\Icons\\INV_Misc_GroupLooking", "Grupos & LFG", "Gerenciamento de grupos e mural de Procurando Grupo.", nil, true)
-
-    -- Aba 4: Agenda
-    local tabAgenda = CreateFrame("Button", "GM_GroupTab_Agenda", frame, template)
-    tabAgenda:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
-    setupTab(tabAgenda, "Interface\\Icons\\INV_Misc_PocketWatch_02", "Agenda da Guilda", "Eventos, aniversários e lembretes da guilda.", function()
-        frame:Hide()
-        if _G.GM and _G.GM.agendaController then _G.GM.agendaController:show() end
-    end, false)
-
-    -- Aba 5: Pedidos de Profissão
-    local tabProf = CreateFrame("Button", "GM_GroupTab_Prof", frame, template)
-    tabProf:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
-    setupTab(tabProf, "Interface\\Icons\\Trade_BlackSmithing", "Pedidos de Profissão", "Consulte receitas, veja quem faz e faça pedidos.", function()
-        frame:Hide()
-        if _G.GM and _G.GM.professionController then _G.GM.professionController:show() end
-    end, false)
-
-    -- Aba 6: Configurações
-    local tabSettings = CreateFrame("Button", "GM_GroupTab_Settings", frame, template)
-    tabSettings:SetPoint("TOPLEFT", tabProf, "BOTTOMLEFT", 0, -8)
-    setupTab(tabSettings, "Interface\\Icons\\Trade_Engineering", "Configurações", "Ajustes do Guild Manager.", function()
-        frame:Hide()
-        if _G.GM and _G.GM.settingsController then _G.GM.settingsController:show() end
-    end, false)
 end
 
 -- =========================================================================

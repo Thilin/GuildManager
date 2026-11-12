@@ -172,6 +172,12 @@ function SettingsView:createUI()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(f) f:StartMoving() end)
     frame:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
+    if _G.GM and _G.GM.hookWindowDrag then
+        _G.GM.hookWindowDrag(frame)
+    end
+    if _G.GM and _G.GM.restoreWindowPosition then
+        _G.GM.restoreWindowPosition(frame)
+    end
     frame:Hide()
 
     if UISpecialFrames then
@@ -268,303 +274,12 @@ end
 function SettingsView:createSideTabs()
     local frame = self._frame
     if not frame then return end
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-
-    -- Aba 1: Auditoria
-    local tabAudit = CreateFrame("Button", "GM_SettingsSideTab_Audit", frame, template)
-    tabAudit:SetSize(36, 36)
-    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -44)
-    if tabAudit.SetBackdrop then
-        tabAudit:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabAudit:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabAudit:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    if _G.GM and _G.GM.createNavigationSideTabs then
+        self._sideTabs = _G.GM.createNavigationSideTabs(frame, 'settings', self)
     end
-    local auditIcon = tabAudit:CreateTexture(nil, "ARTWORK")
-    auditIcon:SetPoint("TOPLEFT", tabAudit, "TOPLEFT", 4, -4)
-    auditIcon:SetPoint("BOTTOMRIGHT", tabAudit, "BOTTOMRIGHT", -4, 4)
-    auditIcon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
-    auditIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    auditIcon:SetVertexColor(0.65, 0.65, 0.65)
-
-    tabAudit:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        auditIcon:SetVertexColor(1.0, 1.0, 1.0)
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabAudit:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        auditIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabAudit:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local auditCtrl = (_G.GM and _G.GM.auditController) or _G.auditController
-        if auditCtrl then
-            auditCtrl:show()
-            local aFrame = (_G.GM and _G.GM.auditView and _G.GM.auditView.getFrame and _G.GM.auditView:getFrame()) or (auditCtrl._auditView and auditCtrl._auditView:getFrame())
-            if aFrame and point then
-                aFrame:ClearAllPoints()
-                if relativeTo then aFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else aFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 2: Logs
-    local tabLogs = CreateFrame("Button", "GM_SettingsSideTab_Logs", frame, template)
-    tabLogs:SetSize(36, 36)
-    tabLogs:SetPoint("TOPLEFT", tabAudit, "BOTTOMLEFT", 0, -8)
-    if tabLogs.SetBackdrop then
-        tabLogs:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabLogs:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabLogs:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local logsIcon = tabLogs:CreateTexture(nil, "ARTWORK")
-    logsIcon:SetPoint("TOPLEFT", tabLogs, "TOPLEFT", 4, -4)
-    logsIcon:SetPoint("BOTTOMRIGHT", tabLogs, "BOTTOMRIGHT", -4, 4)
-    logsIcon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
-    logsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    logsIcon:SetVertexColor(0.65, 0.65, 0.65)
-
-    tabLogs:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        logsIcon:SetVertexColor(1.0, 1.0, 1.0)
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabLogs:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        logsIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabLogs:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local logCtrl = (_G.GM and _G.GM.logController) or _G.logController
-        if logCtrl then
-            logCtrl:show()
-            local lFrame = (_G.GM and _G.GM.logView and _G.GM.logView.getFrame and _G.GM.logView:getFrame()) or (logCtrl._logView and logCtrl._logView:getFrame())
-            if lFrame and point then
-                lFrame:ClearAllPoints()
-                if relativeTo then lFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else lFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 3: Grupos
-    local tabGroups = CreateFrame("Button", "GM_SettingsSideTab_Groups", frame, template)
-    tabGroups:SetSize(36, 36)
-    tabGroups:SetPoint("TOPLEFT", tabLogs, "BOTTOMLEFT", 0, -8)
-    if tabGroups.SetBackdrop then
-        tabGroups:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabGroups:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabGroups:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local groupsIcon = tabGroups:CreateTexture(nil, "ARTWORK")
-    groupsIcon:SetPoint("TOPLEFT", tabGroups, "TOPLEFT", 4, -4)
-    groupsIcon:SetPoint("BOTTOMRIGHT", tabGroups, "BOTTOMRIGHT", -4, 4)
-    groupsIcon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
-    groupsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    groupsIcon:SetVertexColor(0.65, 0.65, 0.65)
-
-    tabGroups:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabGroups:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        groupsIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabGroups:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local groupCtrl = (_G.GM and _G.GM.groupController) or _G.groupController
-        if groupCtrl then
-            groupCtrl:show()
-            local gFrame = (_G.GM and _G.GM.groupView and _G.GM.groupView.getFrame and _G.GM.groupView:getFrame()) or (groupCtrl._groupView and groupCtrl._groupView:getFrame())
-            if gFrame and point then
-                gFrame:ClearAllPoints()
-                if relativeTo then gFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else gFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 4: Agenda
-    local tabAgenda = CreateFrame("Button", "GM_SettingsSideTab_Agenda", frame, template)
-    tabAgenda:SetSize(36, 36)
-    tabAgenda:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
-    if tabAgenda.SetBackdrop then
-        tabAgenda:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabAgenda:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabAgenda:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local agendaIcon = tabAgenda:CreateTexture(nil, "ARTWORK")
-    agendaIcon:SetPoint("TOPLEFT", tabAgenda, "TOPLEFT", 4, -4)
-    agendaIcon:SetPoint("BOTTOMRIGHT", tabAgenda, "BOTTOMRIGHT", -4, 4)
-    local okAgenda = agendaIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
-    if okAgenda ~= false and agendaIcon:GetTexture() then
-        agendaIcon:SetTexCoord(0.0078, 0.375, 0.0156, 0.75)
-    else
-        agendaIcon:SetTexture("Interface\\AddOns\\GuildManager\\Textures\\calendar.tga")
-        agendaIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    agendaIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabAgenda.icon = agendaIcon
-
-    tabAgenda:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabAgenda:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        agendaIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabAgenda:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local agendaCtrl = (_G.GM and _G.GM.agendaController) or _G.agendaController
-        if agendaCtrl then
-            agendaCtrl:show()
-            local aFrame = (_G.GM and _G.GM.agendaView and _G.GM.agendaView.getFrame and _G.GM.agendaView:getFrame())
-            if aFrame and point then
-                aFrame:ClearAllPoints()
-                if relativeTo then aFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else aFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 5: Pedidos de Profissão & Artesãos
-    local tabProf = CreateFrame("Button", "GM_SettingsSideTab_Professions", frame, template)
-    tabProf:SetSize(36, 36)
-    tabProf:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
-    if tabProf.SetBackdrop then
-        tabProf:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabProf:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabProf:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local profIcon = tabProf:CreateTexture(nil, "ARTWORK")
-    profIcon:SetPoint("TOPLEFT", tabProf, "TOPLEFT", 4, -4)
-    profIcon:SetPoint("BOTTOMRIGHT", tabProf, "BOTTOMRIGHT", -4, 4)
-    profIcon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
-    profIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    profIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabProf.icon = profIcon
-
-    tabProf:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        profIcon:SetVertexColor(1.0, 1.0, 1.0)
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. (curL["TAB_PROFESSIONS_TOOLTIP"] or "Pedidos de Profissão") .. "|r")
-        GameTooltip:AddLine(curL["TAB_PROFESSIONS_TOOLTIP_DESC"] or "Consulte receitas, veja quem faz na guilda e faça pedidos de fabricação.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabProf:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        profIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabProf:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local profCtrl = (_G.GM and _G.GM.professionController) or _G.professionController
-        if profCtrl then
-            profCtrl:show()
-            local pFrame = (_G.GM and _G.GM.professionView and _G.GM.professionView.getFrame and _G.GM.professionView:getFrame()) or (profCtrl._professionView and profCtrl._professionView:getFrame())
-            if pFrame and point then
-                pFrame:ClearAllPoints()
-                if relativeTo then pFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else pFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 6: Configurações (Ativa!)
-    local tabSettings = CreateFrame("Button", "GM_SettingsSideTab_Settings", frame, template)
-    tabSettings:SetSize(36, 36)
-    tabSettings:SetPoint("TOPLEFT", tabProf, "BOTTOMLEFT", 0, -8)
-    if tabSettings.SetBackdrop then
-        tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabSettings:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
-        tabSettings:SetBackdropBorderColor(PALETTE.ACTIVE_TAB_BORDER[1], PALETTE.ACTIVE_TAB_BORDER[2], PALETTE.ACTIVE_TAB_BORDER[3], 1.0)
-    end
-    local sIcon = tabSettings:CreateTexture(nil, "ARTWORK")
-    sIcon:SetPoint("TOPLEFT", tabSettings, "TOPLEFT", 4, -4)
-    sIcon:SetPoint("BOTTOMRIGHT", tabSettings, "BOTTOMRIGHT", -4, 4)
-    sIcon:SetTexture("Interface\\Icons\\Trade_Engineering")
-    sIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    sIcon:SetVertexColor(1.0, 1.0, 1.0)
-
-    local sGlow = tabSettings:CreateTexture(nil, "OVERLAY")
-    sGlow:SetPoint("TOPLEFT", tabSettings, "TOPLEFT", -2, 2)
-    sGlow:SetPoint("BOTTOMRIGHT", tabSettings, "BOTTOMRIGHT", 2, -2)
-    sGlow:SetTexture("Interface\\Buttons\\CheckButtonHilight")
-    sGlow:SetBlendMode("ADD")
-    sGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
-
-    tabSettings:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine("|cff888888" .. curL["CURRENT_TAB"] .. "|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabSettings:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
+
+
 
 --- Cria o cabeçalho de resumo e customização da guilda no topo da tela.
 function SettingsView:createTopSummaryBox()
@@ -1850,6 +1565,9 @@ end
 
 function SettingsView:show()
     if not self._frame then self:createUI() end
+    if _G.GM and _G.GM.restoreWindowPosition then
+        _G.GM.restoreWindowPosition(self._frame)
+    end
     self._frame:Show()
     self:updateLocale()
     if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN or 839) end

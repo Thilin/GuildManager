@@ -37,6 +37,7 @@ Services/LocationService.lua
 Services/SyncService.lua
 Services/ProfessionService.lua
 
+Views/NavigationHelper.lua
 Views/MemberView.lua
 Views/LogView.lua
 Views/AuditView.lua

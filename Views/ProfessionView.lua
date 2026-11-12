@@ -251,6 +251,9 @@ end
 --- Exibe a janela
 function ProfessionView:show()
     if not self._frame then self:createUI() end
+    if _G.GM and _G.GM.restoreWindowPosition then
+        _G.GM.restoreWindowPosition(self._frame)
+    end
     self._frame:Show()
     self:updateLocale()
     self:refresh()
@@ -418,6 +421,12 @@ function ProfessionView:createUI()
     frame:SetScript("OnDragStart", function(f) f:StartMoving() end)
     frame:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    if _G.GM and _G.GM.hookWindowDrag then
+        _G.GM.hookWindowDrag(frame)
+    end
+    if _G.GM and _G.GM.restoreWindowPosition then
+        _G.GM.restoreWindowPosition(frame)
+    end
     frame:Hide()
 
     if UISpecialFrames then
@@ -3526,151 +3535,13 @@ end
 
 function ProfessionView:createSideTabs()
     local frame = self._frame
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local curL = (_G.GM and _G.GM.L) or _G.L or L
-
-    -- Aba 1: Auditoria
-    local tabAudit = CreateFrame("Button", "GM_ProfSideTab_Audit", frame, template)
-    tabAudit:SetSize(36, 36)
-    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -60)
-    if tabAudit.SetBackdrop then
-        tabAudit:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabAudit:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabAudit:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+    if not frame then return end
+    if _G.GM and _G.GM.createNavigationSideTabs then
+        self._sideTabs = _G.GM.createNavigationSideTabs(frame, 'professions', self)
     end
-    local aIcon = tabAudit:CreateTexture(nil, "ARTWORK")
-    aIcon:SetPoint("TOPLEFT", tabAudit, "TOPLEFT", 4, -4)
-    aIcon:SetPoint("BOTTOMRIGHT", tabAudit, "BOTTOMRIGHT", -4, 4)
-    aIcon:SetTexture("Interface\\Icons\\INV_Scroll_03")
-    aIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    tabAudit:SetScript("OnClick", function()
-        local pt, rel, relPt, x, y = frame:GetPoint()
-        self:hide()
-        if _G.GM and _G.GM.auditController then
-            _G.GM.auditController:show()
-            local aFrame = _G.GM.auditView and _G.GM.auditView:getFrame()
-            if aFrame and pt then aFrame:ClearAllPoints(); aFrame:SetPoint(pt, rel, relPt, x, y) end
-        end
-    end)
-
-    -- Aba 2: Logs
-    local tabLogs = CreateFrame("Button", "GM_ProfSideTab_Logs", frame, template)
-    tabLogs:SetSize(36, 36)
-    tabLogs:SetPoint("TOPLEFT", tabAudit, "BOTTOMLEFT", 0, -8)
-    if tabLogs.SetBackdrop then
-        tabLogs:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabLogs:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabLogs:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local lIcon = tabLogs:CreateTexture(nil, "ARTWORK")
-    lIcon:SetPoint("TOPLEFT", tabLogs, "TOPLEFT", 4, -4)
-    lIcon:SetPoint("BOTTOMRIGHT", tabLogs, "BOTTOMRIGHT", -4, 4)
-    lIcon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
-    lIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    tabLogs:SetScript("OnClick", function()
-        local pt, rel, relPt, x, y = frame:GetPoint()
-        self:hide()
-        if _G.GM and _G.GM.logController then
-            _G.GM.logController:show()
-            local lFrame = _G.GM.logView and _G.GM.logView:getFrame()
-            if lFrame and pt then lFrame:ClearAllPoints(); lFrame:SetPoint(pt, rel, relPt, x, y) end
-        end
-    end)
-
-    -- Aba 3: Grupos
-    local tabGroups = CreateFrame("Button", "GM_ProfSideTab_Groups", frame, template)
-    tabGroups:SetSize(36, 36)
-    tabGroups:SetPoint("TOPLEFT", tabLogs, "BOTTOMLEFT", 0, -8)
-    if tabGroups.SetBackdrop then
-        tabGroups:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabGroups:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabGroups:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local gIcon = tabGroups:CreateTexture(nil, "ARTWORK")
-    gIcon:SetPoint("TOPLEFT", tabGroups, "TOPLEFT", 4, -4)
-    gIcon:SetPoint("BOTTOMRIGHT", tabGroups, "BOTTOMRIGHT", -4, 4)
-    gIcon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
-    gIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    tabGroups:SetScript("OnClick", function()
-        local pt, rel, relPt, x, y = frame:GetPoint()
-        self:hide()
-        if _G.GM and _G.GM.groupController then
-            _G.GM.groupController:show()
-            local gFrame = _G.GM.groupView and _G.GM.groupView:getFrame()
-            if gFrame and pt then gFrame:ClearAllPoints(); gFrame:SetPoint(pt, rel, relPt, x, y) end
-        end
-    end)
-
-    -- Aba 4: Agenda
-    local tabAgenda = CreateFrame("Button", "GM_ProfSideTab_Agenda", frame, template)
-    tabAgenda:SetSize(36, 36)
-    tabAgenda:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
-    if tabAgenda.SetBackdrop then
-        tabAgenda:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabAgenda:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabAgenda:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local agIcon = tabAgenda:CreateTexture(nil, "ARTWORK")
-    agIcon:SetPoint("TOPLEFT", tabAgenda, "TOPLEFT", 4, -4)
-    agIcon:SetPoint("BOTTOMRIGHT", tabAgenda, "BOTTOMRIGHT", -4, 4)
-    agIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
-    agIcon:SetTexCoord(0.0078, 0.375, 0.0156, 0.75)
-    tabAgenda:SetScript("OnClick", function()
-        local pt, rel, relPt, x, y = frame:GetPoint()
-        self:hide()
-        if _G.GM and _G.GM.agendaController then
-            _G.GM.agendaController:show()
-            local agFrame = _G.GM.agendaView and _G.GM.agendaView:getFrame()
-            if agFrame and pt then agFrame:ClearAllPoints(); agFrame:SetPoint(pt, rel, relPt, x, y) end
-        end
-    end)
-
-    -- Aba 5: Profissões & Pedidos (Ativa nesta janela com brilho dourado)
-    local tabProf = CreateFrame("Button", "GM_ProfSideTab_Professions", frame, template)
-    tabProf:SetSize(36, 36)
-    tabProf:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
-    if tabProf.SetBackdrop then
-        tabProf:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabProf:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
-        tabProf:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
-    end
-    local pIcon = tabProf:CreateTexture(nil, "ARTWORK")
-    pIcon:SetPoint("TOPLEFT", tabProf, "TOPLEFT", 4, -4)
-    pIcon:SetPoint("BOTTOMRIGHT", tabProf, "BOTTOMRIGHT", -4, 4)
-    pIcon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
-    pIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    pIcon:SetVertexColor(1.0, 1.0, 1.0)
-    local pGlow = tabProf:CreateTexture(nil, "OVERLAY")
-    pGlow:SetPoint("TOPLEFT", tabProf, "TOPLEFT", -2, 2)
-    pGlow:SetPoint("BOTTOMRIGHT", tabProf, "BOTTOMRIGHT", 2, -2)
-    pGlow:SetTexture("Interface\\Buttons\\CheckButtonHilight")
-    pGlow:SetBlendMode("ADD")
-    pGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
-
-    -- Aba 6: Configurações
-    local tabSettings = CreateFrame("Button", "GM_ProfSideTab_Settings", frame, template)
-    tabSettings:SetSize(36, 36)
-    tabSettings:SetPoint("TOPLEFT", tabProf, "BOTTOMLEFT", 0, -8)
-    if tabSettings.SetBackdrop then
-        tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabSettings:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabSettings:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local sIcon = tabSettings:CreateTexture(nil, "ARTWORK")
-    sIcon:SetPoint("TOPLEFT", tabSettings, "TOPLEFT", 4, -4)
-    sIcon:SetPoint("BOTTOMRIGHT", tabSettings, "BOTTOMRIGHT", -4, 4)
-    sIcon:SetTexture("Interface\\Icons\\Trade_Engineering")
-    sIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    tabSettings:SetScript("OnClick", function()
-        local pt, rel, relPt, x, y = frame:GetPoint()
-        self:hide()
-        if _G.GM and _G.GM.settingsController then
-            _G.GM.settingsController:show()
-            local sFrame = _G.GM.settingsView and _G.GM.settingsView:getFrame()
-            if sFrame and pt then sFrame:ClearAllPoints(); sFrame:SetPoint(pt, rel, relPt, x, y) end
-        end
-    end)
 end
+
+
 
 --- Atualiza a tela de acordo com a sub-aba selecionada
 function ProfessionView:refresh()
