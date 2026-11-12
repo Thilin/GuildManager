@@ -978,7 +978,7 @@ function SettingsView:createSettingsColumns()
     local changelogBtn = CreateFrame("Button", nil, rChild, "UIPanelButtonTemplate")
     changelogBtn:SetSize(350, 24)
     changelogBtn:SetPoint("TOPLEFT", tutorialBtn, "BOTTOMLEFT", 0, -6)
-    changelogBtn:SetText(L["CHANGELOG_BUTTON"] or "Ver Novidades da Versão (Changelog)")
+    changelogBtn:SetText(L["CHANGELOG_BUTTON"] or "Changelog")
     changelogBtn:SetScript("OnClick", function()
         if _G.GM and _G.GM.changelogView then
             _G.GM.changelogView:show()
@@ -1265,7 +1265,7 @@ function SettingsView:updateLocale()
     if self._widgets.resetAllBtn then self._widgets.resetAllBtn:SetText(curL["SETTINGS_RESET_DEFAULTS_BTN"]) end
     if self._widgets.forceSyncBtn then self._widgets.forceSyncBtn:SetText(curL["SETTINGS_FORCE_SYNC_BTN"]) end
     if self._widgets.tutorialBtn then self._widgets.tutorialBtn:SetText(curL["INTRO_REOPEN_BUTTON"] or "Rever Tutorial / Introdução") end
-    if self._widgets.changelogBtn then self._widgets.changelogBtn:SetText(curL["CHANGELOG_BUTTON"] or "Ver Novidades da Versão (Changelog)") end
+    if self._widgets.changelogBtn then self._widgets.changelogBtn:SetText(curL["CHANGELOG_BUTTON"] or "Changelog") end
 
     -- Rodapé
     if self._widgets.footerHint then self._widgets.footerHint:SetText("|cff666666" .. (curL["SETTINGS_FOOTER_HINT"] or "GuildManager") .. "|r") end

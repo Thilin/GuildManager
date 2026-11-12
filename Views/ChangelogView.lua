@@ -35,54 +35,112 @@ local SUB_CONTAINER_BACKDROP = {
     insets = { left = 3, right = 3, top = 3, bottom = 3 },
 }
 
---- Dados do Changelog por versão do addon.
+--- Retorna o idioma ativo atual ("ptBR" ou "enUS").
+local function getCurrentLocale()
+    if _G.GM and _G.GM.GetLocale then
+        local l = _G.GM.GetLocale()
+        if l == "ptBR" or l == "enUS" then return l end
+    end
+    if GetLocale and GetLocale() == "ptBR" then
+        return "ptBR"
+    end
+    return "enUS"
+end
+
+--- Dados do Changelog por versão do addon (com suporte multilíngue ptBR e enUS).
 local CHANGELOG_DATA = {
     ["1.2"] = {
-        title = "Guild Manager Forever v1.2",
-        date = "12/11/2026",
-        sections = {
-            {
-                category = "GRUPOS & PROCURANDO GRUPO (LFG)",
-                color = "|cffffd200",
-                items = {
-                    "Mural de Procurando Grupo (LFG) em grade com 2 cards por linha.",
-                    "Cada membro da guilda pode criar até 5 cards de LFG simultâneos.",
-                    "Cards expiram automaticamente após 72 horas com contagem regressiva.",
-                    "Criação de grupos liberada para todos os membros da guilda (sem limites).",
-                    "Sincronização em 2 tempos (Criador -> Líder da Guilda -> Outros membros).",
+        ptBR = {
+            title = "Guild Manager Forever v1.2",
+            date = "12/11/2026",
+            dateFmt = "Data da atualização: %s",
+            sections = {
+                {
+                    category = "GRUPOS & PROCURANDO GRUPO (LFG)",
+                    color = "|cffffd200",
+                    items = {
+                        "Uma remodelação da tela de Grupos.",
+                        "Todos podem criar grupos e criar cards de Procurando Grupo.",
+                    }
+                },
+                {
+                    category = "CORREÇÕES & ESTABILIDADE",
+                    color = "|cff33ccff",
+                    items = {
+                        "Correção para casos de 'Nenhum jogador de nome encontrado' ou limite de mensagens enviadas.",
+                        "Correção de ícones da barra lateral.",
+                        "Correção em que o chat desaparecia rapidamente em alguns casos.",
+                    }
+                },
+                {
+                    category = "INTERFACE & MEMBROS",
+                    color = "|cff2ecc71",
+                    items = {
+                        "Padronização de tamanho de telas.",
+                        "Agora ao vincular alts, todos os personagens vinculados mostram a relação na janela de alts.",
+                    }
                 }
-            },
-            {
-                category = "INTERFACE & EXPERIÊNCIA",
-                color = "|cff33ccff",
-                items = {
-                    "Telas padronizadas na dimensão de alta resolução da Auditoria (1180x614).",
-                    "Navegação rápida por abas laterais temáticas entre todas as ferramentas.",
-                    "Botão de contato do desenvolvedor via Discord (thillin_) no topo das telas.",
-                    "Janela de resumo de novidades (Changelog) automática a cada atualização.",
-                }
-            },
-            {
-                category = "MEMBROS & ESTABILIDADE",
-                color = "|cff2ecc71",
-                items = {
-                    "Lista completa de Alts vinculados no popup do membro e na auditoria.",
-                    "Sincronização automática de dados para membros que conectam depois.",
-                    "Filtro de mensagens no chat suprimindo avisos de limite de envio da Blizzard.",
-                    "Fixação do histórico de mensagens no chat (desativando o sumiço automático em 2-3s).",
+            }
+        },
+        enUS = {
+            title = "Guild Manager Forever v1.2",
+            date = "11/12/2026",
+            dateFmt = "Update date: %s",
+            sections = {
+                {
+                    category = "GROUPS & LOOKING FOR GROUP (LFG)",
+                    color = "|cffffd200",
+                    items = {
+                        "A complete redesign of the Groups screen.",
+                        "All guild members can create groups and post Looking for Group (LFG) cards.",
+                    }
+                },
+                {
+                    category = "FIXES & STABILITY",
+                    color = "|cff33ccff",
+                    items = {
+                        "Fix for 'No player named found' or message rate limit issues.",
+                        "Fix of side navigation bar icons across all screens.",
+                        "Fix where chat messages were disappearing rapidly in some cases.",
+                    }
+                },
+                {
+                    category = "INTERFACE & MEMBERS",
+                    color = "|cff2ecc71",
+                    items = {
+                        "Standardization of window sizes across all screens.",
+                        "When linking alts, all linked characters now show their full relationship in the alts window.",
+                    }
                 }
             }
         }
     },
     ["1.0"] = {
-        title = "Guild Manager Forever v1.0",
-        date = "11/11/2026",
-        sections = {
-            {
-                category = "LANÇAMENTO",
-                color = "|cffffd200",
-                items = {
-                    "Versão inicial do Guild Manager Forever para Classic Beta.",
+        ptBR = {
+            title = "Guild Manager Forever v1.0",
+            date = "11/11/2026",
+            dateFmt = "Data da atualização: %s",
+            sections = {
+                {
+                    category = "LANÇAMENTO",
+                    color = "|cffffd200",
+                    items = {
+                        "Versão inicial do Guild Manager Forever para Classic Beta.",
+                    }
+                }
+            }
+        },
+        enUS = {
+            title = "Guild Manager Forever v1.0",
+            date = "11/11/2026",
+            dateFmt = "Update date: %s",
+            sections = {
+                {
+                    category = "RELEASE",
+                    color = "|cffffd200",
+                    items = {
+                        "Initial release of Guild Manager Forever for Classic Beta.",
+                    }
                 }
             }
         }
@@ -262,18 +320,33 @@ function ChangelogView:createUI()
 
     local helpText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     helpText:SetPoint("TOPLEFT", footerSep, "BOTTOMLEFT", 4, -8)
-    helpText:SetText("|cff888888Esta janela abre uma única vez por atualização.\nComando: |cffffd200/gm changelog|r|r")
+    self._helpText = helpText
 
     -- Botão "Entendi! / Fechar"
     local okBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     okBtn:SetSize(120, 26)
     okBtn:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 14)
-    okBtn:SetText("Entendi!")
     okBtn:SetScript("OnClick", function()
         frame:Hide()
     end)
+    self._okBtn = okBtn
 
+    self:updateLocale()
     self:populateChangelog(self._version)
+end
+
+--- Atualiza os textos de rodapé e botões conforme o idioma ativo.
+function ChangelogView:updateLocale()
+    if not self._frame then return end
+    local isEn = (getCurrentLocale() == "enUS")
+    if self._helpText then
+        self._helpText:SetText(isEn
+            and "|cff888888This window opens once per update.\nCommand: |cffffd200/gm changelog|r|r"
+            or "|cff888888Esta janela abre uma única vez por atualização.\nComando: |cffffd200/gm changelog|r|r")
+    end
+    if self._okBtn then
+        self._okBtn:SetText(isEn and "Got it!" or "Entendi!")
+    end
 end
 
 --- Preenche o conteúdo do Changelog para a versão indicada.
@@ -282,7 +355,9 @@ function ChangelogView:populateChangelog(version)
     if not self._scrollChild then return end
 
     local targetVersion = version or self._version or "1.2"
-    local data = CHANGELOG_DATA[targetVersion] or CHANGELOG_DATA["1.2"]
+    local locale = getCurrentLocale()
+    local verData = CHANGELOG_DATA[targetVersion] or CHANGELOG_DATA["1.2"]
+    local data = (verData and verData[locale]) or (verData and verData.ptBR) or verData
 
     -- Remove widgets antigos do scrollChild
     if self._entryFrames then
@@ -313,7 +388,8 @@ function ChangelogView:populateChangelog(version)
 
     local bDate = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     bDate:SetPoint("BOTTOMLEFT", banner, "BOTTOMLEFT", 10, 6)
-    bDate:SetText(string.format("|cffaaaaaaData da atualização: %s|r", data.date or "Recente"))
+    local dateFmt = data.dateFmt or (locale == "enUS" and "Update date: %s" or "Data da atualização: %s")
+    bDate:SetText(string.format("|cffaaaaaa" .. dateFmt .. "|r", data.date or "Recente"))
 
     table.insert(self._entryFrames, banner)
     yOffset = yOffset + 44
@@ -328,10 +404,8 @@ function ChangelogView:populateChangelog(version)
         yOffset = yOffset + 20
 
         -- Container dos Itens
-        local numItems = #(section.items or {})
-        local boxHeight = math.max(30, numItems * 22 + 10)
         local box = CreateFrame("Frame", nil, self._scrollChild, template)
-        box:SetSize(446, boxHeight)
+        box:SetSize(446, 30)
         box:SetPoint("TOPLEFT", self._scrollChild, "TOPLEFT", 2, -yOffset)
         if box.SetBackdrop then
             box:SetBackdrop(SUB_CONTAINER_BACKDROP)
@@ -339,18 +413,23 @@ function ChangelogView:populateChangelog(version)
             box:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.80)
         end
 
-        local itemY = -8
+        local currentY = -8
         for _, itemText in ipairs(section.items or {}) do
             local bullet = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            bullet:SetPoint("TOPLEFT", box, "TOPLEFT", 10, itemY)
+            bullet:SetPoint("TOPLEFT", box, "TOPLEFT", 10, currentY)
             bullet:SetPoint("RIGHT", box, "RIGHT", -10, 0)
             bullet:SetJustifyH("LEFT")
+            bullet:SetWordWrap(true)
             bullet:SetText(string.format("|cffffd200•|r  |cffffffff%s|r", itemText))
-            itemY = itemY - 22
+            local strHeight = bullet:GetStringHeight()
+            if not strHeight or strHeight < 14 then strHeight = 14 end
+            currentY = currentY - (strHeight + 6)
         end
 
+        local finalBoxHeight = math.abs(currentY) + 6
+        box:SetHeight(finalBoxHeight)
         table.insert(self._entryFrames, box)
-        yOffset = yOffset + boxHeight + 8
+        yOffset = yOffset + finalBoxHeight + 10
     end
 
     self._scrollChild:SetHeight(math.max(yOffset + 10, 10))
@@ -362,6 +441,7 @@ function ChangelogView:show(version)
     if not self._frame then
         self:createUI()
     end
+    self:updateLocale()
     self:populateChangelog(version or self._version)
     self._frame:Show()
 end

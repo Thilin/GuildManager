@@ -688,6 +688,7 @@ Locales.strings["enUS"] = {
     ["INTRO_STEP_COUNTER"] = "Step %d of %d",
     ["INTRO_REOPEN_HINT"] = "You can revisit this tutorial anytime by typing |cffffff00/gmtutorial|r or in Addon Settings.",
     ["INTRO_REOPEN_BUTTON"] = "Revisit Tutorial / Intro",
+    ["CHANGELOG_BUTTON"] = "Changelog",
 
     -- Step 1: Audit
     ["INTRO_STEP1_TAB"] = "1. Audit",
@@ -1903,6 +1904,7 @@ Locales.strings["ptBR"] = {
     ["INTRO_STEP_COUNTER"] = "Passo %d de %d",
     ["INTRO_REOPEN_HINT"] = "Você pode rever este tutorial a qualquer momento digitando |cffffff00/gmtutorial|r ou na tela de Configurações.",
     ["INTRO_REOPEN_BUTTON"] = "Rever Tutorial / Introdução",
+    ["CHANGELOG_BUTTON"] = "Changelog",
 
     -- Passo 1: Auditoria
     ["INTRO_STEP1_TAB"] = "1. Auditoria",
