@@ -493,16 +493,22 @@ function AuditView:createUI()
     statsScrollFrame:SetScrollChild(statsContent)
     self._statsContent = statsContent
 
-    local statsScrollBar = CreateFrame("Slider", "GM_AuditStatsScrollBar", statsInset, "UIPanelScrollBarTemplate")
+    statsInset.SetVerticalScroll = function(_, val)
+        if statsScrollFrame and statsScrollFrame.SetVerticalScroll then
+            statsScrollFrame:SetVerticalScroll(val)
+        end
+    end
+
+    local statsScrollBar = CreateFrame("Slider", "GM_AuditStatsScrollBar", statsScrollFrame, "UIPanelScrollBarTemplate")
     statsScrollBar:SetPoint("TOPRIGHT", statsInset, "TOPRIGHT", -3, -34)
     statsScrollBar:SetPoint("BOTTOMRIGHT", statsInset, "BOTTOMRIGHT", -3, 20)
     statsScrollBar:SetWidth(14)
-    statsScrollBar:SetMinMaxValues(0, 100)
-    statsScrollBar:SetValue(0)
-    statsScrollBar:SetValueStep(20)
     statsScrollBar:SetScript("OnValueChanged", function(_, val)
         statsScrollFrame:SetVerticalScroll(val)
     end)
+    statsScrollBar:SetMinMaxValues(0, 100)
+    statsScrollBar:SetValueStep(20)
+    statsScrollBar:SetValue(0)
     self._statsScrollBar = statsScrollBar
 
     local function onStatsMouseWheel(delta)
