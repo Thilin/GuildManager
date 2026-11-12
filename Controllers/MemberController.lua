@@ -138,9 +138,10 @@ function MemberController:initHooks()
             if hasCustomFieldChanged then
                 local nextTs = math.max(getCurrentTimestamp(), (member:getCustomDataTimestamp() or 0) + 1)
                 member:setCustomDataTimestamp(nextTs)
+                self._memberService:saveMember(member, true)
+            else
+                self._memberService:saveMember(member, false)
             end
-
-            self._memberService:saveMember(member)
         end)
     end
 
@@ -932,10 +933,13 @@ function MemberController:broadcastInvite(targetName, recruiterName)
         return
     end
     local payload = string.format("INVITE:%s:%s", targetName, recruiterName)
-    if C_ChatInfo and C_ChatInfo.SendAddonMessage then
-        pcall(C_ChatInfo.SendAddonMessage, "GuildManager", payload, "GUILD")
-    elseif SendAddonMessage then
-        pcall(SendAddonMessage, "GuildManager", payload, "GUILD")
+    if _G.ChatThrottleLib and _G.ChatThrottleLib.SendAddonMessage then
+        pcall(_G.ChatThrottleLib.SendAddonMessage, _G.ChatThrottleLib, "NORMAL", "GuildManager", payload, "GUILD")
+        return
+    end
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    if Send then
+        pcall(Send, "GuildManager", payload, "GUILD")
     end
 end
 

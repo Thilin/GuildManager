@@ -20,6 +20,37 @@ function GM.isSecretValue(val)
     return false
 end
 
+-- Filtro de mensagens de sistema para eliminar permanentemente alertas visuais de limite de envio e whispers
+local function filterSystemChatMessages(self, event, msg, ...)
+    if type(msg) == "string" and msg ~= "" then
+        -- 1. Filtra avisos de limite de mensagens (throttling da Blizzard)
+        if _G.ERR_CHAT_THROTTLED and msg == _G.ERR_CHAT_THROTTLED then
+            return true
+        end
+        if msg:find("número de mensagens que podem ser enviadas")
+            or msg:find("The number of messages that can be sent is limited") then
+            return true
+        end
+
+        -- 2. Filtra avisos de jogador não encontrado decorrentes de whispers automáticos
+        if _G.ERR_CHAT_PLAYER_NOT_FOUND_S then
+            local pattern = _G.ERR_CHAT_PLAYER_NOT_FOUND_S:gsub("%%s", ".-")
+            if msg:find(pattern) then
+                return true
+            end
+        end
+        if msg:find("Nenhum jogador de nome '.-' está jogando no momento")
+            or msg:find("No player named '.-' is currently playing") then
+            return true
+        end
+    end
+    return false, msg, ...
+end
+
+if ChatFrame_AddMessageEventFilter then
+    pcall(ChatFrame_AddMessageEventFilter, "CHAT_MSG_SYSTEM", filterSystemChatMessages)
+end
+
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("ADDON_LOADED")
 

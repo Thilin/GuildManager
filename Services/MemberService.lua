@@ -969,13 +969,15 @@ function MemberService:findAll()
     return self:getAllMembers()
 end
 
---- Salva um membro diretamente através do repositório e transmite atualizações de dados customizados.
+--- Salva um membro diretamente através do repositório.
+--- Por padrão, salva apenas localmente sem transmitir pela rede (Zero Spam/Throttle no login e scans).
+--- A transmissão via SyncService só ocorre se shouldSync for explicitamente true.
 ---@param member Member
----@param skipSync boolean|nil @Se verdadeiro, não retransmite via SyncService (útil para dados recebidos da rede)
+---@param shouldSync boolean|nil @Se verdadeiro, transmite alterações de dados customizados via SyncService
 ---@return boolean
-function MemberService:saveMember(member, skipSync)
+function MemberService:saveMember(member, shouldSync)
     local ok = self._repository:save(member)
-    if ok and not skipSync and self._syncService and self._syncService.broadcastMemberCustomData then
+    if ok and (shouldSync == true) and self._syncService and self._syncService.broadcastMemberCustomData then
         self._syncService:broadcastMemberCustomData(member)
     end
     return ok

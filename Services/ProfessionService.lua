@@ -902,20 +902,11 @@ function ProfessionService:scanAll()
     -- 6. Scan pela janela de Craft (Encantamento) ativa
     self:scanCraftFrame(member)
 
-    -- Salva o membro no banco
+    -- Salva o membro no banco local
     if self._memberService then
         self._memberService:saveMember(member, true)
     end
-        self:notifyChanged()
-
-    local sync = self._syncService or (_G.GM and _G.GM.syncService)
-    if sync then
-        if sync.broadcastMemberProfessions then
-            sync:broadcastMemberProfessions(member)
-        elseif sync.broadcastPlayerProfessions then
-            sync:broadcastPlayerProfessions(member)
-        end
-    end
+    self:notifyChanged()
 
     local count = 0
     local orderKeys = (ProfessionData and ProfessionData.PRIMARY_KEYS) or (ProfessionData and ProfessionData.ORDER) or {}

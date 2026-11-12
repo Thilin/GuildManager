@@ -5,6 +5,8 @@
 ## Version: 1.0
 ## SavedVariables: GM_DB
 
+Libs/ChatThrottleLib/ChatThrottleLib.lua
+
 Database/Database.lua
 Database/ProfessionData.lua
 Locales/Locales.lua

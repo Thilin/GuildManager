@@ -29,9 +29,27 @@ local FALLBACK_PREFIX = "AJ_POS"
 local SYNC_PREFIX = "GM_SYNC"
 local COMM_CHANNEL_NAME = "AJShare"
 
-local MOVE_THROTTLE = 1.5     -- Intervalo quando o jogador estÃ¡ em movimento (1.5s)
-local IDLE_HEARTBEAT = 5.0    -- Intervalo de heartbeat quando o jogador estÃ¡ parado (5.0s)
+local MOVE_THROTTLE = 1.5     -- Intervalo quando o jogador está em movimento (1.5s)
+local IDLE_HEARTBEAT = 5.0    -- Intervalo de heartbeat quando o jogador está parado (5.0s)
 local PEER_TIMEOUT = 45.0     -- Tempo sem sinal para considerar o jogador offline (45s)
+
+--- Envia mensagem de addon com suporte a ChatThrottleLib para proteção total contra limite de mensagens
+local function safeSendAddonMessage(prefix, text, channel, target, prio)
+    if not prefix or not text or not channel then return end
+    prio = prio or "NORMAL"
+    if _G.ChatThrottleLib and _G.ChatThrottleLib.SendAddonMessage then
+        pcall(_G.ChatThrottleLib.SendAddonMessage, _G.ChatThrottleLib, prio, prefix, text, channel, target)
+        return
+    end
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    if Send then
+        if target then
+            pcall(Send, prefix, text, channel, target)
+        else
+            pcall(Send, prefix, text, channel)
+        end
+    end
+end
 
 --- Registra com seguranÃ§a todos os prefixos de mensagem utilizados pelo AddOn
 function LocationService:registerPrefixes()
@@ -61,7 +79,7 @@ function LocationService:new(memberService)
     instance._lastJoinAttempt = 0
     instance._myPlayerName = nil
     instance._myFullName = nil
-    instance._lastSendTime = 0
+    instance._lastSendTime = GetTime and GetTime() or 0
     instance._lastSentX = -1
     instance._lastSentY = -1
     instance._lastSentFacing = -1
@@ -276,48 +294,12 @@ function LocationService:getGuildAddonUsers()
     return users
 end
 
---- Garante a conexÃ£o ao canal global reservado do AddOn sem poluir janelas de chat nativas
+--- Garante que o cliente não utilize canais de chat personalizados (Zero Throttle)
 function LocationService:ensureGlobalChannels()
-    if self._channelNumber and self._channelNumber > 0 then
-        return
+    if LeaveChannelByName then
+        pcall(LeaveChannelByName, COMM_CHANNEL_NAME)
     end
-
-    local now = GetTime and GetTime() or 0
-    if (now - self._lastJoinAttempt) < 8.0 then return end
-    self._lastJoinAttempt = now
-
-    local chName = COMM_CHANNEL_NAME
-    local id = nil
-
-    if GetChannelName then
-        local ok, chID = pcall(GetChannelName, chName)
-        if ok and chID and type(chID) == "number" and chID > 0 then
-            id = chID
-        end
-    end
-
-    if not id and JoinChannelByName then
-        pcall(JoinChannelByName, chName)
-        if GetChannelName then
-            local ok, newID = pcall(GetChannelName, chName)
-            if ok and newID and type(newID) == "number" and newID > 0 then
-                id = newID
-            end
-        end
-    end
-
-    if id and id > 0 then
-        self._channelNumber = id
-        self._channelNumbers[chName:lower()] = id
-
-        -- Silencia no chat nativo da Blizzard uma Ãºnica vez (sem resetar as abas ou animaÃ§Ãµes de fade)
-        if not self._silencedChannels[chName:lower()] then
-            self._silencedChannels[chName:lower()] = true
-            if ChatFrame_RemoveChannel and DEFAULT_CHAT_FRAME then
-                pcall(ChatFrame_RemoveChannel, DEFAULT_CHAT_FRAME, chName)
-            end
-        end
-    end
+    self._channelNumber = nil
 end
 
 --- ObtÃ©m as coordenadas geogrÃ¡ficas normalizadas (0.0 a 1.0) e orientaÃ§Ã£o do jogador local
@@ -402,36 +384,30 @@ function LocationService:getLocalPlayerFullName()
     return myName
 end
 
---- Solicita que todos os outros membros conectados reportem imediatamente suas posiÃ§Ãµes
+--- Solicita que todos os outros membros conectados reportem imediatamente suas posições
 function LocationService:requestPositions()
     local now = GetTime and GetTime() or 0
-    if (now - (self._lastReqTime or 0)) < 2.0 then return end
+    if (now - (self._lastReqTime or 0)) < 3.0 then return end
     self._lastReqTime = now
 
     local myName = self:getLocalPlayerFullName()
     local payload = string.format("POS_REQ:%s", myName)
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    if not Send then return end
 
     if IsInGuild and IsInGuild() then
-        pcall(Send, PRIMARY_PREFIX, payload, "GUILD")
-        pcall(Send, FALLBACK_PREFIX, payload, "GUILD")
-    end
-    if self._channelNumber and self._channelNumber > 0 then
-        pcall(Send, PRIMARY_PREFIX, payload, "CHANNEL", self._channelNumber)
-    end
-    if IsInRaid and IsInRaid() then
-        pcall(Send, PRIMARY_PREFIX, payload, "RAID")
+        safeSendAddonMessage(PRIMARY_PREFIX, payload, "GUILD", nil, "NORMAL")
+    elseif IsInRaid and IsInRaid() then
+        safeSendAddonMessage(PRIMARY_PREFIX, payload, "RAID", nil, "NORMAL")
     elseif IsInGroup and IsInGroup() then
-        pcall(Send, PRIMARY_PREFIX, payload, "PARTY")
+        safeSendAddonMessage(PRIMARY_PREFIX, payload, "PARTY", nil, "NORMAL")
     end
 end
 
---- Transmite as coordenadas do jogador em tempo real para todos os canais disponÃ­veis
+--- Transmite as coordenadas do jogador em tempo real para todos os canais disponíveis
 ---@param force boolean|nil
 function LocationService:sendPosition(force)
     local now = GetTime and GetTime() or 0
-    if not force and (now - self._lastSendTime) < 0.5 then return end
+    local minThrottle = force and 0.5 or 1.0
+    if (now - self._lastSendTime) < minThrottle then return end
 
     local mapID, x, y, facing = self:getLocalPosition()
     mapID = mapID or 0
@@ -439,15 +415,25 @@ function LocationService:sendPosition(force)
     y = y or 0
     facing = facing or 0
 
-    -- DetecÃ§Ã£o de movimento significativo se coordenadas estiverem disponÃ­veis
+    -- Detecção de movimento significativo se coordenadas estiverem disponíveis
     local isMoving = false
-    if x > 0 and y > 0 and self._lastSentX and self._lastSentY then
+    if x > 0 and y > 0 and self._lastSentX and self._lastSentY and self._lastSentX >= 0 then
         local dx = math.abs(x - self._lastSentX)
         local dy = math.abs(y - self._lastSentY)
         local df = math.abs(facing - self._lastSentFacing)
         local mapChanged = (mapID ~= self._lastSentMapID)
         isMoving = (dx > 0.0008 or dy > 0.0008 or df > 0.15 or mapChanged)
     end
+
+    -- Se não estiver forçando envio nem se movendo:
+    -- Só transmite heartbeat periódico se o WorldMapFrame estiver aberto para outros visualizarem
+    if not force and not isMoving then
+        local mapOpen = WorldMapFrame and WorldMapFrame:IsShown()
+        if not mapOpen then
+            return
+        end
+    end
+
     local interval = isMoving and MOVE_THROTTLE or IDLE_HEARTBEAT
 
     if not force and (now - self._lastSendTime) < interval then
@@ -494,25 +480,13 @@ function LocationService:sendPosition(force)
         mapID, x, y, facing, myClass, myLevel, myRace, myGuild, myFullName
     )
 
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    if not Send then return end
-
-    local function sendPacket(pfx)
-        if IsInRaid and IsInRaid() then
-            pcall(Send, pfx, payload, "RAID")
-        elseif IsInGroup and IsInGroup() then
-            pcall(Send, pfx, payload, "PARTY")
-        end
-        if IsInGuild and IsInGuild() then
-            pcall(Send, pfx, payload, "GUILD")
-        end
-        if self._channelNumber and self._channelNumber > 0 then
-            pcall(Send, pfx, payload, "CHANNEL", self._channelNumber)
-        end
+    if IsInGuild and IsInGuild() then
+        safeSendAddonMessage(PRIMARY_PREFIX, payload, "GUILD", nil, "BULK")
+    elseif IsInRaid and IsInRaid() then
+        safeSendAddonMessage(PRIMARY_PREFIX, payload, "RAID", nil, "BULK")
+    elseif IsInGroup and IsInGroup() then
+        safeSendAddonMessage(PRIMARY_PREFIX, payload, "PARTY", nil, "BULK")
     end
-
-    sendPacket(PRIMARY_PREFIX)
-    sendPacket(FALLBACK_PREFIX)
 end
 
 --- Verifica com precisÃ£o se o remetente Ã© o prÃ³prio jogador local (evita ghosting)
@@ -859,12 +833,13 @@ function LocationService:initHooks()
     frame:RegisterEvent("PLAYER_LOGIN")
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:RegisterEvent("CHAT_MSG_ADDON")
-    frame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
     frame:RegisterEvent("GROUP_ROSTER_UPDATE")
     frame:RegisterEvent("PLAYER_GUILD_UPDATE")
-    frame:RegisterEvent("CHANNEL_UI_UPDATE")
 
     local function setupSession()
+        if self._sessionInitialized then return end
+        self._sessionInitialized = true
+
         self:registerPrefixes()
         if UnitName then
             self._myPlayerName = UnitName("player")
@@ -876,51 +851,14 @@ function LocationService:initHooks()
             end
         end
         self:ensureGlobalChannels()
-        if C_Timer and C_Timer.After then
-            C_Timer.After(1.0, function()
-                self:registerPrefixes()
-                self:sendPosition(true)
-                self:requestPositions()
-            end)
-            C_Timer.After(3.5, function()
-                self:sendPosition(true)
-                self:requestPositions()
-            end)
-        end
     end
 
     frame:SetScript("OnEvent", function(_, event, ...)
         if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
             setupSession()
-
         elseif event == "CHAT_MSG_ADDON" then
             local prefix, msg, ch, sender = ...
             self:onAddonMessage(prefix, msg, ch, sender)
-
-        elseif event == "CHAT_MSG_CHANNEL_NOTICE" then
-            local noticeType, _, _, _, _, _, _, arg8, arg9 = ...
-            if noticeType == "YOU_JOINED" then
-                local chName = (type(arg9) == "string" and arg9) or (type(arg8) == "string" and arg8) or nil
-                local chIndex = (type(arg8) == "number" and arg8) or (type(arg9) == "number" and arg9) or nil
-                if chName and chName:lower():find("ajshare", 1, true) then
-                    if chIndex and chIndex > 0 then
-                        self._channelNumber = chIndex
-                        self._channelNumbers["ajshare"] = chIndex
-                    end
-                    if not self._silencedChannels["ajshare"] then
-                        self._silencedChannels["ajshare"] = true
-                        if ChatFrame_RemoveChannel and DEFAULT_CHAT_FRAME then
-                            pcall(ChatFrame_RemoveChannel, DEFAULT_CHAT_FRAME, chName)
-                        end
-                    end
-                end
-            end
-
-        elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" or event == "CHANNEL_UI_UPDATE" then
-            self:registerPrefixes()
-            self:ensureGlobalChannels()
-            self:sendPosition(true)
-            self:requestPositions()
         end
     end)
 
@@ -929,30 +867,20 @@ function LocationService:initHooks()
         setupSession()
     end
 
-    -- Loop de verificaÃ§Ã£o suave (0.75s) e expiraÃ§Ã£o periÃ³dica
+    -- Loop de verificação suave (0.75s) e expiração periódica
     local ticker = 0
     local purgeTicker = 0
-    local channelTicker = 0
 
     frame:SetScript("OnUpdate", function(_, elapsed)
         ticker = ticker + elapsed
         purgeTicker = purgeTicker + elapsed
-        channelTicker = channelTicker + elapsed
 
         if ticker >= 0.75 then
             ticker = 0
             self:sendPosition(false)
         end
 
-        -- Garante conexÃ£o ao canal global reservado somente se ainda nÃ£o conectado (a cada 15s)
-        if channelTicker >= 15.0 then
-            channelTicker = 0
-            if not self._channelNumber or self._channelNumber <= 0 then
-                self:ensureGlobalChannels()
-            end
-        end
-
-        -- AnimaÃ§Ã£o em tempo real para peer de teste se ativo
+        -- Animação em tempo real para peer de teste se ativo
         local testPeer = self._peers["AventureiroTeste"]
         if testPeer and testPeer.isTest then
             local now = GetTime and GetTime() or 0

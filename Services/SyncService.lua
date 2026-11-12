@@ -77,12 +77,29 @@ local function L(key, ...)
 end
 
 local SYNC_PREFIX = "GM_SYNC"
-local COMM_CHANNEL_NAME = "AJShare"
-local RETRANSMIT_INTERVAL = 2.5       -- Intervalo entre retransmissões de pacotes pendentes (2.5s)
-local SEND_QUEUE_INTERVAL = 0.25      -- Intervalo compassado de envio de pacotes (otimizado: 4 pkt/s, zero throttle e sem stutter)
+local RETRANSMIT_INTERVAL = 4.0       -- Intervalo entre retransmissões de pacotes pendentes (4.0s)
+local SEND_QUEUE_INTERVAL = 0.8       -- Intervalo compassado de envio de pacotes (1.25 pkt/s, tráfego super suave e zero throttle)
 local PEER_LIVENESS_WINDOW = 35.0     -- Tempo em segundos sem sinal para considerar peer offline (35s)
 local MAX_RETRANSMIT_ATTEMPTS = 60    -- Limite máximo de tentativas por atualização (evita loop infinito)
 local MAX_QUEUE_SIZE = 250            -- Capacidade máxima da fila compassada para proteção contra vazamento de memória
+
+--- Envia mensagem de addon com suporte a ChatThrottleLib para proteção total contra limite de mensagens
+local function safeSendAddonMessage(prefix, text, channel, target, prio)
+    if not prefix or not text or not channel then return end
+    prio = prio or "NORMAL"
+    if _G.ChatThrottleLib and _G.ChatThrottleLib.SendAddonMessage then
+        pcall(_G.ChatThrottleLib.SendAddonMessage, _G.ChatThrottleLib, prio, prefix, text, channel, target)
+        return
+    end
+    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
+    if Send then
+        if target then
+            pcall(Send, prefix, text, channel, target)
+        else
+            pcall(Send, prefix, text, channel)
+        end
+    end
+end
 
 -- Registra o prefixo de mensagem imediatamente no carregamento do arquivo
 local RegisterPrefix = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
@@ -526,7 +543,7 @@ function SyncService:syncWithPeer(peerName)
             local orders = _G.GM.craftOrderRepository:findAll()
             for _, ord in ipairs(orders) do
                 if ord:getStatus() ~= "CANCELLED" then
-                    self:broadcastCraftOrder(ord, "UPDATE", cName)
+                    self:broadcastCraftOrder(ord, "UPDATE", false)
                 end
             end
         end)
@@ -606,21 +623,14 @@ function SyncService:processSendQueue()
 
     if not item or not item.payload then return end
 
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    if not Send then return end
-
     if item.target == "GUILD" then
         if IsInGuild and IsInGuild() then
-            pcall(Send, SYNC_PREFIX, item.payload, "GUILD")
+            safeSendAddonMessage(SYNC_PREFIX, item.payload, "GUILD", nil, "BULK")
         end
-    elseif item.target == "WHISPER" and item.targetPlayer and item.targetPlayer ~= "" then
-        pcall(Send, SYNC_PREFIX, item.payload, "WHISPER", item.targetPlayer)
-    elseif item.target == "CHANNEL" and item.channelNumber and item.channelNumber > 0 then
-        pcall(Send, SYNC_PREFIX, item.payload, "CHANNEL", item.channelNumber)
     elseif item.target == "RAID" and IsInRaid and IsInRaid() then
-        pcall(Send, SYNC_PREFIX, item.payload, "RAID")
+        safeSendAddonMessage(SYNC_PREFIX, item.payload, "RAID", nil, "BULK")
     elseif item.target == "PARTY" and IsInGroup and IsInGroup() then
-        pcall(Send, SYNC_PREFIX, item.payload, "PARTY")
+        safeSendAddonMessage(SYNC_PREFIX, item.payload, "PARTY", nil, "BULK")
     end
 end
 
@@ -760,39 +770,25 @@ function SyncService:sendUpdatePacket(updateData, immediate)
 
     -- Suporte a retransmissão de atualizações de pedidos de fabricação
     if updateData.type == "ORDER" then
-        local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-        local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
         local payload = updateData.payload
 
-        if immediate and Send and payload then
+        if immediate then
             if IsInGuild and IsInGuild() then
-                pcall(Send, SYNC_PREFIX, payload, "GUILD")
-            end
-            if updateData.requesterChar and updateData.requesterChar ~= "" and not self:isSelf(updateData.requesterChar) then
-                pcall(Send, SYNC_PREFIX, payload, "WHISPER", updateData.requesterChar)
-            end
-            if updateData.acceptedChar and updateData.acceptedChar ~= "" and not self:isSelf(updateData.acceptedChar) then
-                pcall(Send, SYNC_PREFIX, payload, "WHISPER", updateData.acceptedChar)
-            end
-            if IsInRaid and IsInRaid() then
-                pcall(Send, SYNC_PREFIX, payload, "RAID")
+                safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            elseif IsInRaid and IsInRaid() then
+                safeSendAddonMessage(SYNC_PREFIX, payload, "RAID", nil, "NORMAL")
             elseif IsInGroup and IsInGroup() then
-                pcall(Send, SYNC_PREFIX, payload, "PARTY")
+                safeSendAddonMessage(SYNC_PREFIX, payload, "PARTY", nil, "NORMAL")
             end
-            if chNum and chNum > 0 then
-                pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
-            end
-        end
-
-        if payload then
+        elseif payload then
             if IsInGuild and IsInGuild() then
                 self:enqueuePacket(payload, "GUILD")
-            end
-            if updateData.requesterChar and updateData.requesterChar ~= "" and not self:isSelf(updateData.requesterChar) then
-                self:enqueuePacket(payload, "WHISPER", nil, updateData.requesterChar)
-            end
-            if updateData.acceptedChar and updateData.acceptedChar ~= "" and not self:isSelf(updateData.acceptedChar) then
-                self:enqueuePacket(payload, "WHISPER", nil, updateData.acceptedChar)
+            elseif IsInRaid and IsInRaid() then
+                self:enqueuePacket(payload, "RAID")
+            elseif IsInGroup and IsInGroup() then
+                self:enqueuePacket(payload, "PARTY")
+            else
+                self:enqueuePacket(payload, "GUILD")
             end
         end
 
@@ -803,33 +799,27 @@ function SyncService:sendUpdatePacket(updateData, immediate)
 
     -- Suporte a retransmissão de atualizações de profissões e receitas
     if updateData.type == "PROFESSION" then
-        local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-        local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
         local packets = updateData.packets or {}
 
         for idx, payload in ipairs(packets) do
-            if immediate and idx == 1 and Send then
+            if immediate and idx == 1 then
                 if IsInGuild and IsInGuild() then
-                    pcall(Send, SYNC_PREFIX, payload, "GUILD")
+                    safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
                 elseif IsInRaid and IsInRaid() then
-                    pcall(Send, SYNC_PREFIX, payload, "RAID")
+                    safeSendAddonMessage(SYNC_PREFIX, payload, "RAID", nil, "NORMAL")
                 elseif IsInGroup and IsInGroup() then
-                    pcall(Send, SYNC_PREFIX, payload, "PARTY")
-                elseif chNum and chNum > 0 then
-                    pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+                    safeSendAddonMessage(SYNC_PREFIX, payload, "PARTY", nil, "NORMAL")
                 end
-            end
-
-            if IsInGuild and IsInGuild() then
-                self:enqueuePacket(payload, "GUILD")
-            elseif IsInRaid and IsInRaid() then
-                self:enqueuePacket(payload, "RAID")
-            elseif IsInGroup and IsInGroup() then
-                self:enqueuePacket(payload, "PARTY")
-            elseif chNum and chNum > 0 then
-                self:enqueuePacket(payload, "CHANNEL", chNum)
             else
-                self:enqueuePacket(payload, "GUILD")
+                if IsInGuild and IsInGuild() then
+                    self:enqueuePacket(payload, "GUILD")
+                elseif IsInRaid and IsInRaid() then
+                    self:enqueuePacket(payload, "RAID")
+                elseif IsInGroup and IsInGroup() then
+                    self:enqueuePacket(payload, "PARTY")
+                else
+                    self:enqueuePacket(payload, "GUILD")
+                end
             end
         end
 
@@ -850,33 +840,24 @@ function SyncService:sendUpdatePacket(updateData, immediate)
         updateData.role or ""
     )
 
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
-
-    if immediate and Send then
-        -- Envio imediato direto
+    if immediate then
         if IsInGuild and IsInGuild() then
-            pcall(Send, SYNC_PREFIX, payload, "GUILD")
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
         elseif IsInRaid and IsInRaid() then
-            pcall(Send, SYNC_PREFIX, payload, "RAID")
+            safeSendAddonMessage(SYNC_PREFIX, payload, "RAID", nil, "NORMAL")
         elseif IsInGroup and IsInGroup() then
-            pcall(Send, SYNC_PREFIX, payload, "PARTY")
-        elseif chNum and chNum > 0 then
-            pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+            safeSendAddonMessage(SYNC_PREFIX, payload, "PARTY", nil, "NORMAL")
         end
-    end
-
-    -- Enfileira de forma otimizada na fila compassada sem disparar mensagens redundantes em múltiplos canais
-    if IsInGuild and IsInGuild() then
-        self:enqueuePacket(payload, "GUILD")
-    elseif IsInRaid and IsInRaid() then
-        self:enqueuePacket(payload, "RAID")
-    elseif IsInGroup and IsInGroup() then
-        self:enqueuePacket(payload, "PARTY")
-    elseif chNum and chNum > 0 then
-        self:enqueuePacket(payload, "CHANNEL", chNum)
     else
-        self:enqueuePacket(payload, "GUILD")
+        if IsInGuild and IsInGuild() then
+            self:enqueuePacket(payload, "GUILD")
+        elseif IsInRaid and IsInRaid() then
+            self:enqueuePacket(payload, "RAID")
+        elseif IsInGroup and IsInGroup() then
+            self:enqueuePacket(payload, "PARTY")
+        else
+            self:enqueuePacket(payload, "GUILD")
+        end
     end
 
     updateData.sendCount = (updateData.sendCount or 0) + 1
@@ -893,20 +874,12 @@ function SyncService:sendAckPacket(updateId, memberName)
     local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
     local payload = string.format("ACK~%s~%s~%s", updateId, myName, memberName or "")
 
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    if not Send then return end
-
     if IsInGuild and IsInGuild() then
-        pcall(Send, SYNC_PREFIX, payload, "GUILD")
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
     elseif IsInRaid and IsInRaid() then
-        pcall(Send, SYNC_PREFIX, payload, "RAID")
+        safeSendAddonMessage(SYNC_PREFIX, payload, "RAID", nil, "NORMAL")
     elseif IsInGroup and IsInGroup() then
-        pcall(Send, SYNC_PREFIX, payload, "PARTY")
-    end
-
-    local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
-    if chNum and chNum > 0 then
-        pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
+        safeSendAddonMessage(SYNC_PREFIX, payload, "PARTY", nil, "NORMAL")
     end
 end
 
@@ -1501,15 +1474,15 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             end
         end
 
-        -- Envia confirmação (ORDER_ACK) diretamente de volta para o remetente parar a retransmissão
-        local sChar = cleanName(senderClean):match("^(%S+)")
-        if sChar and sChar ~= "" and not self:isSelf(sChar) then
-            local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
-            local ackPayload = string.format("ORDER_ACK~%s~%s~%s", orderId, status, myName)
-            local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-            if Send then
-                pcall(Send, SYNC_PREFIX, ackPayload, "WHISPER", sChar)
-            end
+        -- Envia confirmação (ORDER_ACK) via canal de guilda para o remetente parar a retransmissão
+        local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
+        local ackPayload = string.format("ORDER_ACK~%s~%s~%s", orderId, status, myName)
+        if IsInGuild and IsInGuild() then
+            safeSendAddonMessage(SYNC_PREFIX, ackPayload, "GUILD", nil, "NORMAL")
+        elseif IsInRaid and IsInRaid() then
+            safeSendAddonMessage(SYNC_PREFIX, ackPayload, "RAID", nil, "NORMAL")
+        elseif IsInGroup and IsInGroup() then
+            safeSendAddonMessage(SYNC_PREFIX, ackPayload, "PARTY", nil, "NORMAL")
         end
 
         -- Se a ordem foi concluída (COMPLETED) e o jogador local for o solicitante, notifica no chat e com som
@@ -1571,10 +1544,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     elseif tag == "ORDER_REQ" then
         if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
             local orders = _G.GM.craftOrderRepository:findAll()
-            local sChar = cleanName(senderClean):match("^(%S+)")
             for _, ord in ipairs(orders) do
                 if ord:getStatus() ~= "CANCELLED" then
-                    self:broadcastCraftOrder(ord, "UPDATE", sChar)
+                    self:broadcastCraftOrder(ord, "UPDATE", false)
                 end
             end
         end
@@ -1817,12 +1789,12 @@ function SyncService:broadcastPlayerProfessions(member, specificProfKey, force)
     return self:broadcastMemberProfessions(member, specificProfKey, force)
 end
 
---- Transmite a criação ou alteração de um pedido de fabricação para a guilda e diretamente para os envolvidos.
+--- Transmite a criação ou alteração de um pedido de fabricação para a guilda através do canal oficial.
 --- Formato: ORDER~action~id~requester~crafter~profKey~recipeId~recipeName~itemCount~tipCopper~status~acceptedBy~updatedAt
 ---@param order CraftOrder
 ---@param action string @"CREATE", "UPDATE", "DELETE"
----@param specificTarget string|nil @Nome de um jogador para entrega direcionada (opcional)
-function SyncService:broadcastCraftOrder(order, action, specificTarget)
+---@param immediate boolean|nil @Se verdadeiro ou omitido, envia imediatamente além de enfileirar. Passe false para sincronização em lote.
+function SyncService:broadcastCraftOrder(order, action, immediate)
     if not order or not order.getId then return end
     action = action or "UPDATE"
     local requester = order:getRequester() or ""
@@ -1844,71 +1816,25 @@ function SyncService:broadcastCraftOrder(order, action, specificTarget)
         order:getUpdatedAt() or 0
     )
 
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    local chNum = self._channelNumber or (self._locationService and self._locationService._channelNumber)
-
-    -- Extrai o primeiro nome de rede para Whispers direcionados da Blizzard
-    local requesterChar = cleanName(requester):match("^(%S+)")
-    local acceptedChar = cleanName(acceptedBy):match("^(%S+)")
-    local crafterChar = cleanName(crafter):match("^(%S+)")
-    local targetChar = specificTarget and cleanName(specificTarget):match("^(%S+)")
-
-    -- 1. Disparo IMEDIATO para entrega instantânea (sem delay de fila)
-    if Send then
+    -- Disparo seguro via safeSendAddonMessage (se imediato) ou enfileirado na fila compassada
+    local shouldSendImmediate = (immediate ~= false)
+    if shouldSendImmediate then
         if IsInGuild and IsInGuild() then
-            pcall(Send, SYNC_PREFIX, payload, "GUILD")
-        end
-        if targetChar and targetChar ~= "" and not self:isSelf(targetChar) then
-            pcall(Send, SYNC_PREFIX, payload, "WHISPER", targetChar)
-        end
-        if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) and requesterChar ~= targetChar then
-            pcall(Send, SYNC_PREFIX, payload, "WHISPER", requesterChar)
-        end
-        if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) and acceptedChar ~= targetChar then
-            pcall(Send, SYNC_PREFIX, payload, "WHISPER", acceptedChar)
-        elseif crafterChar and crafterChar ~= "" and crafterChar:upper() ~= "ANY" and not self:isSelf(crafterChar) and crafterChar ~= targetChar then
-            pcall(Send, SYNC_PREFIX, payload, "WHISPER", crafterChar)
-        end
-
-        -- Se o pedido for aberto para qualquer artesão da guilda, dispara via WHISPER para todos os colegas com Addon online
-        if order:isOpenToGuild() then
-            local activePeers = self:getActivePeers()
-            for _, p in ipairs(activePeers) do
-                local pChar = cleanName(p.name):match("^(%S+)")
-                if pChar and pChar ~= "" and not self:isSelf(pChar) and pChar ~= targetChar and pChar ~= requesterChar then
-                    pcall(Send, SYNC_PREFIX, payload, "WHISPER", pChar)
-                end
-            end
-        end
-
-        if IsInRaid and IsInRaid() then
-            pcall(Send, SYNC_PREFIX, payload, "RAID")
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        elseif IsInRaid and IsInRaid() then
+            safeSendAddonMessage(SYNC_PREFIX, payload, "RAID", nil, "NORMAL")
         elseif IsInGroup and IsInGroup() then
-            pcall(Send, SYNC_PREFIX, payload, "PARTY")
+            safeSendAddonMessage(SYNC_PREFIX, payload, "PARTY", nil, "NORMAL")
         end
-        if chNum and chNum > 0 then
-            pcall(Send, SYNC_PREFIX, payload, "CHANNEL", chNum)
-        end
-    end
-
-    -- 2. Enfileira na fila compassada para garantia contra oscilações de conexão
-    self:enqueuePacket(payload, "GUILD")
-    if targetChar and targetChar ~= "" and not self:isSelf(targetChar) then
-        self:enqueuePacket(payload, "WHISPER", nil, targetChar)
-    end
-    if requesterChar and requesterChar ~= "" and not self:isSelf(requesterChar) and requesterChar ~= targetChar then
-        self:enqueuePacket(payload, "WHISPER", nil, requesterChar)
-    end
-    if acceptedChar and acceptedChar ~= "" and not self:isSelf(acceptedChar) and acceptedChar ~= targetChar then
-        self:enqueuePacket(payload, "WHISPER", nil, acceptedChar)
-    end
-    if order:isOpenToGuild() then
-        local activePeers = self:getActivePeers()
-        for _, p in ipairs(activePeers) do
-            local pChar = cleanName(p.name):match("^(%S+)")
-            if pChar and pChar ~= "" and not self:isSelf(pChar) and pChar ~= targetChar and pChar ~= requesterChar then
-                self:enqueuePacket(payload, "WHISPER", nil, pChar)
-            end
+    else
+        if IsInGuild and IsInGuild() then
+            self:enqueuePacket(payload, "GUILD")
+        elseif IsInRaid and IsInRaid() then
+            self:enqueuePacket(payload, "RAID")
+        elseif IsInGroup and IsInGroup() then
+            self:enqueuePacket(payload, "PARTY")
+        else
+            self:enqueuePacket(payload, "GUILD")
         end
     end
 
@@ -1920,8 +1846,6 @@ function SyncService:broadcastCraftOrder(order, action, specificTarget)
         orderId = order:getId(),
         payload = payload,
         target = "GUILD",
-        requesterChar = requesterChar,
-        acceptedChar = acceptedChar,
         lastSent = GetTime and GetTime() or 0,
         sendCount = 1,
         maxAttempts = 4,
@@ -1934,23 +1858,7 @@ end
 function SyncService:requestOrdersSync()
     local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
     local payload = string.format("ORDER_REQ~%s", myName)
-    local Send = (C_ChatInfo and C_ChatInfo.SendAddonMessage) or _G.SendAddonMessage
-    if Send and IsInGuild and IsInGuild() then
-        pcall(Send, SYNC_PREFIX, payload, "GUILD")
-    end
     self:enqueuePacket(payload, "GUILD")
-
-    -- Whispers diretos para todos os colegas com Addon online
-    local activePeers = self:getActivePeers()
-    for _, p in ipairs(activePeers) do
-        local pChar = cleanName(p.name):match("^(%S+)")
-        if pChar and pChar ~= "" and not self:isSelf(pChar) then
-            if Send then
-                pcall(Send, SYNC_PREFIX, payload, "WHISPER", pChar)
-            end
-            self:enqueuePacket(payload, "WHISPER", nil, pChar)
-        end
-    end
 end
 
 --- Força manualmente a sincronização de todos os dados customizados de todos os membros da guilda.
@@ -2007,7 +1915,7 @@ function SyncService:forceSyncAll()
             local orders = _G.GM.craftOrderRepository:findAll()
             for _, ord in ipairs(orders) do
                 if ord:getStatus() ~= "CANCELLED" then
-                    self:broadcastCraftOrder(ord, "UPDATE")
+                    self:broadcastCraftOrder(ord, "UPDATE", false)
                 end
             end
         end)
@@ -2089,6 +1997,9 @@ function SyncService:initHooks()
     frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 
     local function setupSession()
+        if self._sessionInitialized then return end
+        self._sessionInitialized = true
+
         if UnitName then
             self._myPlayerName = UnitName("player")
         end
@@ -2129,31 +2040,37 @@ function SyncService:initHooks()
             end
         end
 
-        -- Garante que todos os prefixos estejam registrados na conexÃ£o do chat
+        -- Garante que todos os prefixos estejam registrados na conexão do chat
         local Register = (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) or _G.RegisterAddonMessagePrefix
         if Register then
             pcall(Register, SYNC_PREFIX)
             pcall(Register, "GM_POS")
-            pcall(Register, "AJ_POS")
             pcall(Register, "GuildManager")
         end
 
-        -- Ao logar / entrar no mundo, aguarda 2.5s para os canais de chat estarem conectados
-        -- e então anuncia a presença e solicita sincronização
+        -- Sincronização automática compassada após estabilização da conexão (12 a 16s pós-login)
+        -- O atraso de warmup garante que os canais estejam ativos e o limite de tráfego inicial da Blizzard liberado
         if C_Timer and C_Timer.After then
-            C_Timer.After(2.5, function()
+            local warmup = 12.0 + math.random(1, 4)
+            C_Timer.After(warmup, function()
+                if not IsInGuild or not IsInGuild() then return end
                 local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Desconhecido"
-                -- 1. Anuncia aos outros membros que este jogador com o Addon logou
+
+                -- 1. Anuncia aos outros membros que este jogador com o Addon conectou
                 self:enqueuePacket(string.format("LOGIN~%s", myName), "GUILD")
-                -- 2. Solicita os dados aos outros membros
+
+                -- 2. Solicita os dados mais recentes aos outros membros
                 self:enqueuePacket(string.format("SYNC_REQ~%s", myName), "GUILD")
-                -- 3. Transmite as profissões e receitas do jogador local para os colegas
-                pcall(function() self:broadcastMemberProfessions() end)
-                -- 4. Solicita pedidos de fabricação ativos da guilda
+
+                -- 3. Solicita pedidos de fabricação ativos da guilda
                 pcall(function() self:requestOrdersSync() end)
-                if self._locationService and self._locationService.requestPositions then
-                    self._locationService:requestPositions()
-                end
+
+                -- 4. Transmite profissões e receitas do jogador local com espaçamento suave adicional
+                C_Timer.After(4.0, function()
+                    if IsInGuild and IsInGuild() then
+                        pcall(function() self:broadcastMemberProfessions() end)
+                    end
+                end)
             end)
         end
     end
@@ -2164,9 +2081,6 @@ function SyncService:initHooks()
         elseif event == "CHAT_MSG_ADDON" then
             local prefix, msg, ch, sender = ...
             self:onAddonMessage(prefix, msg, ch, sender)
-        elseif event == "PLAYER_GUILD_UPDATE" or event == "GROUP_ROSTER_UPDATE" then
-            -- Tenta reenviar atualizações pendentes
-            self:processRetransmission()
         end
     end)
 

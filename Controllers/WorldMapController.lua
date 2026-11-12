@@ -361,10 +361,7 @@ function WorldMapController:initHooks()
                 if IsInGuild and not IsInGuild() then
                     self._worldMapView:clearPins()
                 else
-                    if self._locationService and self._locationService.requestPositions then
-            self._locationService:requestPositions()
-        end
-        self._worldMapView:updateRealtimePins()
+                    self._worldMapView:updateRealtimePins()
                 end
             end
         end)
