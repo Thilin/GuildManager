@@ -549,6 +549,32 @@ function SyncService:syncWithPeer(peerName)
         end)
     end
 
+    -- Sincroniza Grupos e Cards de LFG com o peer conectado
+    if isLeader then
+        pcall(function()
+            self:broadcastAllGroups()
+            self:broadcastAllLFGCards()
+        end)
+    elseif self:isSenderGuildLeader(peerName) then
+        pcall(function()
+            local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
+            if _G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll then
+                for _, g in ipairs(_G.GM.groupRepository:findAll()) do
+                    if g:isCreator(myName) then
+                        self:syncGroup(g, "UPDATE")
+                    end
+                end
+            end
+            if _G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll then
+                for _, c in ipairs(_G.GM.lfgRepository:findAll()) do
+                    if c:isCreator(myName) then
+                        self:syncLFGCard(c, "UPDATE")
+                    end
+                end
+            end
+        end)
+    end
+
     return count
 end
 
@@ -944,7 +970,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     local senderClean = cleanName(sender)
     self:touchPeer(senderClean)
 
-    local tag, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 = strsplit("~", message)
+    local parts = { strsplit("~", message) }
+    local tag = parts[1]
+    local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11 = parts[2], parts[3], parts[4], parts[5], parts[6], parts[7], parts[8], parts[9], parts[10], parts[11], parts[12]
 
     -- =========================================================================
     -- RECEBIMENTO DE ANÚNCIO DE LOGIN / HELLO
@@ -1550,6 +1578,230 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
                 end
             end
         end
+
+    -- =========================================================================
+    -- PROPOSTA DE GRUPO (GRP_PROP: Criador -> Líder da Guilda)
+    -- =========================================================================
+    elseif tag == "GRP_PROP" then
+        local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+        if not isLocalLeader then return end
+
+        local action = arg1 or "UPDATE"
+        local groupId = arg2
+        if not groupId or groupId == "" then return end
+
+        if action == "DELETE" then
+            if _G.GM and _G.GM.groupRepository then
+                _G.GM.groupRepository:delete(groupId)
+            end
+            local payload = string.format("GRP_DATA~DELETE~%s", groupId)
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            self:refreshActiveViews()
+            return
+        end
+
+        local gType = arg3 or "DUNGEON"
+        local gTime = arg4 or ""
+        local gLeader = arg5 or ""
+        local gCreator = arg6 or ""
+        local gUpdatedAt = tonumber(arg7) or time()
+        local gName = arg8 or "Novo Grupo"
+        local gDesc = arg9 or ""
+        local membersCsv = arg10 or ""
+
+        local membersList = {}
+        if membersCsv ~= "" then
+            for item in membersCsv:gmatch("[^;]+") do
+                local n, r, c, l = item:match("^(.-)/(.-)/(.-)/(.-)$")
+                if n and n ~= "" then
+                    table.insert(membersList, {
+                        name = n,
+                        role = r or "NONE",
+                        class = c or "",
+                        level = tonumber(l) or 1,
+                        addedAt = time(),
+                    })
+                end
+            end
+        end
+
+        local group = Group:new({
+            id = groupId,
+            name = gName,
+            type = gType,
+            time = gTime,
+            leader = gLeader,
+            creator = gCreator,
+            description = gDesc,
+            note = gTime,
+            updatedAt = gUpdatedAt,
+            members = membersList,
+        })
+
+        if _G.GM and _G.GM.groupRepository then
+            _G.GM.groupRepository:save(group)
+        end
+
+        -- Líder replica para toda a guilda como verdade oficial (GRP_DATA)
+        local payload = string.format("GRP_DATA~%s~%s~%s~%s~%s~%s~%d~%s~%s~%s",
+            action, groupId, gType, gTime, gLeader, gCreator, gUpdatedAt, gName, gDesc, membersCsv)
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        self:refreshActiveViews()
+
+    -- =========================================================================
+    -- DADOS OFICIAIS DE GRUPO (GRP_DATA: Líder da Guilda -> Todos os membros)
+    -- =========================================================================
+    elseif tag == "GRP_DATA" then
+        if not self:isSenderGuildLeader(senderClean) then return end
+
+        local action = arg1 or "UPDATE"
+        local groupId = arg2
+        if not groupId or groupId == "" then return end
+
+        if action == "DELETE" then
+            if _G.GM and _G.GM.groupRepository then
+                _G.GM.groupRepository:delete(groupId)
+            end
+            self:refreshActiveViews()
+            return
+        end
+
+        local gType = arg3 or "DUNGEON"
+        local gTime = arg4 or ""
+        local gLeader = arg5 or ""
+        local gCreator = arg6 or ""
+        local gUpdatedAt = tonumber(arg7) or time()
+        local gName = arg8 or "Novo Grupo"
+        local gDesc = arg9 or ""
+        local membersCsv = arg10 or ""
+
+        local membersList = {}
+        if membersCsv ~= "" then
+            for item in membersCsv:gmatch("[^;]+") do
+                local n, r, c, l = item:match("^(.-)/(.-)/(.-)/(.-)$")
+                if n and n ~= "" then
+                    table.insert(membersList, {
+                        name = n,
+                        role = r or "NONE",
+                        class = c or "",
+                        level = tonumber(l) or 1,
+                        addedAt = time(),
+                    })
+                end
+            end
+        end
+
+        local group = Group:new({
+            id = groupId,
+            name = gName,
+            type = gType,
+            time = gTime,
+            leader = gLeader,
+            creator = gCreator,
+            description = gDesc,
+            note = gTime,
+            updatedAt = gUpdatedAt,
+            members = membersList,
+        })
+
+        if _G.GM and _G.GM.groupRepository then
+            _G.GM.groupRepository:save(group)
+        end
+
+        self:refreshActiveViews()
+
+    -- =========================================================================
+    -- PROPOSTA DE CARD LFG (LFG_PROP: Jogador -> Líder da Guilda)
+    -- =========================================================================
+    elseif tag == "LFG_PROP" then
+        local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+        if not isLocalLeader then return end
+
+        local action = arg1 or "UPDATE"
+        local cardId = arg2
+        if not cardId or cardId == "" then return end
+
+        if action == "DELETE" then
+            if _G.GM and _G.GM.lfgRepository then
+                _G.GM.lfgRepository:delete(cardId)
+            end
+            local payload = string.format("LFG_DATA~DELETE~%s", cardId)
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            self:refreshActiveViews()
+            return
+        end
+
+        local cType = arg3 or "DUNGEON"
+        local cTime = arg4 or ""
+        local cCreator = arg5 or senderClean
+        local cClass = arg6 or ""
+        local cLevel = tonumber(arg7) or 1
+        local cCreatedAt = tonumber(arg8) or time()
+        local cDesc = arg9 or ""
+
+        local card = LFGCard:new({
+            id = cardId,
+            type = cType,
+            time = cTime,
+            creator = cCreator,
+            creatorClass = cClass,
+            creatorLevel = cLevel,
+            createdAt = cCreatedAt,
+            description = cDesc,
+        })
+
+        if _G.GM and _G.GM.lfgRepository then
+            _G.GM.lfgRepository:save(card)
+        end
+
+        -- Líder replica para toda a guilda (LFG_DATA)
+        local payload = string.format("LFG_DATA~%s~%s~%s~%s~%s~%s~%d~%d~%s",
+            action, cardId, cType, cTime, cCreator, cClass, cLevel, cCreatedAt, cDesc)
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        self:refreshActiveViews()
+
+    -- =========================================================================
+    -- DADOS OFICIAIS DE CARD LFG (LFG_DATA: Líder da Guilda -> Todos os membros)
+    -- =========================================================================
+    elseif tag == "LFG_DATA" then
+        if not self:isSenderGuildLeader(senderClean) then return end
+
+        local action = arg1 or "UPDATE"
+        local cardId = arg2
+        if not cardId or cardId == "" then return end
+
+        if action == "DELETE" then
+            if _G.GM and _G.GM.lfgRepository then
+                _G.GM.lfgRepository:delete(cardId)
+            end
+            self:refreshActiveViews()
+            return
+        end
+
+        local cType = arg3 or "DUNGEON"
+        local cTime = arg4 or ""
+        local cCreator = arg5 or ""
+        local cClass = arg6 or ""
+        local cLevel = tonumber(arg7) or 1
+        local cCreatedAt = tonumber(arg8) or time()
+        local cDesc = arg9 or ""
+
+        local card = LFGCard:new({
+            id = cardId,
+            type = cType,
+            time = cTime,
+            creator = cCreator,
+            creatorClass = cClass,
+            creatorLevel = cLevel,
+            createdAt = cCreatedAt,
+            description = cDesc,
+        })
+
+        if _G.GM and _G.GM.lfgRepository then
+            _G.GM.lfgRepository:save(card)
+        end
+
+        self:refreshActiveViews()
     end
 end
 
@@ -1588,6 +1840,14 @@ function SyncService:executeRefreshViews(memberName, refreshAgenda)
         local pView = _G.GM.professionView
         if pView and pView.isShown and pView:isShown() then
             _G.GM.professionController:refreshView()
+        end
+    end
+
+    -- Atualiza tela de grupos e procurando grupo (LFG) se aberta
+    if _G.GM and _G.GM.groupController and _G.GM.groupController.refreshGroups then
+        local gView = _G.GM.groupView
+        if gView and gView.isShown and gView:isShown() then
+            _G.GM.groupController:refreshGroups()
         end
     end
 end
@@ -1861,6 +2121,120 @@ function SyncService:requestOrdersSync()
     self:enqueuePacket(payload, "GUILD")
 end
 
+local function serializeGroupMembers(members)
+    if type(members) ~= "table" then return "" end
+    local parts = {}
+    for _, m in ipairs(members) do
+        local mName = (m.name or ""):gsub("[~/;]", "-")
+        local mRole = m.role or "NONE"
+        local mClass = m.class or ""
+        local mLvl = tostring(m.level or 1)
+        table.insert(parts, string.format("%s/%s/%s/%s", mName, mRole, mClass, mLvl))
+    end
+    return table.concat(parts, ";")
+end
+
+--- Sincroniza criação ou alteração de um grupo.
+--- Regra: O sync acontece primeiro entre o criador e o líder da guilda,
+--- e então do líder da guilda para os outros membros da guilda.
+---@param group Group
+---@param action string|nil @"CREATE", "UPDATE"
+function SyncService:syncGroup(group, action)
+    if not group or not group.getId then return end
+    action = action or "UPDATE"
+    local gId = group:getId()
+    local gType = group:getType() or "DUNGEON"
+    local gTime = (group:getTime() or ""):gsub("[~]", "-")
+    local gLeader = (group:getLeader() or ""):gsub("[~]", "-")
+    local gCreator = (group:getCreator() or ""):gsub("[~]", "-")
+    local gUpdatedAt = tonumber(group:getUpdatedAt()) or time()
+    local gName = (group:getName() or ""):gsub("[~]", "-")
+    local gDesc = (group:getDescription() or ""):gsub("[~]", "-")
+    local membersCsv = serializeGroupMembers(group:getMembers())
+
+    local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+    local tag = isLocalLeader and "GRP_DATA" or "GRP_PROP"
+
+    local payload = string.format("%s~%s~%s~%s~%s~%s~%s~%d~%s~%s~%s",
+        tag, action, gId, gType, gTime, gLeader, gCreator, gUpdatedAt, gName, gDesc, membersCsv)
+
+    if IsInGuild and IsInGuild() then
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+    end
+end
+
+--- Sincroniza a exclusão de um grupo.
+---@param groupId string
+function SyncService:syncGroupDelete(groupId)
+    if not groupId or groupId == "" then return end
+    local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+    local tag = isLocalLeader and "GRP_DATA" or "GRP_PROP"
+    local payload = string.format("%s~DELETE~%s", tag, groupId)
+
+    if IsInGuild and IsInGuild() then
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+    end
+end
+
+--- Sincroniza criação ou alteração de um card de Procurando Grupo (LFG).
+--- Regra: O sync acontece primeiro entre o criador e o líder da guilda,
+--- e então do líder da guilda para os outros membros da guilda.
+---@param card LFGCard
+---@param action string|nil @"CREATE", "UPDATE"
+function SyncService:syncLFGCard(card, action)
+    if not card or not card.getId then return end
+    action = action or "UPDATE"
+    local cId = card:getId()
+    local cType = card:getType() or "DUNGEON"
+    local cTime = (card:getTime() or ""):gsub("[~]", "-")
+    local cCreator = (card:getCreator() or ""):gsub("[~]", "-")
+    local cClass = card:getCreatorClass() or ""
+    local cLevel = tonumber(card:getCreatorLevel()) or 1
+    local cCreated = tonumber(card:getCreatedAt()) or time()
+    local cDesc = (card:getDescription() or ""):gsub("[~]", "-")
+
+    local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+    local tag = isLocalLeader and "LFG_DATA" or "LFG_PROP"
+
+    local payload = string.format("%s~%s~%s~%s~%s~%s~%s~%d~%d~%s",
+        tag, action, cId, cType, cTime, cCreator, cClass, cLevel, cCreated, cDesc)
+
+    if IsInGuild and IsInGuild() then
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+    end
+end
+
+--- Sincroniza a exclusão de um card de Procurando Grupo.
+---@param cardId string
+function SyncService:syncLFGCardDelete(cardId)
+    if not cardId or cardId == "" then return end
+    local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+    local tag = isLocalLeader and "LFG_DATA" or "LFG_PROP"
+    local payload = string.format("%s~DELETE~%s", tag, cardId)
+
+    if IsInGuild and IsInGuild() then
+        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+    end
+end
+
+--- O Líder da guilda transmite todos os grupos para a guilda.
+function SyncService:broadcastAllGroups()
+    if not (_G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll) then return end
+    local groups = _G.GM.groupRepository:findAll()
+    for _, g in ipairs(groups) do
+        self:syncGroup(g, "UPDATE")
+    end
+end
+
+--- O Líder da guilda transmite todos os cards de LFG para a guilda.
+function SyncService:broadcastAllLFGCards()
+    if not (_G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll) then return end
+    local cards = _G.GM.lfgRepository:findAll()
+    for _, c in ipairs(cards) do
+        self:syncLFGCard(c, "UPDATE")
+    end
+end
+
 --- Força manualmente a sincronização de todos os dados customizados de todos os membros da guilda.
 --- Enfileira todos os pacotes, reinicia as confirmações esperadas dos pares online e transmite na hora.
 --- Também envia um SYNC_REQ solicitando aos outros colegas que transmitam suas informações.
@@ -1918,6 +2292,14 @@ function SyncService:forceSyncAll()
                     self:broadcastCraftOrder(ord, "UPDATE", false)
                 end
             end
+        end)
+    end
+
+    -- 4. Se for o Líder da guilda, sincroniza grupos e cards de Procurando Grupo (LFG)
+    if isLeader then
+        pcall(function()
+            self:broadcastAllGroups()
+            self:broadcastAllLFGCards()
         end)
     end
 

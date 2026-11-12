@@ -49,6 +49,10 @@ function Database:init()
         _G.GM_DB.groups = {}
     end
 
+    if type(_G.GM_DB.lfgCards) ~= "table" then
+        _G.GM_DB.lfgCards = {}
+    end
+
     if type(_G.GM_DB.events) ~= "table" then
         _G.GM_DB.events = {}
     end
@@ -77,6 +81,7 @@ function Database:init()
         members = {},
         logs = {},
         groups = {},
+        lfgCards = {},
         events = {},
         craftOrders = {},
         professions = {},
@@ -125,6 +130,7 @@ function Database:getGuildData(guildKey)
             members = {},
             logs = {},
             groups = {},
+            lfgCards = {},
             events = {},
             craftOrders = {},
             professions = {},
@@ -135,6 +141,7 @@ function Database:getGuildData(guildKey)
         if type(g.members) ~= "table" then g.members = {} end
         if type(g.logs) ~= "table" then g.logs = {} end
         if type(g.groups) ~= "table" then g.groups = {} end
+        if type(g.lfgCards) ~= "table" then g.lfgCards = {} end
         if type(g.events) ~= "table" then g.events = {} end
         if type(g.craftOrders) ~= "table" then g.craftOrders = {} end
         if type(g.professions) ~= "table" then g.professions = {} end
@@ -168,6 +175,7 @@ function Database:getActiveDatabase()
         members = {},
         logs = {},
         groups = {},
+        lfgCards = {},
         events = {},
         craftOrders = {},
         professions = {},

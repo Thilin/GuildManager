@@ -75,7 +75,8 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local auditController = AuditController:new(memberService, guildRosterService, auditView, logService)
 
         local groupRepository = GroupRepository:new(dbTable)
-        local groupService = GroupService:new(groupRepository, memberService, guildRosterService)
+        local lfgRepository = LFGRepository:new(dbTable)
+        local groupService = GroupService:new(groupRepository, memberService, guildRosterService, lfgRepository, nil)
         local groupView = GroupView:new()
         local groupController = GroupController:new(groupService, memberService, guildRosterService, groupView)
 
@@ -95,6 +96,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         local syncService = SyncService:new(memberService, locationService, settingsService, guildRosterService)
         syncService:setSyncConflictView(syncConflictView)
         memberService:setSyncService(syncService)
+        groupService:setSyncService(syncService)
 
         local worldMapView = WorldMapView:new()
         local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
@@ -125,6 +127,7 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         GM.auditView = auditView
         GM.auditController = auditController
         GM.groupRepository = groupRepository
+        GM.lfgRepository = lfgRepository
         GM.groupService = groupService
         GM.groupView = groupView
         GM.groupController = groupController
@@ -337,6 +340,9 @@ function GM.switchActiveGuild(guildName, realmName, force)
         end
         if GM.groupRepository and GM.groupRepository.setDatabase then
             GM.groupRepository:setDatabase(targetDb)
+        end
+        if GM.lfgRepository and GM.lfgRepository.setDatabase then
+            GM.lfgRepository:setDatabase(targetDb)
         end
         if GM.eventRepository and GM.eventRepository.setDatabase then
             GM.eventRepository:setDatabase(targetDb)

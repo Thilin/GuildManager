@@ -53,70 +53,18 @@ local PALETTE = {
     FOCUS_BG = { 0.065, 0.045, 0.020, 0.95 },
     FOCUS_BORDER = { 0.85, 0.58, 0.20, 1.0 },
     HIGHLIGHT_TINT = { 0.71, 0.49, 0.16, 0.20 },
-    ACTIVE_TAB_BG = { 0.20, 0.13, 0.05, 0.95 },
-    ACTIVE_TAB_BORDER = { 0.95, 0.70, 0.25, 1.0 },
-    INACTIVE_TAB_BG = { 0.045, 0.030, 0.012, 0.80 },
-    INACTIVE_TAB_BORDER = { 0.50, 0.33, 0.12, 0.85 },
     ROLE_TANK = { 0.29, 0.56, 0.88 },
     ROLE_HEALER = { 0.18, 0.80, 0.44 },
     ROLE_DPS = { 0.91, 0.30, 0.24 },
 }
 
---- Construtor da View de Grupos.
----@return GroupView
-function GroupView:new()
-    local instance = setmetatable({}, self)
-
-    instance._frame = nil
-    instance._columns = {}
-    instance._groups = {}
-    instance._guildMembers = {}
-    instance._createButtons = {}
-    instance._currentDetailGroupId = nil
-
-    -- Callbacks
-    instance._onRefreshCallback = nil
-    instance._onCreateGroupCallback = nil
-    instance._onDeleteGroupCallback = nil
-    instance._onAddMemberCallback = nil
-    instance._onRemoveMemberCallback = nil
-    instance._onSetLeaderCallback = nil
-    instance._onSetRoleCallback = nil
-    instance._onInviteGroupCallback = nil
-    instance._onUpdateGroupDetailsCallback = nil
-
-    -- Modais
-    instance._createModal = nil
-    instance._addMemberModal = nil
-    instance._leaderPickerModal = nil
-    instance._detailModal = nil
-
-    instance:createUI()
-
-    return instance
-end
-
-function GroupView:setOnRefreshCallback(cb) self._onRefreshCallback = cb end
-function GroupView:setOnCreateGroupCallback(cb) self._onCreateGroupCallback = cb end
-function GroupView:setOnDeleteGroupCallback(cb) self._onDeleteGroupCallback = cb end
-function GroupView:setOnAddMemberCallback(cb) self._onAddMemberCallback = cb end
-function GroupView:setOnRemoveMemberCallback(cb) self._onRemoveMemberCallback = cb end
-function GroupView:setOnSetLeaderCallback(cb) self._onSetLeaderCallback = cb end
-function GroupView:setOnSetRoleCallback(cb) self._onSetRoleCallback = cb end
-function GroupView:setOnInviteGroupCallback(cb) self._onInviteGroupCallback = cb end
-function GroupView:setOnUpdateGroupDetailsCallback(cb) self._onUpdateGroupDetailsCallback = cb end
-
-local CLASS_COLORS = {
-    WARRIOR     = { r = 0.78, g = 0.61, b = 0.43, hex = "|cffc79c6e" },
-    MAGE        = { r = 0.41, g = 0.80, b = 0.94, hex = "|cff69ccf0" },
-    ROGUE       = { r = 1.00, g = 0.96, b = 0.41, hex = "|cfffff569" },
-    DRUID       = { r = 1.00, g = 0.49, b = 0.04, hex = "|cffff7d0a" },
-    HUNTER      = { r = 0.67, g = 0.83, b = 0.45, hex = "|cffabd473" },
-    SHAMAN      = { r = 0.00, g = 0.44, b = 0.87, hex = "|cff0070de" },
-    PRIEST      = { r = 1.00, g = 1.00, b = 1.00, hex = "|cffffffff" },
-    WARLOCK     = { r = 0.58, g = 0.51, b = 0.79, hex = "|cff9482c9" },
-    PALADIN     = { r = 0.96, g = 0.55, b = 0.73, hex = "|cfff58cba" },
-    DEATHKNIGHT = { r = 0.77, g = 0.12, b = 0.23, hex = "|cffc41e3a" },
+local GROUP_TYPE_INFO = {
+    DUNGEON = { label = "Masmorras", color = "|cff4a90e2", icon = "Interface\\Icons\\INV_Shield_04" },
+    RAID    = { label = "Raides",    color = "|cffff8000", icon = "Interface\\Icons\\INV_Helmet_06" },
+    MISC    = { label = "Diversos",  color = "|cff00ff88", icon = "Interface\\Icons\\INV_Misc_GroupLooking" },
+    FARM    = { label = "Farm",      color = "|cffffff55", icon = "Interface\\Icons\\INV_Misc_Bag_08" },
+    QUESTS  = { label = "Missões",   color = "|cff33ccff", icon = "Interface\\Icons\\INV_Misc_Book_07" },
+    PVP     = { label = "PvP",       color = "|cffff4444", icon = "Interface\\Icons\\INV_BannerPVP_02" },
 }
 
 local CLASS_ICON_COORDS = {
@@ -159,7 +107,6 @@ local CLASS_NAME_TO_TOKEN = {
     ["DK"] = "DEATHKNIGHT",
 }
 
---- Formata o nome do membro com a cor da sua classe.
 local function getColoredMemberName(name, classToken)
     if not name or name == "" then return "" end
     local clean = name:match("^[^-]+") or name
@@ -171,28 +118,144 @@ local function getColoredMemberName(name, classToken)
         tok = CLASS_NAME_TO_TOKEN[raw:upper()] or raw:upper()
     end
 
-    if tok then
-        if RAID_CLASS_COLORS and RAID_CLASS_COLORS[tok] then
-            local c = RAID_CLASS_COLORS[tok]
-            return string.format("|cff%02x%02x%02x%s|r", math.floor(c.r * 255), math.floor(c.g * 255), math.floor(c.b * 255), clean)
-        elseif CLASS_COLORS and CLASS_COLORS[tok] then
-            return CLASS_COLORS[tok].hex .. clean .. "|r"
+    if tok and RAID_CLASS_COLORS and RAID_CLASS_COLORS[tok] then
+        local c = RAID_CLASS_COLORS[tok]
+        if c and c.r and c.g and c.b then
+            local r = math.min(255, math.max(0, math.floor(c.r * 255)))
+            local g = math.min(255, math.max(0, math.floor(c.g * 255)))
+            local b = math.min(255, math.max(0, math.floor(c.b * 255)))
+            return string.format("|cff%02x%02x%02x%s|r", r, g, b, clean)
         end
     end
     return string.format("|cffffffff%s|r", clean)
 end
 
---- Retorna o texto formatado da função do membro.
 local function getRoleFormatted(role)
-    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     if role == GroupRole.TANK or role == "TANK" then
         return "|cff4a90e2[Tank]|r"
     elseif role == GroupRole.HEALER or role == "HEALER" then
-        return isEn and "|cff2ecc71[Healer]|r" or "|cff2ecc71[Cura]|r"
+        return "|cff2ecc71[Cura]|r"
     elseif role == GroupRole.DPS or role == "DPS" then
-        return isEn and "|cffe74c3c[DPS]|r" or "|cffe74c3c[Dano]|r"
+        return "|cffe74c3c[Dano]|r"
     end
     return "|cff888888[-]|r"
+end
+
+local function styleBox(eb)
+    eb:SetFontObject("GameFontHighlightSmall")
+    eb:SetAutoFocus(false)
+    eb:SetTextInsets(6, 6, 2, 2)
+    if eb.SetBackdrop then
+        eb:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        eb:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        eb:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+    eb:SetScript("OnEditFocusGained", function(box)
+        if box.SetBackdropBorderColor then
+            box:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
+        end
+    end)
+    eb:SetScript("OnEditFocusLost", function(box)
+        if box.SetBackdropBorderColor then
+            box:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+        end
+    end)
+end
+
+--- Construtor da View de Grupos e LFG.
+---@return GroupView
+function GroupView:new()
+    local instance = setmetatable({}, self)
+
+    instance._frame = nil
+    instance._groups = {}
+    instance._lfgCards = {}
+    instance._guildMembers = {}
+    instance._currentDetailGroupId = nil
+    instance._selectedLFGType = "ALL"
+    instance._lfgSearchText = ""
+
+    -- Callbacks
+    instance._onRefreshCallback = nil
+    instance._onCreateGroupCallback = nil
+    instance._onDeleteGroupCallback = nil
+    instance._onAddMemberCallback = nil
+    instance._onRemoveMemberCallback = nil
+    instance._onSetLeaderCallback = nil
+    instance._onSetRoleCallback = nil
+    instance._onInviteGroupCallback = nil
+    instance._onUpdateGroupDetailsCallback = nil
+    instance._onCreateLFGCardCallback = nil
+    instance._onDeleteLFGCardCallback = nil
+
+    -- Modais
+    instance._createGroupModal = nil
+    instance._createLFGModal = nil
+    instance._detailModal = nil
+    instance._addMemberModal = nil
+
+    instance:createUI()
+
+    return instance
+end
+
+function GroupView:setOnRefreshCallback(cb) self._onRefreshCallback = cb end
+function GroupView:setOnCreateGroupCallback(cb) self._onCreateGroupCallback = cb end
+function GroupView:setOnDeleteGroupCallback(cb) self._onDeleteGroupCallback = cb end
+function GroupView:setOnAddMemberCallback(cb) self._onAddMemberCallback = cb end
+function GroupView:setOnRemoveMemberCallback(cb) self._onRemoveMemberCallback = cb end
+function GroupView:setOnSetLeaderCallback(cb) self._onSetLeaderCallback = cb end
+function GroupView:setOnSetRoleCallback(cb) self._onSetRoleCallback = cb end
+function GroupView:setOnInviteGroupCallback(cb) self._onInviteGroupCallback = cb end
+function GroupView:setOnUpdateGroupDetailsCallback(cb) self._onUpdateGroupDetailsCallback = cb end
+function GroupView:setOnCreateLFGCardCallback(cb) self._onCreateLFGCardCallback = cb end
+function GroupView:setOnDeleteLFGCardCallback(cb) self._onDeleteLFGCardCallback = cb end
+
+function GroupView:getFrame() return self._frame end
+function GroupView:isShown() return self._frame and self._frame:IsShown() end
+
+function GroupView:show()
+    if self._frame then
+        self._frame:Show()
+        self:renderLFGDashboard()
+        self:renderCreatedGroups()
+    end
+end
+
+function GroupView:hide()
+    if self._frame then
+        self._frame:Hide()
+        if self._createGroupModal then self._createGroupModal:Hide() end
+        if self._createLFGModal then self._createLFGModal:Hide() end
+        if self._detailModal then self._detailModal:Hide() end
+        if self._addMemberModal then self._addMemberModal:Hide() end
+    end
+end
+
+function GroupView:toggle()
+    if self:isShown() then
+        self:hide()
+    else
+        self:show()
+    end
+end
+
+function GroupView:setGuildMembers(members)
+    self._guildMembers = members or {}
+end
+
+function GroupView:setGroups(groups)
+    self._groups = groups or {}
+    if self._frame and self._frame:IsShown() then
+        self:renderCreatedGroups()
+    end
+end
+
+function GroupView:setLFGCards(cards)
+    self._lfgCards = cards or {}
+    if self._frame and self._frame:IsShown() then
+        self:renderLFGDashboard()
+    end
 end
 
 --- Busca um membro na lista de membros da guilda por nome (valida nome e sobrenome).
@@ -201,7 +264,6 @@ function GroupView:findGuildMember(name)
     local clean = (name:match("^[^-]+") or name):match("^%s*(.-)%s*$")
     local cleanLower = clean:lower()
 
-    -- 1. Busca exata / case-insensitive pelo nome completo (nome e sobrenome)
     for _, m in ipairs(self._guildMembers or {}) do
         local mName = m:getName() or ""
         local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
@@ -210,7 +272,6 @@ function GroupView:findGuildMember(name)
         end
     end
 
-    -- 2. Se a busca não tem espaço (apenas primeiro nome), tenta resolver nome completo único
     if not clean:find("%s") and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
         local full = _G.GM.memberService:resolveFullName(clean)
         if full and full ~= "" and full:find("%s") then
@@ -224,28 +285,17 @@ function GroupView:findGuildMember(name)
             end
         end
     end
-
     return nil
 end
 
---- Resolve o token da classe de um membro (ex: "WARRIOR", "PALADIN", etc.).
---- Realiza fallback em múltiplas fontes: valor pré-existente, self._guildMembers,
---- MemberService, Roster da Blizzard e GetPlayerInfoByGUID.
----@param name string
----@param fallbackClass string|nil
----@return string @Token da classe em maiúsculas (ex: "WARRIOR") ou "" se não encontrado
 function GroupView:resolveMemberClass(name, fallbackClass)
     if fallbackClass and fallbackClass ~= "" then
         local raw = fallbackClass:match("^%s*(.-)%s*$") or fallbackClass
         local tok = CLASS_NAME_TO_TOKEN[raw:upper()] or raw:upper()
-        if CLASS_ICON_COORDS[tok] then
-            return tok
-        end
+        if CLASS_ICON_COORDS[tok] then return tok end
     end
 
-    if not name or name == "" then
-        return ""
-    end
+    if not name or name == "" then return "" end
 
     local clean = name:match("^[^-]+") or name
     clean = clean:match("^%s*(.-)%s*$") or clean
@@ -257,70 +307,25 @@ function GroupView:resolveMemberClass(name, fallbackClass)
     end
     local cleanLower = clean:lower()
 
-    -- 1. Busca na lista em cache de membros da guilda (self._guildMembers)
     for _, m in ipairs(self._guildMembers or {}) do
-        local mName = m:getName() or ""
-        local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
-        if mClean:lower() == cleanLower then
-            local c = m:getClass()
-            if c and c ~= "" then
-                local tok = CLASS_NAME_TO_TOKEN[c:upper()] or c:upper()
-                if CLASS_ICON_COORDS[tok] then return tok end
-            end
-            local cDisp = m:getClassDisplayName()
-            if cDisp and cDisp ~= "" then
-                local tok = CLASS_NAME_TO_TOKEN[cDisp:upper()]
-                if tok and CLASS_ICON_COORDS[tok] then return tok end
-            end
-        end
-    end
-
-    -- 2. Busca no MemberService do Addon
-    if _G.GM and _G.GM.memberService then
-        local m = nil
-        if _G.GM.memberService.getMember then
-            m = _G.GM.memberService:getMember(clean) or _G.GM.memberService:getMember(name)
-        end
-        if not m and _G.GM.memberService.getAllMembers then
-            for _, cand in ipairs(_G.GM.memberService:getAllMembers() or {}) do
-                local cName = cand:getName() or ""
-                local cClean = (cName:match("^[^-]+") or cName):match("^%s*(.-)%s*$") or cName
-                if cClean:lower() == cleanLower then
-                    m = cand
-                    break
-                end
-            end
-        end
-        if m then
-            local c = m:getClass()
-            if c and c ~= "" then
-                local tok = CLASS_NAME_TO_TOKEN[c:upper()] or c:upper()
-                if CLASS_ICON_COORDS[tok] then return tok end
-            end
-            local cDisp = m:getClassDisplayName()
-            if cDisp and cDisp ~= "" then
-                local tok = CLASS_NAME_TO_TOKEN[cDisp:upper()]
-                if tok and CLASS_ICON_COORDS[tok] then return tok end
-            end
-        end
-    end
-
-    -- 3. Busca no GuildRosterService do Addon
-    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.getRosterData then
-        local roster = _G.GM.guildRosterService:getRosterData()
-        if roster then
-            local rData = roster[clean] or roster[cleanLower] or roster[name] or roster[name:lower()]
-            if rData then
-                local c = rData.classFileName or rData.class
+        if type(m) == "table" then
+            local mName = (m.getName and m:getName()) or m.name or ""
+            local mClean = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$") or mName
+            if mClean:lower() == cleanLower then
+                local c = (m.getClass and m:getClass()) or m.class
                 if c and c ~= "" then
                     local tok = CLASS_NAME_TO_TOKEN[c:upper()] or c:upper()
                     if CLASS_ICON_COORDS[tok] then return tok end
                 end
+                local cDisp = (m.getClassDisplayName and m:getClassDisplayName()) or m.classDisplayName
+                if cDisp and cDisp ~= "" then
+                    local tok = CLASS_NAME_TO_TOKEN[cDisp:upper()]
+                    if tok and CLASS_ICON_COORDS[tok] then return tok end
+                end
             end
         end
     end
 
-    -- 4. Busca nativa na Blizzard Guild API
     if GetNumGuildMembers and GetGuildRosterInfo then
         local num = GetNumGuildMembers() or 0
         for i = 1, num do
@@ -345,100 +350,69 @@ function GroupView:resolveMemberClass(name, fallbackClass)
     return ""
 end
 
---- Helper para estilizar caixas EditBox no padrão do Addon.
-local function styleBox(eb)
-    eb:SetFontObject("GameFontHighlightSmall")
-    eb:SetAutoFocus(false)
-    eb:SetTextInsets(6, 6, 2, 2)
-    if eb.SetBackdrop then
-        eb:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        eb:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
-        eb:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+--- Obtém o nome completo do jogador logado.
+function GroupView:getPlayerFullName()
+    if _G.GM and _G.GM.groupController and _G.GM.groupController.resolvePlayerFullName then
+        local res = _G.GM.groupController:resolvePlayerFullName()
+        if res and res ~= "" then return res end
     end
-    eb:SetScript("OnEditFocusGained", function(box)
-        if box.SetBackdropBorderColor then
-            box:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
-        end
-        if box.SetBackdropColor then
-            box:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], 0.95)
-        end
-    end)
-    eb:SetScript("OnEditFocusLost", function(box)
-        if box.SetBackdropBorderColor then
-            box:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
-        end
-        if box.SetBackdropColor then
-            box:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.75)
-        end
-    end)
+    if _G.GM and _G.GM.memberService and _G.GM.memberService.resolvePlayerFullName then
+        local res = _G.GM.memberService:resolvePlayerFullName()
+        if res and res ~= "" then return res end
+    end
+    local p = UnitName and UnitName("player")
+    if p and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
+        local res = _G.GM.memberService:resolveFullName(p)
+        if res and res ~= "" then return res end
+    end
+    return p or ""
 end
 
---- Cria a interface principal da janela de grupos (3 Colunas).
-function GroupView:createUI()
-    if self._frame then return end
+-- =========================================================================
+-- CRIAÇÃO DA INTERFACE PRINCIPAL (1180 x 614)
+-- =========================================================================
 
+function GroupView:createUI()
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local frame = CreateFrame("Frame", "GuildManagerGroupFrame", UIParent, template)
+    local frame = CreateFrame("Frame", "GM_GroupViewFrame", UIParent, template)
     self._frame = frame
 
     frame:SetSize(1180, 614)
-    frame:SetFrameStrata("DIALOG")
-    frame:SetToplevel(true)
-    frame:SetClampedToScreen(true)
-    frame:EnableMouse(true)
-    frame:SetMovable(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", function(f) f:StartMoving() end)
-    frame:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("HIGH")
     frame:Hide()
 
-    if UISpecialFrames then
-        table.insert(UISpecialFrames, "GuildManagerGroupFrame")
-    end
-
     frame:SetScript("OnShow", function()
-        if PlaySound then
-            if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN then
-                PlaySound(SOUNDKIT.IG_CHARACTER_INFO_OPEN)
-            else
-                pcall(PlaySound, 839)
-            end
-        end
-        self:updateCreatePermissions()
-        if self._onRefreshCallback then
-            self._onRefreshCallback()
-        end
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN or 839) end
+        self:renderLFGDashboard()
+        self:renderCreatedGroups()
     end)
-
     frame:SetScript("OnHide", function()
-        if PlaySound then
-            if SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_CLOSE then
-                PlaySound(SOUNDKIT.IG_CHARACTER_INFO_CLOSE)
-            else
-                pcall(PlaySound, 840)
-            end
-        end
-        if self._createModal and self._createModal:IsShown() then self._createModal:Hide() end
-        if self._addMemberModal and self._addMemberModal:IsShown() then self._addMemberModal:Hide() end
-        if self._leaderPickerModal and self._leaderPickerModal:IsShown() then self._leaderPickerModal:Hide() end
+        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_CLOSE or 840) end
+        if self._createGroupModal and self._createGroupModal:IsShown() then self._createGroupModal:Hide() end
+        if self._createLFGModal and self._createLFGModal:IsShown() then self._createLFGModal:Hide() end
         if self._detailModal and self._detailModal:IsShown() then self._detailModal:Hide() end
+        if self._addMemberModal and self._addMemberModal:IsShown() then self._addMemberModal:Hide() end
     end)
 
-    -- Camada sólida de fundo
+    -- Fundo e borda temática
     local solidBg = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
     solidBg:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
     solidBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
     solidBg:SetColorTexture(0.04, 0.03, 0.02, 1.0)
 
-    -- Textura de pergaminho clássica GuildManager
     local bgTex = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
     bgTex:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
     bgTex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
     bgTex:SetTexture("Interface\\AddOns\\GuildManager\\Textures\\background.tga")
     bgTex:SetAlpha(0.45)
 
-    -- Moldura e borda temática Blizzard
     if frame.SetBackdrop then
         frame:SetBackdrop(DIALOG_BACKDROP)
         frame:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.20)
@@ -465,2278 +439,1665 @@ function GroupView:createUI()
     -- Título da Janela
     local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     titleText:SetPoint("LEFT", factionIcon, "RIGHT", 10, 0)
-    titleText:SetText(L["GROUPS_TITLE"])
+    titleText:SetText("GERENCIAMENTO DE GRUPOS & PROCURANDO GRUPO (LFG)")
     self._titleText = titleText
 
-    -- Subtítulo informativo
     local subtitleText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitleText:SetPoint("LEFT", titleText, "RIGHT", 12, 0)
-    subtitleText:SetText(L["GROUPS_SUBTITLE"])
-    self._subtitleText = subtitleText
+    subtitleText:SetText("|cffaaaaaaMural de grupos e jogadores da guilda|r")
 
-    -- Divisória abaixo do cabeçalho
+    -- Divisória do Cabeçalho
     local headerSep = frame:CreateTexture(nil, "ARTWORK")
     headerSep:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -44)
     headerSep:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
     headerSep:SetHeight(1)
     headerSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
-    -- Criação das abas laterais, 3 colunas e modais
+    -- Abas Laterais à Direita
     self:createSideTabs()
-    self:createThreeColumns()
+
+    -- 1. Painel Esquerdo/Central: Dashboard de Procurando Grupo (width 770, height 554)
+    self:createLFGDashboardPanel()
+
+    -- 2. Coluna Lateral Direita: Grupos Criados (width 370, height 554)
+    self:createCreatedGroupsPanel()
+
+    -- Modais
     self:createModals()
-    self:updateCreatePermissions()
 end
 
---- Cria as abas laterais (Auditoria, Logs, Grupos).
+-- =========================================================================
+-- ABAS LATERAIS
+-- =========================================================================
+
 function GroupView:createSideTabs()
     local frame = self._frame
     if not frame then return end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
-    -- Aba 1: Auditoria
-    local tabAudit = CreateFrame("Button", "GM_GroupSideTab_Audit", frame, template)
-    tabAudit:SetSize(36, 36)
-    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -44)
-    if tabAudit.SetBackdrop then
-        tabAudit:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabAudit:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabAudit:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local auditIcon = tabAudit:CreateTexture(nil, "ARTWORK")
-    auditIcon:SetPoint("TOPLEFT", tabAudit, "TOPLEFT", 4, -4)
-    auditIcon:SetPoint("BOTTOMRIGHT", tabAudit, "BOTTOMRIGHT", -4, 4)
-    auditIcon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
-    auditIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    auditIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabAudit.icon = auditIcon
-
-    tabAudit:SetScript("OnEnter", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        auditIcon:SetVertexColor(1.0, 1.0, 1.0)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AUDIT_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_AUDIT_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabAudit:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        auditIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabAudit:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local auditCtrl = (_G.GM and _G.GM.auditController) or _G.auditController
-        if auditCtrl then
-            auditCtrl:show()
-            local auditFrame = (_G.GM and _G.GM.auditView and _G.GM.auditView.getFrame and _G.GM.auditView:getFrame())
-            if auditFrame and point then
-                auditFrame:ClearAllPoints()
-                if relativeTo then auditFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else auditFrame:SetPoint(point, xOfs, yOfs) end
+    local function setupTab(btn, iconPath, tooltipTitle, tooltipDesc, onClickFn, isActive)
+        btn:SetSize(36, 36)
+        if btn.SetBackdrop then
+            btn:SetBackdrop(SIDE_TAB_BACKDROP)
+            if isActive then
+                btn:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
+                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+            else
+                btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
             end
         end
-    end)
+
+        local icon = btn:CreateTexture(nil, "ARTWORK")
+        icon:SetPoint("TOPLEFT", btn, "TOPLEFT", 4, -4)
+        icon:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -4, 4)
+        icon:SetTexture(iconPath)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        icon:SetVertexColor(isActive and 1.0 or 0.65, isActive and 1.0 or 0.65, isActive and 1.0 or 0.65)
+
+        btn:SetScript("OnEnter", function(b)
+            if not isActive and b.SetBackdropBorderColor then
+                b:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
+                b:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+                icon:SetVertexColor(1, 1, 1)
+            end
+            GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+            GameTooltip:AddLine("|cffffd200" .. tooltipTitle .. "|r")
+            if isActive then
+                GameTooltip:AddLine("|cff888888Aba atual|r")
+            end
+            GameTooltip:AddLine(tooltipDesc, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function(b)
+            if not isActive and b.SetBackdropBorderColor then
+                b:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
+                b:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
+                icon:SetVertexColor(0.65, 0.65, 0.65)
+            end
+            GameTooltip:Hide()
+        end)
+        if onClickFn then
+            btn:SetScript("OnClick", onClickFn)
+        end
+    end
+
+    -- Aba 1: Auditoria
+    local tabAudit = CreateFrame("Button", "GM_GroupTab_Audit", frame, template)
+    tabAudit:SetPoint("TOPLEFT", frame, "TOPRIGHT", -2, -44)
+    setupTab(tabAudit, "Interface\\Icons\\INV_Misc_Book_09", "Auditoria da Guilda", "Painel de controle e lista de membros da guilda.", function()
+        frame:Hide()
+        if _G.GM and _G.GM.auditController then _G.GM.auditController:show() end
+    end, false)
 
     -- Aba 2: Logs
-    local tabLogs = CreateFrame("Button", "GM_GroupSideTab_Logs", frame, template)
-    tabLogs:SetSize(36, 36)
+    local tabLogs = CreateFrame("Button", "GM_GroupTab_Logs", frame, template)
     tabLogs:SetPoint("TOPLEFT", tabAudit, "BOTTOMLEFT", 0, -8)
-    if tabLogs.SetBackdrop then
-        tabLogs:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabLogs:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabLogs:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local logsIcon = tabLogs:CreateTexture(nil, "ARTWORK")
-    logsIcon:SetPoint("TOPLEFT", tabLogs, "TOPLEFT", 4, -4)
-    logsIcon:SetPoint("BOTTOMRIGHT", tabLogs, "BOTTOMRIGHT", -4, 4)
-    logsIcon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
-    logsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    logsIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabLogs.icon = logsIcon
-
-    tabLogs:SetScript("OnEnter", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        logsIcon:SetVertexColor(1.0, 1.0, 1.0)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_LOGS_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_LOGS_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabLogs:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        logsIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabLogs:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local logCtrl = (_G.GM and _G.GM.logController) or _G.logController
-        if logCtrl then
-            logCtrl:show()
-            local logFrame = (_G.GM and _G.GM.logView and _G.GM.logView.getFrame and _G.GM.logView:getFrame())
-            if logFrame and point then
-                logFrame:ClearAllPoints()
-                if relativeTo then logFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else logFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
+    setupTab(tabLogs, "Interface\\Icons\\Spell_Holy_PrayerOfHealing", "Histórico de Logs", "Visualiza alterações cadastrais, entradas e saídas.", function()
+        frame:Hide()
+        if _G.GM and _G.GM.logController then _G.GM.logController:show() end
+    end, false)
 
     -- Aba 3: Grupos (Ativa)
-    local tabGroups = CreateFrame("Button", "GM_GroupSideTab_Groups", frame, template)
-    tabGroups:SetSize(36, 36)
+    local tabGroups = CreateFrame("Button", "GM_GroupTab_Groups", frame, template)
     tabGroups:SetPoint("TOPLEFT", tabLogs, "BOTTOMLEFT", 0, -8)
-    if tabGroups.SetBackdrop then
-        tabGroups:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabGroups:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
-        tabGroups:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
-    end
-    local groupsIcon = tabGroups:CreateTexture(nil, "ARTWORK")
-    groupsIcon:SetPoint("TOPLEFT", tabGroups, "TOPLEFT", 4, -4)
-    groupsIcon:SetPoint("BOTTOMRIGHT", tabGroups, "BOTTOMRIGHT", -4, 4)
-    groupsIcon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
-    groupsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    groupsIcon:SetVertexColor(1.0, 1.0, 1.0)
-
-    local groupsGlow = tabGroups:CreateTexture(nil, "OVERLAY")
-    groupsGlow:SetPoint("TOPLEFT", tabGroups, "TOPLEFT", -2, 2)
-    groupsGlow:SetPoint("BOTTOMRIGHT", tabGroups, "BOTTOMRIGHT", 2, -2)
-    groupsGlow:SetTexture("Interface\\Buttons\\CheckButtonHilight")
-    groupsGlow:SetBlendMode("ADD")
-    groupsGlow:SetVertexColor(1.0, 0.85, 0.20, 0.80)
-
-    tabGroups:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_GROUPS_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine("|cff888888" .. curL["TAB_CURRENT"] .. "|r", 0.7, 0.7, 0.7)
-        GameTooltip:AddLine(curL["TAB_GROUPS_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabGroups:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    setupTab(tabGroups, "Interface\\Icons\\INV_Misc_GroupLooking", "Grupos & LFG", "Gerenciamento de grupos e mural de Procurando Grupo.", nil, true)
 
     -- Aba 4: Agenda
-    local tabAgenda = CreateFrame("Button", "GM_GroupSideTab_Agenda", frame, template)
-    tabAgenda:SetSize(36, 36)
+    local tabAgenda = CreateFrame("Button", "GM_GroupTab_Agenda", frame, template)
     tabAgenda:SetPoint("TOPLEFT", tabGroups, "BOTTOMLEFT", 0, -8)
-    if tabAgenda.SetBackdrop then
-        tabAgenda:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabAgenda:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabAgenda:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local agendaIcon = tabAgenda:CreateTexture(nil, "ARTWORK")
-    agendaIcon:SetPoint("TOPLEFT", tabAgenda, "TOPLEFT", 4, -4)
-    agendaIcon:SetPoint("BOTTOMRIGHT", tabAgenda, "BOTTOMRIGHT", -4, 4)
-    local okAgenda = agendaIcon:SetTexture("Interface\\Calendar\\UI-Calendar-Button")
-    if okAgenda ~= false and agendaIcon:GetTexture() then
-        agendaIcon:SetTexCoord(0.0078, 0.375, 0.0156, 0.75)
-    else
-        agendaIcon:SetTexture("Interface\\AddOns\\GuildManager\\Textures\\calendar.tga")
-        agendaIcon:SetTexCoord(0, 1, 0, 1)
-    end
-    agendaIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabAgenda.icon = agendaIcon
+    setupTab(tabAgenda, "Interface\\Icons\\INV_Misc_PocketWatch_02", "Agenda da Guilda", "Eventos, aniversários e lembretes da guilda.", function()
+        frame:Hide()
+        if _G.GM and _G.GM.agendaController then _G.GM.agendaController:show() end
+    end, false)
 
-    tabAgenda:SetScript("OnEnter", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        agendaIcon:SetVertexColor(1.0, 1.0, 1.0)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_AGENDA_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_AGENDA_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabAgenda:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        agendaIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabAgenda:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local agendaCtrl = (_G.GM and _G.GM.agendaController) or _G.agendaController
-        if agendaCtrl then
-            agendaCtrl:show()
-            local aFrame = (_G.GM and _G.GM.agendaView and _G.GM.agendaView.getFrame and _G.GM.agendaView:getFrame())
-            if aFrame and point then
-                aFrame:ClearAllPoints()
-                if relativeTo then aFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else aFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 5: Pedidos de Profissão & Artesãos
-    local tabProf = CreateFrame("Button", "GM_GroupSideTab_Professions", frame, template)
-    tabProf:SetSize(36, 36)
+    -- Aba 5: Pedidos de Profissão
+    local tabProf = CreateFrame("Button", "GM_GroupTab_Prof", frame, template)
     tabProf:SetPoint("TOPLEFT", tabAgenda, "BOTTOMLEFT", 0, -8)
-    if tabProf.SetBackdrop then
-        tabProf:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabProf:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabProf:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local profIcon = tabProf:CreateTexture(nil, "ARTWORK")
-    profIcon:SetPoint("TOPLEFT", tabProf, "TOPLEFT", 4, -4)
-    profIcon:SetPoint("BOTTOMRIGHT", tabProf, "BOTTOMRIGHT", -4, 4)
-    profIcon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
-    profIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    profIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabProf.icon = profIcon
+    setupTab(tabProf, "Interface\\Icons\\Trade_BlackSmithing", "Pedidos de Profissão", "Consulte receitas, veja quem faz e faça pedidos.", function()
+        frame:Hide()
+        if _G.GM and _G.GM.professionController then _G.GM.professionController:show() end
+    end, false)
 
-    tabProf:SetScript("OnEnter", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        profIcon:SetVertexColor(1.0, 1.0, 1.0)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. (curL["TAB_PROFESSIONS_TOOLTIP"] or "Pedidos de Profissão") .. "|r")
-        GameTooltip:AddLine(curL["TAB_PROFESSIONS_TOOLTIP_DESC"] or "Consulte receitas, veja quem faz na guilda e faça pedidos de fabricação.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabProf:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        profIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabProf:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local profCtrl = (_G.GM and _G.GM.professionController) or _G.professionController
-        if profCtrl then
-            profCtrl:show()
-            local pFrame = (_G.GM and _G.GM.professionView and _G.GM.professionView.getFrame and _G.GM.professionView:getFrame()) or (profCtrl._professionView and profCtrl._professionView:getFrame())
-            if pFrame and point then
-                pFrame:ClearAllPoints()
-                if relativeTo then pFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else pFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    -- Aba 6: Configurações do Addon
-    local tabSettings = CreateFrame("Button", "GM_GroupSideTab_Settings", frame, template)
-    tabSettings:SetSize(36, 36)
+    -- Aba 6: Configurações
+    local tabSettings = CreateFrame("Button", "GM_GroupTab_Settings", frame, template)
     tabSettings:SetPoint("TOPLEFT", tabProf, "BOTTOMLEFT", 0, -8)
-    if tabSettings.SetBackdrop then
-        tabSettings:SetBackdrop(SIDE_TAB_BACKDROP)
-        tabSettings:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        tabSettings:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-    end
-    local settingsIcon = tabSettings:CreateTexture(nil, "ARTWORK")
-    settingsIcon:SetPoint("TOPLEFT", tabSettings, "TOPLEFT", 4, -4)
-    settingsIcon:SetPoint("BOTTOMRIGHT", tabSettings, "BOTTOMRIGHT", -4, 4)
-    settingsIcon:SetTexture("Interface\\Icons\\Trade_Engineering")
-    settingsIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    settingsIcon:SetVertexColor(0.65, 0.65, 0.65)
-    tabSettings.icon = settingsIcon
-
-    tabSettings:SetScript("OnEnter", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.95, 0.70, 0.25, 1.0)
-            btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        settingsIcon:SetVertexColor(1.0, 1.0, 1.0)
-        local curL = (_G.GM and _G.GM.L) or _G.L or L
-        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. curL["TAB_SETTINGS_TOOLTIP"] .. "|r")
-        GameTooltip:AddLine(curL["TAB_SETTINGS_TOOLTIP_DESC"], 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    tabSettings:SetScript("OnLeave", function(btn)
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
-            btn:SetBackdropColor(0.035, 0.025, 0.012, 0.85)
-        end
-        settingsIcon:SetVertexColor(0.65, 0.65, 0.65)
-        GameTooltip:Hide()
-    end)
-    tabSettings:SetScript("OnClick", function()
-        if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_TAB or 841) end
-        local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint()
-        self:hide()
-        local settingsCtrl = (_G.GM and _G.GM.settingsController) or _G.settingsController
-        if settingsCtrl then
-            settingsCtrl:show()
-            local sFrame = (_G.GM and _G.GM.settingsView and _G.GM.settingsView.getFrame and _G.GM.settingsView:getFrame()) or (settingsCtrl._settingsView and settingsCtrl._settingsView:getFrame())
-            if sFrame and point then
-                sFrame:ClearAllPoints()
-                if relativeTo then sFrame:SetPoint(point, relativeTo, relativePoint, xOfs, yOfs) else sFrame:SetPoint(point, xOfs, yOfs) end
-            end
-        end
-    end)
-
-    self._tabAudit = tabAudit
-    self._tabLogs = tabLogs
-    self._tabGroups = tabGroups
-    self._tabAgenda = tabAgenda
-    self._tabProf = tabProf
-    self._tabSettings = tabSettings
+    setupTab(tabSettings, "Interface\\Icons\\Trade_Engineering", "Configurações", "Ajustes do Guild Manager.", function()
+        frame:Hide()
+        if _G.GM and _G.GM.settingsController then _G.GM.settingsController:show() end
+    end, false)
 end
 
---- Cria as 3 colunas: Masmorras, Raides e Diversos.
-function GroupView:createThreeColumns()
+-- =========================================================================
+-- PAINEL 1: DASHBOARD DE PROCURANDO GRUPO (LFG) - LADO ESQUERDO / CENTRO
+-- =========================================================================
+
+function GroupView:createLFGDashboardPanel()
     local frame = self._frame
-    if not frame then return end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
-    local columnDefs = {
-        {
-            type = GroupType.DUNGEON,
-            titleKey = "GROUP_COL_DUNGEONS",
-            subKey = "GROUP_COL_DUNGEONS_SUB",
-            title = "MASMORRAS",
-            subtitle = "5 Jogadores",
-            titleColor = "|cff4a90e2",
-            icon = "Interface\\Icons\\INV_Shield_04",
-            x = 16,
-        },
-        {
-            type = GroupType.RAID,
-            titleKey = "GROUP_COL_RAIDS",
-            subKey = "GROUP_COL_RAIDS_SUB",
-            title = "RAIDES",
-            subtitle = "10 / 25 / 40 Jogadores",
-            titleColor = "|cffff8000",
-            icon = "Interface\\Icons\\INV_Helmet_06",
-            x = 402,
-        },
-        {
-            type = GroupType.MISC,
-            titleKey = "GROUP_COL_MISC",
-            subKey = "GROUP_COL_MISC_SUB",
-            title = "DIVERSOS",
-            subtitle = "PvP / Farm / Eventos",
-            titleColor = "|cff00ff88",
-            icon = "Interface\\Icons\\INV_Misc_GroupLooking",
-            x = 788,
-        },
+    local panel = CreateFrame("Frame", "GM_LFGPanel", frame, template)
+    panel:SetSize(770, 554)
+    panel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -50)
+    self._lfgPanel = panel
+
+    if panel.SetBackdrop then
+        panel:SetBackdrop(CONTAINER_BACKDROP)
+        panel:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        panel:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
+    end
+
+    -- Header da Dashboard LFG
+    local headerBar = CreateFrame("Frame", nil, panel, template)
+    headerBar:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
+    headerBar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, -4)
+    headerBar:SetHeight(38)
+    if headerBar.SetBackdrop then
+        headerBar:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        headerBar:SetBackdropColor(0.12, 0.08, 0.03, 0.95)
+        headerBar:SetBackdropBorderColor(0.60, 0.42, 0.15, 0.90)
+    end
+
+    local hIcon = headerBar:CreateTexture(nil, "ARTWORK")
+    hIcon:SetSize(24, 24)
+    hIcon:SetPoint("LEFT", headerBar, "LEFT", 8, 0)
+    hIcon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
+    hIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local hTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    hTitle:SetPoint("TOPLEFT", hIcon, "TOPRIGHT", 8, 2)
+    hTitle:SetText("|cffffd200DASHBOARD - PROCURANDO GRUPO (LFG)|r")
+
+    local hSub = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hSub:SetPoint("BOTTOMLEFT", hIcon, "BOTTOMRIGHT", 8, -2)
+    hSub:SetText("|cffaaaaaaMembros procurando parceiros para atividades|r")
+
+    -- Botão "+ Procurar Grupo"
+    local createLfgBtn = CreateFrame("Button", nil, headerBar, "UIPanelButtonTemplate")
+    createLfgBtn:SetSize(130, 24)
+    createLfgBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
+    createLfgBtn:SetText("+ Procurar Grupo")
+    createLfgBtn:SetScript("OnClick", function()
+        if self._createLFGModal then
+            self:openCreateLFGModal()
+        end
+    end)
+
+    -- Barra de Filtros e Busca (Logo abaixo do header)
+    local filterBar = CreateFrame("Frame", nil, panel, template)
+    filterBar:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 0, -4)
+    filterBar:SetPoint("TOPRIGHT", headerBar, "BOTTOMRIGHT", 0, -4)
+    filterBar:SetHeight(32)
+
+    local filterTypes = {
+        { id = "ALL",     label = "Todos" },
+        { id = "DUNGEON", label = "Masmorras" },
+        { id = "RAID",    label = "Raides" },
+        { id = "MISC",    label = "Diversos" },
+        { id = "FARM",    label = "Farm" },
+        { id = "QUESTS",  label = "Missões" },
+        { id = "PVP",     label = "PvP" },
     }
 
-    self._columns = {}
+    self._filterButtons = {}
+    local prevBtn = nil
 
-    for _, def in ipairs(columnDefs) do
-        local col = CreateFrame("Frame", "GM_GroupCol_" .. def.type, frame, template)
-        col:SetSize(376, 554)
-        col:SetPoint("TOPLEFT", frame, "TOPLEFT", def.x, -50)
+    for _, f in ipairs(filterTypes) do
+        local fBtn = CreateFrame("Button", nil, filterBar, template)
+        fBtn:SetSize(72, 22)
+        if not prevBtn then
+            fBtn:SetPoint("LEFT", filterBar, "LEFT", 4, 0)
+        else
+            fBtn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
+        end
+        prevBtn = fBtn
 
-        if col.SetBackdrop then
-            col:SetBackdrop(CONTAINER_BACKDROP)
-            col:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
-            col:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
+        if fBtn.SetBackdrop then
+            fBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
         end
 
-        -- Header da Coluna
-        local headerBar = CreateFrame("Frame", nil, col, template)
-        headerBar:SetPoint("TOPLEFT", col, "TOPLEFT", 3, -3)
-        headerBar:SetPoint("TOPRIGHT", col, "TOPRIGHT", -3, -3)
-        headerBar:SetHeight(38)
-        if headerBar.SetBackdrop then
-            headerBar:SetBackdrop(SUB_CONTAINER_BACKDROP)
-            headerBar:SetBackdropColor(0.12, 0.08, 0.03, 0.95)
-            headerBar:SetBackdropBorderColor(0.60, 0.42, 0.15, 0.90)
+        local fText = fBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fText:SetPoint("CENTER", fBtn, "CENTER", 0, 0)
+        fText:SetText(f.label)
+        fBtn.label = fText
+        fBtn.typeId = f.id
+
+        fBtn:SetScript("OnClick", function()
+            self._selectedLFGType = f.id
+            self:updateFilterButtons()
+            self:renderLFGDashboard()
+        end)
+
+        table.insert(self._filterButtons, fBtn)
+    end
+
+    -- Caixa de Busca na direita da barra de filtros
+    local searchBox = CreateFrame("EditBox", "GM_LFGSearchBox", filterBar, template)
+    searchBox:SetSize(160, 22)
+    searchBox:SetPoint("RIGHT", filterBar, "RIGHT", -4, 0)
+    styleBox(searchBox)
+
+    local placeholder = searchBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    placeholder:SetPoint("LEFT", searchBox, "LEFT", 8, 0)
+    placeholder:SetText("Buscar card...")
+    searchBox.placeholder = placeholder
+
+    searchBox:SetScript("OnTextChanged", function(box)
+        local txt = box:GetText() or ""
+        if txt == "" then
+            placeholder:Show()
+        else
+            placeholder:Hide()
         end
+        self._lfgSearchText = txt:lower():match("^%s*(.-)%s*$") or ""
+        self:renderLFGDashboard()
+    end)
+    searchBox:SetScript("OnEscapePressed", function(box)
+        box:SetText("")
+        box:ClearFocus()
+    end)
 
-        local colIcon = headerBar:CreateTexture(nil, "ARTWORK")
-        colIcon:SetSize(24, 24)
-        colIcon:SetPoint("LEFT", headerBar, "LEFT", 6, 0)
-        colIcon:SetTexture(def.icon)
-        colIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    -- ScrollFrame de Cards de Procurando Grupo
+    local scrollFrame = CreateFrame("ScrollFrame", "GM_LFGScrollFrame", panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", filterBar, "BOTTOMLEFT", 4, -4)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 6)
+    self._lfgScrollFrame = scrollFrame
 
-        local colTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        colTitle:SetPoint("TOPLEFT", colIcon, "TOPRIGHT", 6, 0)
-        colTitle:SetText(def.titleColor .. L[def.titleKey] .. "|r")
+    local contentFrame = CreateFrame("Frame", "GM_LFGContentFrame", scrollFrame)
+    contentFrame:SetSize(736, 10)
+    scrollFrame:SetScrollChild(contentFrame)
+    self._lfgContentFrame = contentFrame
 
-        local colSub = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        colSub:SetPoint("BOTTOMLEFT", colIcon, "BOTTOMRIGHT", 6, 0)
-        colSub:SetText("|cffaaaaaa" .. L[def.subKey] .. "|r")
+    -- Mensagem de Lista Vazia
+    local emptyText = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    emptyText:SetPoint("CENTER", panel, "CENTER", 0, -20)
+    emptyText:SetJustifyH("CENTER")
+    emptyText:SetText("|cff888888Nenhum jogador procurando grupo no momento.\nClique em '+ Procurar Grupo' acima para cadastrar seu card!|r")
+    self._lfgEmptyText = emptyText
 
-        -- Botão "+ Criar" no header da coluna
-        local createBtn = CreateFrame("Button", nil, headerBar, "UIPanelButtonTemplate")
-        createBtn:SetSize(62, 22)
-        createBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
-        createBtn:SetText(L["GROUP_CREATE_BTN"])
-        if createBtn.SetMotionScriptsWhileDisabled then
-            createBtn:SetMotionScriptsWhileDisabled(true)
-        end
-        createBtn:SetScript("OnEnter", function(btn)
-            local canOfficer = false
-            if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-                canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-            elseif IsGuildLeader and IsGuildLeader() then
-                canOfficer = true
-            elseif CanEditOfficerNote and CanEditOfficerNote() then
-                canOfficer = true
+    self:updateFilterButtons()
+end
+
+function GroupView:updateFilterButtons()
+    for _, btn in ipairs(self._filterButtons or {}) do
+        local isActive = (btn.typeId == self._selectedLFGType)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(0.25, 0.18, 0.05, 0.95)
+                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                btn.label:SetTextColor(1.0, 0.82, 0.20)
+            else
+                btn:SetBackdropColor(0.04, 0.025, 0.01, 0.75)
+                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.80)
+                btn.label:SetTextColor(0.80, 0.80, 0.80)
             end
+        end
+    end
+end
 
-            if GameTooltip then
-                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-                GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-                GameTooltip:AddLine(string.format("|cffffd200%s (%s)|r", curL["GROUP_CREATE_SUBMIT"], curL[def.titleKey]), 1, 1, 1)
-                if not canOfficer then
-                    GameTooltip:AddLine(curL["GROUP_TIP_OFFICER_ONLY"], 1, 0.3, 0.3, true)
-                else
-                    GameTooltip:AddLine(curL["GROUP_TIP_CREATE_CLICK"], 0.2, 1.0, 0.2)
+--- Renderiza a lista de cards de LFG no mural.
+function GroupView:renderLFGDashboard()
+    if not self._lfgContentFrame then return end
+
+    -- Limpa cards anteriores
+    if self._lfgCardFrames then
+        for _, f in ipairs(self._lfgCardFrames) do
+            f:Hide()
+        end
+    end
+    self._lfgCardFrames = {}
+
+    local myFullName = self:getPlayerFullName()
+    local myNameNorm = (myFullName:match("^[^-]+") or myFullName):match("^%s*(.-)%s*$"):lower()
+
+    local cards = self._lfgCards or {}
+    local filtered = {}
+
+    for _, card in ipairs(cards) do
+        local isExp = (card.isExpired and card:isExpired()) or false
+        if not isExp then
+            local matchesType = (self._selectedLFGType == "ALL") or (card:getType() == self._selectedLFGType)
+            local matchesSearch = true
+            if self._lfgSearchText and self._lfgSearchText ~= "" then
+                local textMatch = false
+                local cCreator = (card:getCreator() or ""):lower()
+                local cDesc = (card:getDescription() or ""):lower()
+                local cTime = (card:getTime() or ""):lower()
+                local typeDef = GROUP_TYPE_INFO[card:getType()]
+                local typeLabel = typeDef and typeDef.label:lower() or ""
+                if cCreator:find(self._lfgSearchText, 1, true) or
+                   cDesc:find(self._lfgSearchText, 1, true) or
+                   cTime:find(self._lfgSearchText, 1, true) or
+                   typeLabel:find(self._lfgSearchText, 1, true) then
+                    textMatch = true
                 end
-                GameTooltip:Show()
-            end
-        end)
-        createBtn:SetScript("OnLeave", function()
-            if GameTooltip then GameTooltip:Hide() end
-        end)
-        createBtn:SetScript("OnClick", function()
-            local canOfficer = false
-            if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-                canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-            elseif IsGuildLeader and IsGuildLeader() then
-                canOfficer = true
-            elseif CanEditOfficerNote and CanEditOfficerNote() then
-                canOfficer = true
+                matchesSearch = textMatch
             end
 
-            if not canOfficer then
-                local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-                print(string.format("|cffff4444[GuildManager]|r %s", curL["GROUP_ERR_OFFICER_ONLY"]))
-                return
+            if matchesType and matchesSearch then
+                table.insert(filtered, card)
             end
-            self:openCreateModal(def.type)
-        end)
-        table.insert(self._createButtons, createBtn)
-
-        -- ScrollFrame para os cards de grupos
-        local scrollFrame = CreateFrame("ScrollFrame", "GM_GroupScroll_" .. def.type, col, "UIPanelScrollFrameTemplate")
-        scrollFrame:SetPoint("TOPLEFT", col, "TOPLEFT", 4, -44)
-        scrollFrame:SetPoint("BOTTOMRIGHT", col, "BOTTOMRIGHT", -22, 6)
-
-        local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-        scrollChild:SetWidth(348)
-        scrollChild:SetHeight(1)
-        scrollFrame:SetScrollChild(scrollChild)
-
-        col:EnableMouseWheel(true)
-        col:SetScript("OnMouseWheel", function(_, delta)
-            local current = scrollFrame:GetVerticalScroll()
-            scrollFrame:SetVerticalScroll(math.max(0, current - (delta * 30)))
-        end)
-
-        local emptyText = col:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        emptyText:SetPoint("CENTER", col, "CENTER", 0, -10)
-        emptyText:SetWidth(300)
-        emptyText:SetJustifyH("CENTER")
-        emptyText:SetText(L["GROUP_EMPTY_COL"])
-        emptyText:Hide()
-
-        self._columns[def.type] = {
-            frame = col,
-            scrollFrame = scrollFrame,
-            scrollChild = scrollChild,
-            emptyText = emptyText,
-            headerTitle = colTitle,
-            headerSub = colSub,
-            createBtn = createBtn,
-            def = def,
-            cardPool = {},
-        }
-    end
-end
-
---- Renderiza os grupos nas 3 colunas exibindo APENAS: Nome, Nota/Horário e Líder.
---- Ao clicar no grupo, abre a janela dedicada de gerenciamento de membros.
-function GroupView:renderGroups()
-    if not self._frame then return end
-
-    local grouped = {
-        [GroupType.DUNGEON] = {},
-        [GroupType.RAID] = {},
-        [GroupType.MISC] = {},
-    }
-
-    for _, g in ipairs(self._groups or {}) do
-        local gType = g:getType()
-        if grouped[gType] then
-            table.insert(grouped[gType], g)
-        else
-            table.insert(grouped[GroupType.MISC], g)
         end
     end
 
-    for gType, colData in pairs(self._columns) do
-        local list = grouped[gType] or {}
-        local child = colData.scrollChild
-
-        for _, card in ipairs(colData.cardPool) do
-            card:Hide()
-        end
-
-        if #list == 0 then
-            colData.emptyText:Show()
-            child:SetHeight(1)
-        else
-            colData.emptyText:Hide()
-            local yOffset = 0
-
-            for i, group in ipairs(list) do
-                local card = self:getOrCreateCard(colData, i)
-                self:setupCard(card, group)
-                card:ClearAllPoints()
-                card:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -yOffset)
-                card:Show()
-
-                yOffset = yOffset + card:GetHeight() + 8
-            end
-
-            child:SetHeight(math.max(1, yOffset))
-        end
-    end
-end
-
---- Cria ou reaproveita um card compacto de grupo na coluna.
-function GroupView:getOrCreateCard(colData, index)
-    if colData.cardPool[index] then
-        return colData.cardPool[index]
+    if #filtered == 0 then
+        self._lfgEmptyText:Show()
+        self._lfgContentFrame:SetHeight(10)
+        return
+    else
+        self._lfgEmptyText:Hide()
     end
 
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local card = CreateFrame("Button", nil, colData.scrollChild, template)
-    card:SetWidth(346)
-    card:SetHeight(74) -- Altura fixa e compacta para exibir Nome, Nota e Líder
+    local cardWidth = 360
+    local cardHeight = 92
+    local cardGapX = 10
+    local cardGapY = 8
+    local colCount = 2
 
-    if card.SetBackdrop then
-        card:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        card:SetBackdropColor(0.045, 0.030, 0.015, 0.90)
-        card:SetBackdropBorderColor(0.60, 0.40, 0.14, 0.90)
-    end
+    for i, card in ipairs(filtered) do
+        local okCard = pcall(function()
+            local col = (i - 1) % colCount
+            local row = math.floor((i - 1) / colCount)
+            local xOffset = col * (cardWidth + cardGapX)
+            local yOffset = row * (cardHeight + cardGapY)
 
-    -- Highlight ao passar o mouse sobre o card
-    local hl = card:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(card)
-    hl:SetColorTexture(1.0, 0.82, 0.20, 0.15)
-    card:SetHighlightTexture(hl)
+            local cardId = (card.getId and card:getId()) or tostring(card.id or "")
+            local rawType = (card.getType and card:getType()) or card.type or "DUNGEON"
+            local cType = tostring(rawType):upper()
+            local typeDef = GROUP_TYPE_INFO[cType] or GROUP_TYPE_INFO[rawType] or GROUP_TYPE_INFO.MISC
+            local creator = (card.getCreator and card:getCreator()) or card.creator or "Desconhecido"
+            local cTime = (card.getTime and card:getTime()) or card.time or "A combinar"
+            local cDesc = (card.getDescription and card:getDescription()) or card.description or ""
+            local cLevel = (card.getCreatorLevel and card:getCreatorLevel()) or card.creatorLevel or 1
+            local cClassRaw = (card.getCreatorClass and card:getCreatorClass()) or card.creatorClass or ""
+            local cClass = self:resolveMemberClass(creator, cClassRaw)
+            local isMyCard = (card.isCreator and card:isCreator(myFullName)) or (creator:lower() == myNameNorm)
 
-    -- Linha 1: Nome do Grupo
-    local title = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    title:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -8)
-    title:SetPoint("RIGHT", card, "RIGHT", -55, 0)
-    title:SetJustifyH("LEFT")
-    card.title = title
+            local cardFrame = CreateFrame("Frame", nil, self._lfgContentFrame, template)
+            cardFrame:SetSize(cardWidth, cardHeight)
+            cardFrame:SetPoint("TOPLEFT", self._lfgContentFrame, "TOPLEFT", xOffset, -yOffset)
+            cardFrame:SetFrameLevel(self._lfgContentFrame:GetFrameLevel() + 2)
 
-    -- Contador de membros no canto superior direito
-    local countText = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    countText:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -8)
-    card.countText = countText
-
-    -- Linha 2: Nota / Horário
-    local noteText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    noteText:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
-    noteText:SetPoint("RIGHT", card, "RIGHT", -8, 0)
-    noteText:SetJustifyH("LEFT")
-    card.noteText = noteText
-
-    -- Linha 3: Líder do Grupo
-    local crown = card:CreateTexture(nil, "ARTWORK")
-    crown:SetSize(14, 14)
-    crown:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 8, 8)
-    crown:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
-    card.crown = crown
-
-    local leaderText = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    leaderText:SetPoint("LEFT", crown, "RIGHT", 4, 0)
-    leaderText:SetPoint("RIGHT", card, "RIGHT", -8, 0)
-    leaderText:SetJustifyH("LEFT")
-    card.leaderText = leaderText
-
-    table.insert(colData.cardPool, card)
-    return card
-end
-
---- Configura o card com APENAS o Nome, a Nota/Horário e o Líder.
---- O clique abre a tela de gerenciamento de membros.
-function GroupView:setupCard(card, group)
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    local leaderName = group:getLeader() or ""
-    local note = group:getNote() or ""
-    local members = group:getMembers() or {}
-
-    -- 1. Nome do Grupo
-    card.title:SetText("|cffffd200" .. (group:getName() or L["NEW_GROUP"]) .. "|r")
-
-    -- Quantidade de membros (discreta)
-    card.countText:SetText(string.format(L["GROUP_CARD_MEMBERS_FMT"], #members))
-
-    -- 2. Nota / Horário
-    if note ~= "" then
-        card.noteText:SetText("|cffaaaaaa" .. note .. "|r")
-    else
-        card.noteText:SetText(L["GROUP_NO_NOTE"])
-    end
-
-    -- 3. Líder do Grupo
-    local leaderMember = self:findGuildMember(leaderName)
-    local leaderClass = self:resolveMemberClass(leaderName, leaderMember and leaderMember:getClass())
-    if leaderName ~= "" then
-        card.leaderText:SetText(L["GROUP_LEADER_PREFIX"] .. getColoredMemberName(leaderName, leaderClass))
-    else
-        card.leaderText:SetText(L["GROUP_NO_LEADER"])
-    end
-
-    -- Ação de Clique: Abre a tela completa de gerenciamento do grupo!
-    card:SetScript("OnClick", function()
-        self:openGroupDetailModal(group)
-    end)
-
-    -- Tooltip indicando clique para gerenciar
-    card:SetScript("OnEnter", function(f)
-        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        if f.SetBackdropBorderColor then
-            f:SetBackdropBorderColor(1.0, 0.85, 0.20, 1.0)
-            f:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
-        end
-        GameTooltip:SetOwner(f, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("|cffffd200" .. group:getName() .. "|r")
-        GameTooltip:AddLine("|cffaaaaaa" .. curL["GROUP_LEADER"] .. ":|r " .. (leaderName ~= "" and leaderName or curL["NONE"]))
-        if note ~= "" then
-            GameTooltip:AddLine("|cffaaaaaa" .. curL["GROUP_NOTE_LABEL_PLAIN"] .. "|r " .. note)
-        end
-        GameTooltip:AddLine(string.format("|cffaaaaaa%s:|r %d", curL["GROUP_MEMBERS"], #members))
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(curL["GROUP_CLICK_MANAGE_TIP"], 0.9, 0.9, 0.9)
-        GameTooltip:Show()
-    end)
-
-    card:SetScript("OnLeave", function(f)
-        if f.SetBackdropBorderColor then
-            f:SetBackdropBorderColor(0.60, 0.40, 0.14, 0.90)
-            f:SetBackdropColor(0.045, 0.030, 0.015, 0.90)
-        end
-        GameTooltip:Hide()
-    end)
-end
-
---- Cria todas as modais da View: Detalhes do Grupo, Novo Grupo, Adicionar Membro, Picker de Líder.
-function GroupView:createModals()
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-
-    -- =========================================================================
-    -- 1. MODAL DE GERENCIAMENTO / DETALHES DO GRUPO (Outra tela ao clicar)
-    -- =========================================================================
-    local detailModal = CreateFrame("Frame", "GM_GroupDetailModal", UIParent, template)
-    detailModal:SetSize(620, 520)
-    detailModal:SetFrameStrata("FULLSCREEN_DIALOG")
-    detailModal:SetToplevel(true)
-    detailModal:SetClampedToScreen(true)
-    detailModal:EnableMouse(true)
-    detailModal:SetMovable(true)
-    detailModal:RegisterForDrag("LeftButton")
-    detailModal:SetScript("OnDragStart", function(f) f:StartMoving() end)
-    detailModal:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
-    detailModal:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
-    detailModal:Hide()
-
-    if UISpecialFrames then
-        table.insert(UISpecialFrames, "GM_GroupDetailModal")
-    end
-
-    if detailModal.SetBackdrop then
-        detailModal:SetBackdrop(DIALOG_BACKDROP)
-        detailModal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
-        detailModal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
-    end
-
-    local dCloseBtn = CreateFrame("Button", nil, detailModal, "UIPanelCloseButton")
-    dCloseBtn:SetPoint("TOPRIGHT", detailModal, "TOPRIGHT", -4, -4)
-    dCloseBtn:SetSize(28, 28)
-    dCloseBtn:SetScript("OnClick", function() detailModal:Hide() end)
-
-    -- Cabeçalho da Modal
-    local dIcon = detailModal:CreateTexture(nil, "ARTWORK")
-    dIcon:SetSize(26, 26)
-    dIcon:SetPoint("TOPLEFT", detailModal, "TOPLEFT", 16, -14)
-    detailModal.icon = dIcon
-
-    local dTitle = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    dTitle:SetPoint("LEFT", dIcon, "RIGHT", 8, 0)
-    dTitle:SetText(L["GROUP_DETAIL_TITLE"])
-    detailModal.title = dTitle
-
-    local dSub = detailModal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    dSub:SetPoint("LEFT", dTitle, "RIGHT", 12, 0)
-    dSub:SetText("")
-    detailModal.subtitle = dSub
-
-    local dSep = detailModal:CreateTexture(nil, "ARTWORK")
-    dSep:SetPoint("TOPLEFT", detailModal, "TOPLEFT", 16, -46)
-    dSep:SetPoint("RIGHT", detailModal, "RIGHT", -16, 0)
-    dSep:SetHeight(1)
-    dSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
-
-    -- --- SEÇÃO DE EDIÇÃO BÁSICA DO GRUPO ---
-    -- Campo: Nome do Grupo
-    local nameLbl = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    nameLbl:SetPoint("TOPLEFT", dSep, "BOTTOMLEFT", 4, -10)
-    nameLbl:SetText(L["GROUP_NAME_LABEL_PLAIN"])
-    detailModal.nameLbl = nameLbl
-
-    local nameEB = CreateFrame("EditBox", nil, detailModal, template)
-    nameEB:SetPoint("TOPLEFT", nameLbl, "BOTTOMLEFT", 0, -3)
-    nameEB:SetSize(280, 22)
-    styleBox(nameEB)
-    detailModal.nameEB = nameEB
-
-    -- Campo: Nota / Horário
-    local noteLbl = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    noteLbl:SetPoint("LEFT", nameLbl, "LEFT", 295, 0)
-    noteLbl:SetText(L["GROUP_NOTE_LABEL_PLAIN"])
-    detailModal.noteLbl = noteLbl
-
-    local noteEB = CreateFrame("EditBox", nil, detailModal, template)
-    noteEB:SetPoint("TOPLEFT", noteLbl, "BOTTOMLEFT", 0, -3)
-    noteEB:SetSize(280, 22)
-    styleBox(noteEB)
-    detailModal.noteEB = noteEB
-
-    -- Campo: Líder do Grupo
-    local leaderLbl = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    leaderLbl:SetPoint("TOPLEFT", nameEB, "BOTTOMLEFT", 0, -8)
-    leaderLbl:SetText(L["GROUP_CURRENT_LEADER_LABEL"])
-    detailModal.leaderLbl = leaderLbl
-
-    local leaderBox = CreateFrame("Frame", nil, detailModal, template)
-    leaderBox:SetPoint("TOPLEFT", leaderLbl, "BOTTOMLEFT", 0, -3)
-    leaderBox:SetSize(280, 24)
-    if leaderBox.SetBackdrop then
-        leaderBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        leaderBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
-        leaderBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
-    end
-
-    local lCrown = leaderBox:CreateTexture(nil, "ARTWORK")
-    lCrown:SetSize(14, 14)
-    lCrown:SetPoint("LEFT", leaderBox, "LEFT", 6, 0)
-    lCrown:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
-    detailModal.lCrown = lCrown
-
-    local lClassIcon = leaderBox:CreateTexture(nil, "ARTWORK")
-    lClassIcon:SetSize(16, 16)
-    lClassIcon:SetPoint("LEFT", lCrown, "RIGHT", 4, 0)
-    lClassIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-    lClassIcon:Hide()
-    detailModal.leaderClassIcon = lClassIcon
-
-    local leaderVal = leaderBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    leaderVal:SetPoint("LEFT", lCrown, "RIGHT", 6, 0)
-    leaderVal:SetPoint("RIGHT", leaderBox, "RIGHT", -6, 0)
-    leaderVal:SetJustifyH("LEFT")
-    detailModal.leaderVal = leaderVal
-    detailModal.selectedLeaderName = ""
-
-    local changeLeaderBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
-    changeLeaderBtn:SetSize(110, 22)
-    changeLeaderBtn:SetPoint("LEFT", leaderBox, "RIGHT", 8, 0)
-    changeLeaderBtn:SetText(L["GROUP_CHANGE_LEADER_BTN"])
-    changeLeaderBtn:SetScript("OnClick", function()
-        self:openLeaderPicker(function(chosenMember)
-            detailModal.selectedLeaderName = chosenMember:getName()
-            local chClass = self:resolveMemberClass(chosenMember:getName(), chosenMember:getClass())
-            leaderVal:SetText(getColoredMemberName(chosenMember:getName(), chClass))
-            if detailModal.leaderClassIcon then
-                local coords = chClass ~= "" and CLASS_ICON_COORDS[chClass]
-                if coords then
-                    detailModal.leaderClassIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-                    detailModal.leaderClassIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-                    detailModal.leaderClassIcon:Show()
-                    leaderVal:SetPoint("LEFT", detailModal.leaderClassIcon, "RIGHT", 4, 0)
+            if cardFrame.SetBackdrop then
+                cardFrame:SetBackdrop(SUB_CONTAINER_BACKDROP)
+                if isMyCard then
+                    cardFrame:SetBackdropColor(0.12, 0.08, 0.02, 0.95)
+                    cardFrame:SetBackdropBorderColor(1.0, 0.75, 0.20, 0.95)
                 else
-                    detailModal.leaderClassIcon:Hide()
-                    leaderVal:SetPoint("LEFT", lCrown, "RIGHT", 6, 0)
+                    cardFrame:SetBackdropColor(0.04, 0.025, 0.01, 0.85)
+                    cardFrame:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.85)
                 end
             end
-        end)
-    end)
-    detailModal.changeLeaderBtn = changeLeaderBtn
 
-    -- Botão "Salvar Dados"
-    local saveInfoBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
-    saveInfoBtn:SetSize(162, 22)
-    saveInfoBtn:SetPoint("RIGHT", detailModal, "RIGHT", -20, 0)
-    saveInfoBtn:SetPoint("CENTER", changeLeaderBtn, "CENTER", 140, 0)
-    saveInfoBtn:SetText(L["GROUP_SAVE_INFO_BTN"])
-    saveInfoBtn:SetScript("OnClick", function()
-        if not detailModal.currentGroup then return end
-        local nVal = nameEB:GetText()
-        local ntVal = noteEB:GetText()
-        local lVal = detailModal.selectedLeaderName
-        if self._onUpdateGroupDetailsCallback then
-            self._onUpdateGroupDetailsCallback(detailModal.currentGroup:getId(), nVal, ntVal, lVal)
-        end
-    end)
-    detailModal.saveInfoBtn = saveInfoBtn
+            -- Ícone da Classe
+            local classIcon = cardFrame:CreateTexture(nil, "ARTWORK")
+            classIcon:SetSize(32, 32)
+            classIcon:SetPoint("TOPLEFT", cardFrame, "TOPLEFT", 8, -8)
+            classIcon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+            local coords = CLASS_ICON_COORDS[cClass] or { 0, 0.25, 0, 0.25 }
+            classIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
 
-    -- Divisória abaixo dos dados do grupo
-    local dSep2 = detailModal:CreateTexture(nil, "ARTWORK")
-    dSep2:SetPoint("TOPLEFT", leaderBox, "BOTTOMLEFT", 0, -10)
-    dSep2:SetPoint("RIGHT", detailModal, "RIGHT", -16, 0)
-    dSep2:SetHeight(1)
-    dSep2:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
+            -- Nome do Criador (validando nome e sobrenome) + Nível
+            local creatorNameText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            creatorNameText:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 6, 0)
+            creatorNameText:SetPoint("RIGHT", cardFrame, "RIGHT", -78, 0)
+            creatorNameText:SetJustifyH("LEFT")
+            local coloredName = getColoredMemberName(creator, cClass)
+            local myTag = isMyCard and " |cffffd200[Meu]|r" or ""
+            creatorNameText:SetText(coloredName .. string.format(" |cffaaaaaa(Nv %d)|r", cLevel) .. myTag)
 
-    -- --- SEÇÃO DE MEMBROS DO GRUPO ---
-    local membersHeader = detailModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    membersHeader:SetPoint("TOPLEFT", dSep2, "BOTTOMLEFT", 4, -8)
-    membersHeader:SetText(L["GROUP_MEMBERS_HEADER"])
-    detailModal.membersHeader = membersHeader
+            -- Tipo de Grupo Procurado (Badge) & Expiração em 72h
+            local remStr = (card.getRemainingTimeString and card:getRemainingTimeString()) or "72h"
+            local typeBadge = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            typeBadge:SetPoint("TOPLEFT", creatorNameText, "BOTTOMLEFT", 0, -2)
+            typeBadge:SetText((typeDef.color or "|cffffffff") .. "[" .. (typeDef.label or "Geral") .. "]|r  |cff888888⏳|r |cffffd200" .. remStr .. "|r")
 
-    local membersSummary = detailModal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    membersSummary:SetPoint("LEFT", membersHeader, "RIGHT", 12, 0)
-    detailModal.membersSummary = membersSummary
+            -- Horário previsto
+            local timeText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            timeText:SetPoint("TOPLEFT", typeBadge, "BOTTOMLEFT", 0, -2)
+            timeText:SetPoint("RIGHT", cardFrame, "RIGHT", -78, 0)
+            timeText:SetJustifyH("LEFT")
+            timeText:SetText("|cffffff00⏰|r " .. (cTime ~= "" and cTime or "A combinar"))
 
-    local addMemberBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
-    addMemberBtn:SetSize(140, 22)
-    addMemberBtn:SetPoint("RIGHT", detailModal, "RIGHT", -18, 0)
-    addMemberBtn:SetPoint("CENTER", membersHeader, "CENTER", 180, 0)
-    addMemberBtn:SetText(L["GROUP_ADD_MEMBER_BTN"])
-    addMemberBtn:SetScript("OnClick", function()
-        if detailModal.currentGroup then
-            self:openAddMemberModal(detailModal.currentGroup)
-        end
-    end)
-    detailModal.addMemberBtn = addMemberBtn
-
-    -- Container e ScrollFrame da lista de membros
-    local memberTable = CreateFrame("Frame", nil, detailModal, template)
-    memberTable:SetPoint("TOPLEFT", membersHeader, "BOTTOMLEFT", 0, -6)
-    memberTable:SetPoint("BOTTOMRIGHT", detailModal, "BOTTOMRIGHT", -16, 50)
-    if memberTable.SetBackdrop then
-        memberTable:SetBackdrop(CONTAINER_BACKDROP)
-        memberTable:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], 0.90)
-        memberTable:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], 0.90)
-    end
-
-    local memberScroll = CreateFrame("ScrollFrame", "GM_DetailMemberScroll", memberTable, "UIPanelScrollFrameTemplate")
-    memberScroll:SetPoint("TOPLEFT", memberTable, "TOPLEFT", 4, -4)
-    memberScroll:SetPoint("BOTTOMRIGHT", memberTable, "BOTTOMRIGHT", -22, 4)
-
-    local memberChild = CreateFrame("Frame", nil, memberScroll)
-    memberChild:SetWidth(555)
-    memberChild:SetHeight(1)
-    memberScroll:SetScrollChild(memberChild)
-    detailModal.memberChild = memberChild
-    detailModal.memberRows = {}
-
-    -- Suporte a rolagem do mouse na tabela de membros
-    memberTable:EnableMouseWheel(true)
-    memberTable:SetScript("OnMouseWheel", function(_, delta)
-        local cur = memberScroll:GetVerticalScroll()
-        memberScroll:SetVerticalScroll(math.max(0, cur - (delta * 24)))
-    end)
-
-    -- --- SEÇÃO INFERIOR: AÇÕES DO GRUPO ---
-    local inviteAllBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
-    inviteAllBtn:SetSize(140, 24)
-    inviteAllBtn:SetPoint("BOTTOMLEFT", detailModal, "BOTTOMLEFT", 16, 14)
-    inviteAllBtn:SetText(L["INVITE_ALL"])
-    inviteAllBtn:SetScript("OnClick", function()
-        if detailModal.currentGroup and self._onInviteGroupCallback then
-            self._onInviteGroupCallback(detailModal.currentGroup:getId())
-        end
-    end)
-    detailModal.inviteAllBtn = inviteAllBtn
-
-    local delGroupBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
-    delGroupBtn:SetSize(120, 24)
-    delGroupBtn:SetPoint("LEFT", inviteAllBtn, "RIGHT", 10, 0)
-    delGroupBtn:SetText(L["GROUP_DELETE_BTN"])
-    if delGroupBtn.SetMotionScriptsWhileDisabled then
-        delGroupBtn:SetMotionScriptsWhileDisabled(true)
-    end
-    delGroupBtn:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
-
-        if GameTooltip then
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine(curL["GROUP_DELETE_BTN"], 1, 1, 1)
-            if not canOfficer then
-                GameTooltip:AddLine(curL["GROUP_TIP_OFFICER_ONLY"], 1, 0.3, 0.3, true)
+            -- Descrição do Card (ocupa a parte inferior do card)
+            local descText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            descText:SetPoint("TOPLEFT", cardFrame, "TOPLEFT", 8, -50)
+            descText:SetPoint("BOTTOMRIGHT", cardFrame, "BOTTOMRIGHT", -8, 6)
+            descText:SetJustifyH("LEFT")
+            descText:SetJustifyV("TOP")
+            descText:SetWordWrap(true)
+            if cDesc and cDesc ~= "" then
+                descText:SetText("|cffcccccc💬 " .. cDesc .. "|r")
             else
-                GameTooltip:AddLine(curL["GROUP_TIP_DELETE_CLICK"], 0.2, 1.0, 0.2)
+                descText:SetText("|cff666666💬 Sem descrição adicional.|r")
             end
-            GameTooltip:Show()
-        end
-    end)
-    delGroupBtn:SetScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    delGroupBtn:SetScript("OnClick", function()
-        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
 
-        if not canOfficer then
-            print(string.format("|cffff4444[GuildManager]|r %s", curL["GROUP_ERR_OFFICER_ONLY"]))
-            return
-        end
-
-        if detailModal.currentGroup and self._onDeleteGroupCallback then
-            local gId = detailModal.currentGroup:getId()
-            local gName = detailModal.currentGroup:getName() or curL["NEW_GROUP"]
-            local confirm = true
-            if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("confirmGroupDelete") == false then
-                confirm = false
-            end
-            if confirm and StaticPopupDialogs then
-                StaticPopupDialogs["GM_CONFIRM_DELETE_GROUP"] = {
-                    text = string.format(curL["GROUP_CONFIRM_DELETE"], gName),
-                    button1 = curL["YES"],
-                    button2 = curL["NO"],
-                    OnAccept = function()
-                        self._onDeleteGroupCallback(gId)
-                        detailModal:Hide()
-                    end,
-                    timeout = 0,
-                    whileDead = true,
-                    hideOnEscape = true,
-                    preferredIndex = 3,
-                }
-                StaticPopup_Show("GM_CONFIRM_DELETE_GROUP")
+            -- Ações à Direita
+            if isMyCard or (IsGuildLeader and IsGuildLeader()) then
+                local delBtn = CreateFrame("Button", nil, cardFrame, "UIPanelButtonTemplate")
+                delBtn:SetSize(68, 22)
+                delBtn:SetPoint("TOPRIGHT", cardFrame, "TOPRIGHT", -8, -8)
+                delBtn:SetText("Excluir")
+                delBtn:SetScript("OnClick", function()
+                    if self._onDeleteLFGCardCallback then
+                        self._onDeleteLFGCardCallback(cardId)
+                    end
+                end)
             else
-                self._onDeleteGroupCallback(gId)
-                detailModal:Hide()
-            end
-        end
-    end)
-    detailModal.delGroupBtn = delGroupBtn
+                local whisperBtn = CreateFrame("Button", nil, cardFrame, "UIPanelButtonTemplate")
+                whisperBtn:SetSize(66, 18)
+                whisperBtn:SetPoint("TOPRIGHT", cardFrame, "TOPRIGHT", -8, -6)
+                whisperBtn:SetText("Sussurrar")
+                whisperBtn:SetScript("OnClick", function()
+                    local cleanTarget = creator:match("^[^-]+") or creator
+                    cleanTarget = cleanTarget:match("^(%S+)") or cleanTarget
+                    if ChatFrame_OpenChat then
+                        ChatFrame_OpenChat("/w " .. cleanTarget .. " ")
+                    end
+                end)
 
-    local closeDetailBtn = CreateFrame("Button", nil, detailModal, "UIPanelButtonTemplate")
-    closeDetailBtn:SetSize(100, 24)
-    closeDetailBtn:SetPoint("BOTTOMRIGHT", detailModal, "BOTTOMRIGHT", -16, 14)
-    closeDetailBtn:SetText(L["CLOSE"])
-    closeDetailBtn:SetScript("OnClick", function() detailModal:Hide() end)
-    detailModal.closeDetailBtn = closeDetailBtn
-
-    self._detailModal = detailModal
-
-    -- =========================================================================
-    -- 2. MODAL DE NOVO GRUPO
-    -- =========================================================================
-    local createModal = CreateFrame("Frame", "GM_CreateGroupModal", UIParent, template)
-    createModal:SetSize(430, 440)
-    createModal:SetFrameStrata("FULLSCREEN_DIALOG")
-    createModal:SetToplevel(true)
-    createModal:SetClampedToScreen(true)
-    createModal:EnableMouse(true)
-    createModal:SetMovable(true)
-    createModal:RegisterForDrag("LeftButton")
-    createModal:SetScript("OnDragStart", function(f) f:StartMoving() end)
-    createModal:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
-    createModal:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
-    createModal:Hide()
-
-    if UISpecialFrames then
-        table.insert(UISpecialFrames, "GM_CreateGroupModal")
-    end
-
-    if createModal.SetBackdrop then
-        createModal:SetBackdrop(DIALOG_BACKDROP)
-        createModal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
-        createModal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
-    end
-
-    local cCloseBtn = CreateFrame("Button", nil, createModal, "UIPanelCloseButton")
-    cCloseBtn:SetPoint("TOPRIGHT", createModal, "TOPRIGHT", -4, -4)
-    cCloseBtn:SetSize(28, 28)
-    cCloseBtn:SetScript("OnClick", function() createModal:Hide() end)
-
-    local cTitle = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    cTitle:SetPoint("TOPLEFT", createModal, "TOPLEFT", 18, -16)
-    cTitle:SetText(L["GROUP_CREATE_MODAL_TITLE"])
-    createModal.titleText = cTitle
-
-    local cSep = createModal:CreateTexture(nil, "ARTWORK")
-    cSep:SetPoint("TOPLEFT", createModal, "TOPLEFT", 16, -44)
-    cSep:SetPoint("RIGHT", createModal, "RIGHT", -16, 0)
-    cSep:SetHeight(1)
-    cSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
-
-    -- Nome
-    local cNameLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cNameLabel:SetPoint("TOPLEFT", cSep, "BOTTOMLEFT", 4, -12)
-    cNameLabel:SetText(L["GROUP_NAME_LABEL"])
-    createModal.nameLabel = cNameLabel
-
-    local cNameEB = CreateFrame("EditBox", nil, createModal, template)
-    cNameEB:SetPoint("TOPLEFT", cNameLabel, "BOTTOMLEFT", 0, -4)
-    cNameEB:SetSize(380, 24)
-    styleBox(cNameEB)
-    createModal.nameEB = cNameEB
-
-    -- Tipo
-    local cTypeLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cTypeLabel:SetPoint("TOPLEFT", cNameEB, "BOTTOMLEFT", 0, -12)
-    cTypeLabel:SetText(L["GROUP_TYPE_LABEL"])
-    createModal.typeLabel = cTypeLabel
-
-    local typeButtons = {}
-    local typeDefs = {
-        { id = GroupType.DUNGEON, labelKey = "GROUP_BTN_TYPE_DUNGEONS" },
-        { id = GroupType.RAID,    labelKey = "GROUP_BTN_TYPE_RAIDS" },
-        { id = GroupType.MISC,    labelKey = "GROUP_BTN_TYPE_MISC" },
-    }
-    createModal.typeDefs = typeDefs
-    createModal.selectedType = GroupType.DUNGEON
-
-    for i, tDef in ipairs(typeDefs) do
-        local btn = CreateFrame("Button", nil, createModal, template)
-        btn:SetSize(120, 24)
-        btn:SetPoint("TOPLEFT", cTypeLabel, "BOTTOMLEFT", (i - 1) * 130, -4)
-        if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
-        local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        txt:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        txt:SetText(L[tDef.labelKey] or tDef.labelKey)
-        btn.txt = txt
-
-        btn:SetScript("OnClick", function()
-            createModal.selectedType = tDef.id
-            self:updateCreateModalTypeButtons(typeButtons, tDef.id)
-            self:updateCreateModalRoleVisibility()
-        end)
-        typeButtons[tDef.id] = btn
-    end
-    createModal.typeButtons = typeButtons
-
-    -- Nota / Horário
-    local cNoteLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cNoteLabel:SetPoint("TOPLEFT", cTypeLabel, "BOTTOMLEFT", 0, -38)
-    cNoteLabel:SetText(L["GROUP_NOTE_LABEL"])
-    createModal.noteLabel = cNoteLabel
-
-    local cNoteEB = CreateFrame("EditBox", nil, createModal, template)
-    cNoteEB:SetPoint("TOPLEFT", cNoteLabel, "BOTTOMLEFT", 0, -4)
-    cNoteEB:SetSize(380, 24)
-    styleBox(cNoteEB)
-    createModal.noteEB = cNoteEB
-
-    -- Líder Obrigatório
-    local cLeaderLabel = createModal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cLeaderLabel:SetPoint("TOPLEFT", cNoteEB, "BOTTOMLEFT", 0, -12)
-    cLeaderLabel:SetText(L["GROUP_LEADER_LABEL"])
-    createModal.leaderLabel = cLeaderLabel
-
-    local cLeaderBox = CreateFrame("Button", nil, createModal, template)
-    cLeaderBox:SetPoint("TOPLEFT", cLeaderLabel, "BOTTOMLEFT", 0, -4)
-    cLeaderBox:SetSize(270, 24)
-    if cLeaderBox.SetBackdrop then
-        cLeaderBox:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        cLeaderBox:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
-        cLeaderBox:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 1.0)
-    end
-    local cCrown = cLeaderBox:CreateTexture(nil, "ARTWORK")
-    cCrown:SetSize(14, 14)
-    cCrown:SetPoint("LEFT", cLeaderBox, "LEFT", 6, 0)
-    cCrown:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
-
-    local cLeaderText = cLeaderBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    cLeaderText:SetPoint("LEFT", cCrown, "RIGHT", 6, 0)
-    cLeaderText:SetText(L["GROUP_LEADER_PICK_HINT"])
-    createModal.leaderText = cLeaderText
-    createModal.selectedLeader = nil
-
-    local cLeaderPickBtn = CreateFrame("Button", nil, createModal, "UIPanelButtonTemplate")
-    cLeaderPickBtn:SetSize(104, 24)
-    cLeaderPickBtn:SetPoint("LEFT", cLeaderBox, "RIGHT", 6, 0)
-    cLeaderPickBtn:SetText(L["GROUP_SELECT_BTN"])
-    cLeaderPickBtn:SetScript("OnClick", function()
-        self:openLeaderPicker(function(chosenMember)
-            createModal.selectedLeader = chosenMember
-            local chClass = self:resolveMemberClass(chosenMember:getName(), chosenMember:getClass())
-            cLeaderText:SetText(getColoredMemberName(chosenMember:getName(), chClass))
-            if chClass ~= "" and (createModal.selectedType ~= GroupType.MISC) then
-                self:autoSelectRoleForClass(createModal.roleButtons, chClass, function(r)
-                    createModal.selectedLeaderRole = r
+                local inviteBtn = CreateFrame("Button", nil, cardFrame, "UIPanelButtonTemplate")
+                inviteBtn:SetSize(66, 18)
+                inviteBtn:SetPoint("TOPRIGHT", cardFrame, "TOPRIGHT", -8, -26)
+                inviteBtn:SetText("Convidar")
+                inviteBtn:SetScript("OnClick", function()
+                    local cleanTarget = creator:match("^[^-]+") or creator
+                    cleanTarget = cleanTarget:match("^(%S+)") or cleanTarget
+                    if C_PartyInfo and C_PartyInfo.InviteUnit then
+                        pcall(C_PartyInfo.InviteUnit, cleanTarget)
+                    elseif InviteUnit then
+                        pcall(InviteUnit, cleanTarget)
+                    end
                 end)
             end
+
+            cardFrame:Show()
+            table.insert(self._lfgCardFrames, cardFrame)
         end)
-    end)
-    cLeaderBox:SetScript("OnClick", function() cLeaderPickBtn:Click() end)
-    createModal.leaderPickBtn = cLeaderPickBtn
-
-    -- Função do Líder
-    local cRoleContainer = CreateFrame("Frame", nil, createModal)
-    cRoleContainer:SetPoint("TOPLEFT", cLeaderBox, "BOTTOMLEFT", 0, -10)
-    cRoleContainer:SetSize(380, 50)
-    createModal.roleContainer = cRoleContainer
-
-    local cRoleLabel = cRoleContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cRoleLabel:SetPoint("TOPLEFT", cRoleContainer, "TOPLEFT", 0, 0)
-    cRoleLabel:SetText(L["GROUP_ROLE_LABEL"])
-    createModal.roleLabel = cRoleLabel
-
-    local cRoleButtons = {}
-    local roleDefs = {
-        { id = GroupRole.TANK,   labelKey = "ROLE_TANK",   color = { 0.29, 0.56, 0.88 } },
-        { id = GroupRole.HEALER, labelKey = "ROLE_HEALER", color = { 0.18, 0.80, 0.44 } },
-        { id = GroupRole.DPS,    labelKey = "ROLE_DPS",    color = { 0.91, 0.30, 0.24 } },
-    }
-    createModal.roleDefs = roleDefs
-    createModal.selectedLeaderRole = GroupRole.DPS
-
-    for i, rDef in ipairs(roleDefs) do
-        local rBtn = CreateFrame("Button", nil, cRoleContainer, template)
-        rBtn:SetSize(120, 24)
-        rBtn:SetPoint("TOPLEFT", cRoleLabel, "BOTTOMLEFT", (i - 1) * 130, -4)
-        if rBtn.SetBackdrop then rBtn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
-        local rTxt = rBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        rTxt:SetPoint("CENTER", rBtn, "CENTER", 0, 0)
-        rTxt:SetText(L[rDef.labelKey] or rDef.labelKey)
-        rBtn.txt = rTxt
-        rBtn.def = rDef
-
-        rBtn:SetScript("OnClick", function()
-            createModal.selectedLeaderRole = rDef.id
-            self:updateRoleButtons(cRoleButtons, rDef.id)
-        end)
-        cRoleButtons[rDef.id] = rBtn
     end
-    createModal.roleButtons = cRoleButtons
 
-    local cErrorText = createModal:CreateFontString(nil, "OVERLAY", "GameFontRedSmall")
-    cErrorText:SetPoint("BOTTOMLEFT", createModal, "BOTTOMLEFT", 18, 48)
-    cErrorText:SetPoint("BOTTOMRIGHT", createModal, "BOTTOMRIGHT", -18, 48)
-    cErrorText:SetJustifyH("CENTER")
-    cErrorText:SetText("")
-    createModal.errorText = cErrorText
+    local totalRows = math.ceil(#filtered / colCount)
+    local totalHeight = totalRows * (cardHeight + cardGapY)
+    self._lfgContentFrame:SetHeight(math.max(totalHeight, 10))
+    self._lfgContentFrame:SetWidth(736)
+end
 
-    local cSaveBtn = CreateFrame("Button", nil, createModal, "UIPanelButtonTemplate")
-    cSaveBtn:SetSize(130, 24)
-    cSaveBtn:SetPoint("BOTTOMRIGHT", createModal, "BOTTOMRIGHT", -16, 16)
-    cSaveBtn:SetText(L["GROUP_CREATE_SUBMIT"])
-    cSaveBtn:SetScript("OnEnter", function(btn)
-        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
+-- =========================================================================
+-- PAINEL 2: COLUNA LATERAL DE GRUPOS CRIADOS - LADO DIREITO (370 x 554)
+-- =========================================================================
 
-        if GameTooltip then
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:AddLine(curL["GROUP_TIP_CREATE_HEADER"], 1, 1, 1)
-            if not canOfficer then
-                GameTooltip:AddLine(curL["GROUP_TIP_OFFICER_ONLY"], 1, 0.3, 0.3, true)
-            else
-                GameTooltip:AddLine(curL["GROUP_TIP_CREATE_CLICK"], 0.2, 1.0, 0.2)
-            end
-            GameTooltip:Show()
-        end
+function GroupView:createCreatedGroupsPanel()
+    local frame = self._frame
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+
+    local panel = CreateFrame("Frame", "GM_GroupsPanel", frame, template)
+    panel:SetSize(370, 554)
+    panel:SetPoint("TOPLEFT", frame, "TOPLEFT", 794, -50)
+    self._groupsPanel = panel
+
+    if panel.SetBackdrop then
+        panel:SetBackdrop(CONTAINER_BACKDROP)
+        panel:SetBackdropColor(PALETTE.INSET_BG[1], PALETTE.INSET_BG[2], PALETTE.INSET_BG[3], PALETTE.INSET_BG[4])
+        panel:SetBackdropBorderColor(PALETTE.INSET_BORDER[1], PALETTE.INSET_BORDER[2], PALETTE.INSET_BORDER[3], PALETTE.INSET_BORDER[4])
+    end
+
+    -- Header da Coluna de Grupos
+    local headerBar = CreateFrame("Frame", nil, panel, template)
+    headerBar:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4)
+    headerBar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -4, -4)
+    headerBar:SetHeight(38)
+    if headerBar.SetBackdrop then
+        headerBar:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        headerBar:SetBackdropColor(0.12, 0.08, 0.03, 0.95)
+        headerBar:SetBackdropBorderColor(0.60, 0.42, 0.15, 0.90)
+    end
+
+    local gIcon = headerBar:CreateTexture(nil, "ARTWORK")
+    gIcon:SetSize(24, 24)
+    gIcon:SetPoint("LEFT", headerBar, "LEFT", 8, 0)
+    gIcon:SetTexture("Interface\\Icons\\INV_Shield_04")
+    gIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local gTitle = headerBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    gTitle:SetPoint("TOPLEFT", gIcon, "TOPRIGHT", 8, 2)
+    gTitle:SetText("|cffffd200GRUPOS CRIADOS|r")
+
+    local gCountText = headerBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    gCountText:SetPoint("BOTTOMLEFT", gIcon, "BOTTOMRIGHT", 8, -2)
+    gCountText:SetText("|cffaaaaaa(0 grupos ativos)|r")
+    self._groupsCountText = gCountText
+
+    -- Botão "+ Criar Grupo" (TODOS os membros podem criar grupos)
+    local createGroupBtn = CreateFrame("Button", nil, headerBar, "UIPanelButtonTemplate")
+    createGroupBtn:SetSize(100, 24)
+    createGroupBtn:SetPoint("RIGHT", headerBar, "RIGHT", -6, 0)
+    createGroupBtn:SetText("+ Criar Grupo")
+    createGroupBtn:SetScript("OnClick", function()
+        self:openCreateGroupModal()
     end)
-    cSaveBtn:SetScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    cSaveBtn:SetScript("OnClick", function()
-        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        local canOfficer = false
-        if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-            canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-        elseif IsGuildLeader and IsGuildLeader() then
-            canOfficer = true
-        elseif CanEditOfficerNote and CanEditOfficerNote() then
-            canOfficer = true
-        end
 
-        if not canOfficer then
-            cErrorText:SetText(curL["GROUP_ERR_OFFICER_ONLY"])
-            return
+    -- ScrollFrame de Grupos
+    local scrollFrame = CreateFrame("ScrollFrame", "GM_CreatedGroupsScrollFrame", panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", headerBar, "BOTTOMLEFT", 4, -6)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -26, 6)
+    self._createdGroupsScrollFrame = scrollFrame
+
+    local contentFrame = CreateFrame("Frame", "GM_CreatedGroupsContentFrame", scrollFrame)
+    contentFrame:SetSize(336, 10)
+    scrollFrame:SetScrollChild(contentFrame)
+    self._createdGroupsContentFrame = contentFrame
+
+    -- Mensagem de Lista Vazia
+    local emptyText = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    emptyText:SetPoint("CENTER", panel, "CENTER", 0, -20)
+    emptyText:SetJustifyH("CENTER")
+    emptyText:SetText("|cff888888Nenhum grupo criado ainda.\nClique em '+ Criar Grupo' acima para iniciar um!|r")
+    self._groupsEmptyText = emptyText
+end
+
+--- Renderiza a coluna de grupos criados.
+function GroupView:renderCreatedGroups()
+    if not self._createdGroupsContentFrame then return end
+
+    if self._groupCardFrames then
+        for _, f in ipairs(self._groupCardFrames) do
+            f:Hide()
         end
-        local nameVal = cNameEB:GetText()
-        if not nameVal or nameVal:match("^%s*$") then
-            cErrorText:SetText(curL["GROUP_ERR_NAME_REQ"])
-            return
-        end
-        if not createModal.selectedLeader then
-            cErrorText:SetText(curL["GROUP_ERR_LEADER_REQ"])
-            return
-        end
-        local lRole = createModal.selectedLeaderRole
-        if createModal.selectedType ~= GroupType.MISC then
-            if not lRole or lRole == GroupRole.NONE then
-                cErrorText:SetText(curL["GROUP_ERR_ROLE_REQ"])
-                return
+    end
+    self._groupCardFrames = {}
+
+    local groups = self._groups or {}
+    if self._groupsCountText then
+        self._groupsCountText:SetText(string.format("|cffaaaaaa(%d grupo%s ativo%s)|r", #groups, #groups == 1 and "" or "s", #groups == 1 and "" or "s"))
+    end
+
+    if #groups == 0 then
+        self._groupsEmptyText:Show()
+        self._createdGroupsContentFrame:SetHeight(10)
+        return
+    else
+        self._groupsEmptyText:Hide()
+    end
+
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local yOffset = 0
+    local cardHeight = 88
+
+    for _, group in ipairs(groups) do
+        local okCard = pcall(function()
+            local groupId = (group.getId and group:getId()) or tostring(group.id or "")
+            local rawType = (group.getType and group:getType()) or group.type or "DUNGEON"
+            local gType = tostring(rawType):upper()
+            local typeDef = GROUP_TYPE_INFO[gType] or GROUP_TYPE_INFO[rawType] or GROUP_TYPE_INFO.MISC or { label = "Geral", color = "|cffffffff" }
+            local gName = (group.getName and group:getName()) or group.name or "Grupo"
+            local leader = (group.getLeader and group:getLeader()) or group.leader or "Sem líder"
+            local creator = (group.getCreator and group:getCreator()) or group.creator or leader
+            if not creator or creator == "" then creator = leader end
+            local gTime = (group.getTime and group:getTime()) or (group.getNote and group:getNote()) or group.time or group.note or ""
+            local members = (group.getMembers and group:getMembers()) or group.members or {}
+            local desc = (group.getDescription and group:getDescription()) or group.description or ""
+
+            local lClass = self:resolveMemberClass(leader)
+            local cClass = self:resolveMemberClass(creator)
+
+            local cardFrame = CreateFrame("Button", nil, self._createdGroupsContentFrame, template)
+            cardFrame:SetSize(332, cardHeight)
+            cardFrame:SetPoint("TOPLEFT", self._createdGroupsContentFrame, "TOPLEFT", 0, -yOffset)
+            cardFrame:SetFrameLevel(self._createdGroupsContentFrame:GetFrameLevel() + 2)
+
+            if cardFrame.SetBackdrop then
+                cardFrame:SetBackdrop(SUB_CONTAINER_BACKDROP)
+                cardFrame:SetBackdropColor(0.04, 0.025, 0.01, 0.85)
+                cardFrame:SetBackdropBorderColor(0.55, 0.38, 0.15, 0.85)
             end
+
+            cardFrame:SetScript("OnEnter", function(btn)
+                if btn.SetBackdropBorderColor then
+                    btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                    btn:SetBackdropColor(0.08, 0.05, 0.02, 0.95)
+                end
+            end)
+            cardFrame:SetScript("OnLeave", function(btn)
+                if btn.SetBackdropBorderColor then
+                    btn:SetBackdropBorderColor(0.55, 0.38, 0.15, 0.85)
+                    btn:SetBackdropColor(0.04, 0.025, 0.01, 0.85)
+                end
+            end)
+            cardFrame:SetScript("OnClick", function()
+                self:openDetailModal(group)
+            end)
+
+            -- Nome do Grupo
+            local titleText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            titleText:SetPoint("TOPLEFT", cardFrame, "TOPLEFT", 10, -8)
+            titleText:SetPoint("RIGHT", cardFrame, "RIGHT", -90, 0)
+            titleText:SetJustifyH("LEFT")
+            titleText:SetText("|cffffd200" .. gName .. "|r")
+
+            -- Badge do Tipo
+            local badgeText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            badgeText:SetPoint("TOPRIGHT", cardFrame, "TOPRIGHT", -10, -8)
+            badgeText:SetText((typeDef.color or "|cffffffff") .. "[" .. (typeDef.label or "Grupo") .. "]|r")
+
+            -- Horário e Membros
+            local infoText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            infoText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -4)
+            infoText:SetText(string.format("⏰ |cffffff00%s|r  •  👥 |cffffffff%d membro%s|r",
+                (gTime ~= "" and gTime or "A combinar"), #members, #members == 1 and "" or "s"))
+
+            -- Líder e Criador
+            local leaderText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            leaderText:SetPoint("TOPLEFT", infoText, "BOTTOMLEFT", 0, -3)
+            leaderText:SetText("👑 " .. getColoredMemberName(leader, lClass) .. "  |cff888888(Líder)|r")
+
+            local creatorText = cardFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            creatorText:SetPoint("TOPLEFT", leaderText, "BOTTOMLEFT", 0, -3)
+            creatorText:SetPoint("RIGHT", cardFrame, "RIGHT", -10, 0)
+            creatorText:SetJustifyH("LEFT")
+            creatorText:SetText("✍ |cffaaaaaaCriador:|r " .. getColoredMemberName(creator, cClass))
+
+            cardFrame:Show()
+            table.insert(self._groupCardFrames, cardFrame)
+            yOffset = yOffset + cardHeight + 4
+        end)
+    end
+
+    self._createdGroupsContentFrame:SetHeight(math.max(yOffset, 10))
+    self._createdGroupsContentFrame:Show()
+    if self._createdGroupsScrollFrame then
+        self._createdGroupsScrollFrame:Show()
+    end
+end
+
+-- =========================================================================
+-- MODAL 1: CRIAR NOVO GRUPO (Todos os membros da guilda podem criar)
+-- =========================================================================
+
+function GroupView:openCreateGroupModal()
+    if not self._createGroupModal then return end
+    local myFullName = self:getPlayerFullName()
+
+    self._createGroupNameBox:SetText("")
+    self._createGroupTimeBox:SetText("")
+    self._createGroupLeaderBox:SetText(myFullName ~= "" and myFullName or (UnitName and UnitName("player")) or "")
+    self._createGroupCreatorText:SetText("|cffffd200" .. (myFullName ~= "" and myFullName or (UnitName and UnitName("player")) or "") .. "|r")
+    self._createGroupDescBox:SetText("")
+    self._createGroupSelectedType = "DUNGEON"
+    self:updateCreateGroupTypeButtons()
+
+    self._createGroupModal:Show()
+    self._createGroupNameBox:SetFocus()
+end
+
+function GroupView:createCreateGroupModal()
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local modal = CreateFrame("Frame", "GM_CreateGroupModal", self._frame, template)
+    modal:SetSize(480, 480)
+    modal:SetPoint("CENTER", self._frame, "CENTER", 0, 0)
+    modal:SetFrameStrata("DIALOG")
+    modal:EnableMouse(true)
+    modal:Hide()
+    self._createGroupModal = modal
+
+    if modal.SetBackdrop then
+        modal:SetBackdrop(DIALOG_BACKDROP)
+        modal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
+        modal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+    end
+
+    local title = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", modal, "TOPLEFT", 20, -18)
+    title:SetText("Criar Novo Grupo")
+
+    local subtitle = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    subtitle:SetText("|cffaaaaaaTodos os membros da guilda podem criar grupos|r")
+
+    local closeBtn = CreateFrame("Button", nil, modal, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", modal, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(28, 28)
+    closeBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    -- 1. Nome do Grupo
+    local nameLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    nameLabel:SetPoint("TOPLEFT", modal, "TOPLEFT", 24, -68)
+    nameLabel:SetText("Nome do Grupo:")
+
+    local nameBox = CreateFrame("EditBox", nil, modal, template)
+    nameBox:SetSize(432, 26)
+    nameBox:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -4)
+    styleBox(nameBox)
+    self._createGroupNameBox = nameBox
+
+    -- 2. Tipo do Grupo (Masmorras, Raides, Diversos, Farm, Missões, PvP)
+    local typeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    typeLabel:SetPoint("TOPLEFT", nameBox, "BOTTOMLEFT", 0, -10)
+    typeLabel:SetText("Tipo do Grupo:")
+
+    local types = {
+        { id = "DUNGEON", label = "Masmorras" },
+        { id = "RAID",    label = "Raides" },
+        { id = "MISC",    label = "Diversos" },
+        { id = "FARM",    label = "Farm" },
+        { id = "QUESTS",  label = "Missões" },
+        { id = "PVP",     label = "PvP" },
+    }
+
+    self._createGroupTypeButtons = {}
+    self._createGroupSelectedType = "DUNGEON"
+    local prevBtn = nil
+
+    for _, t in ipairs(types) do
+        local btn = CreateFrame("Button", nil, modal, template)
+        btn:SetSize(68, 22)
+        if not prevBtn then
+            btn:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -4)
         else
-            lRole = GroupRole.NONE
+            btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
         end
+        prevBtn = btn
+
+        if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+        local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        bText:SetText(t.label)
+        btn.label = bText
+        btn.typeId = t.id
+
+        btn:SetScript("OnClick", function()
+            self._createGroupSelectedType = t.id
+            self:updateCreateGroupTypeButtons()
+        end)
+        table.insert(self._createGroupTypeButtons, btn)
+    end
+
+    -- 3. Horário
+    local timeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    timeLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -36)
+    timeLabel:SetText("Horário Previsto:")
+
+    local timeBox = CreateFrame("EditBox", nil, modal, template)
+    timeBox:SetSize(432, 26)
+    timeBox:SetPoint("TOPLEFT", timeLabel, "BOTTOMLEFT", 0, -4)
+    styleBox(timeBox)
+    self._createGroupTimeBox = timeBox
+
+    -- 4. Líder do Grupo
+    local leaderLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    leaderLabel:SetPoint("TOPLEFT", timeBox, "BOTTOMLEFT", 0, -10)
+    leaderLabel:SetText("Líder do Grupo:")
+
+    local leaderBox = CreateFrame("EditBox", nil, modal, template)
+    leaderBox:SetSize(432, 26)
+    leaderBox:SetPoint("TOPLEFT", leaderLabel, "BOTTOMLEFT", 0, -4)
+    styleBox(leaderBox)
+    self._createGroupLeaderBox = leaderBox
+
+    -- 5. Criador do Grupo (pego automaticamente sempre validando nome e sobrenome, NÃO EDITÁVEL)
+    local creatorLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    creatorLabel:SetPoint("TOPLEFT", leaderBox, "BOTTOMLEFT", 0, -10)
+    creatorLabel:SetText("Criador do Grupo (Fixo):")
+
+    local creatorBg = CreateFrame("Frame", nil, modal, template)
+    creatorBg:SetSize(432, 24)
+    creatorBg:SetPoint("TOPLEFT", creatorLabel, "BOTTOMLEFT", 0, -4)
+    if creatorBg.SetBackdrop then
+        creatorBg:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        creatorBg:SetBackdropColor(0.02, 0.015, 0.005, 0.70)
+        creatorBg:SetBackdropBorderColor(0.40, 0.28, 0.10, 0.80)
+    end
+    local creatorText = creatorBg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    creatorText:SetPoint("LEFT", creatorBg, "LEFT", 8, 0)
+    self._createGroupCreatorText = creatorText
+
+    -- 6. Descrição do Grupo
+    local descLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    descLabel:SetPoint("TOPLEFT", creatorBg, "BOTTOMLEFT", 0, -10)
+    descLabel:SetText("Descrição do Grupo:")
+
+    local descBoxBg = CreateFrame("Frame", nil, modal, template)
+    descBoxBg:SetSize(432, 60)
+    descBoxBg:SetPoint("TOPLEFT", descLabel, "BOTTOMLEFT", 0, -4)
+    if descBoxBg.SetBackdrop then
+        descBoxBg:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        descBoxBg:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        descBoxBg:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+
+    local descBox = CreateFrame("EditBox", nil, descBoxBg)
+    descBox:SetPoint("TOPLEFT", descBoxBg, "TOPLEFT", 6, -4)
+    descBox:SetPoint("BOTTOMRIGHT", descBoxBg, "BOTTOMRIGHT", -6, 4)
+    descBox:SetMultiLine(true)
+    descBox:SetAutoFocus(false)
+    descBox:SetFontObject("GameFontHighlightSmall")
+    self._createGroupDescBox = descBox
+
+    -- Botões Criar e Cancelar
+    local cancelBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(90, 24)
+    cancelBtn:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -24, 16)
+    cancelBtn:SetText("Cancelar")
+    cancelBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    local confirmBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    confirmBtn:SetSize(110, 24)
+    confirmBtn:SetPoint("RIGHT", cancelBtn, "LEFT", -10, 0)
+    confirmBtn:SetText("Criar Grupo")
+    confirmBtn:SetScript("OnClick", function()
+        local name = nameBox:GetText() or ""
+        local gType = self._createGroupSelectedType or "DUNGEON"
+        local timeStr = timeBox:GetText() or ""
+        local leader = leaderBox:GetText() or ""
+        local descStr = descBox:GetText() or ""
+
+        if name:match("^%s*$") then
+            print("|cffff4444[GuildManager]|r Por favor, informe um nome para o grupo.")
+            return
+        end
+        if leader:match("^%s*$") then
+            print("|cffff4444[GuildManager]|r Por favor, informe o líder do grupo.")
+            return
+        end
+
+        local defaultRole = (gType == "DUNGEON" or gType == "RAID") and GroupRole.DPS or GroupRole.NONE
 
         if self._onCreateGroupCallback then
-            local ok, err = self._onCreateGroupCallback(
-                nameVal,
-                createModal.selectedType,
-                createModal.selectedLeader:getName(),
-                lRole,
-                cNoteEB:GetText()
-            )
+            local ok, err = self._onCreateGroupCallback(name, gType, leader, defaultRole, timeStr, descStr)
             if ok then
-                createModal:Hide()
+                modal:Hide()
+                nameBox:SetText("")
+                timeBox:SetText("")
+                descBox:SetText("")
             else
-                cErrorText:SetText(err or curL["GROUP_ERR_CREATE_FAIL"])
+                print("|cffff4444[GuildManager]|r " .. tostring(err or "Falha ao criar grupo."))
             end
+        else
+            modal:Hide()
         end
     end)
-    createModal.saveBtn = cSaveBtn
+end
 
-    local cCancelBtn = CreateFrame("Button", nil, createModal, "UIPanelButtonTemplate")
-    cCancelBtn:SetSize(100, 24)
-    cCancelBtn:SetPoint("RIGHT", cSaveBtn, "LEFT", -8, 0)
-    cCancelBtn:SetText(L["CANCEL"])
-    cCancelBtn:SetScript("OnClick", function() createModal:Hide() end)
-    createModal.cancelBtn = cCancelBtn
+function GroupView:updateCreateGroupTypeButtons()
+    for _, btn in ipairs(self._createGroupTypeButtons or {}) do
+        local isActive = (btn.typeId == self._createGroupSelectedType)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(0.25, 0.18, 0.05, 0.95)
+                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                btn.label:SetTextColor(1.0, 0.82, 0.20)
+            else
+                btn:SetBackdropColor(0.04, 0.025, 0.01, 0.75)
+                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.80)
+                btn.label:SetTextColor(0.80, 0.80, 0.80)
+            end
+        end
+    end
+end
 
-    self._createModal = createModal
+-- =========================================================================
+-- MODAL 2: CRIAR CARD DE PROCURANDO GRUPO (LFG)
+-- =========================================================================
 
-    -- =========================================================================
-    -- 3. MODAL DE ADICIONAR MEMBRO
-    -- =========================================================================
-    local addModal = CreateFrame("Frame", "GM_AddMemberModal", UIParent, template)
-    addModal:SetSize(400, 440)
-    addModal:SetFrameStrata("FULLSCREEN_DIALOG")
-    addModal:SetToplevel(true)
-    addModal:SetClampedToScreen(true)
-    addModal:EnableMouse(true)
-    addModal:SetMovable(true)
-    addModal:RegisterForDrag("LeftButton")
-    addModal:SetScript("OnDragStart", function(f) f:StartMoving() end)
-    addModal:SetScript("OnDragStop", function(f) f:StopMovingOrSizing() end)
-    addModal:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
-    addModal:Hide()
+function GroupView:openCreateLFGModal()
+    if not self._createLFGModal then return end
+    local myFullName = self:getPlayerFullName()
 
-    if UISpecialFrames then
-        table.insert(UISpecialFrames, "GM_AddMemberModal")
+    local myCardsCount = 0
+    for _, card in ipairs(self._lfgCards or {}) do
+        if not (card.isExpired and card:isExpired()) and (card.isCreator and card:isCreator(myFullName)) then
+            myCardsCount = myCardsCount + 1
+        end
     end
 
-    if addModal.SetBackdrop then
-        addModal:SetBackdrop(DIALOG_BACKDROP)
-        addModal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
-        addModal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+    if myCardsCount >= 5 then
+        print(string.format("|cffff4444[GuildManager]|r Você já possui o limite de 5 cards de Procurando Grupo ativos (%d/5). Exclua um card existente para poder criar outro.", myCardsCount))
+        return
     end
 
-    local aCloseBtn = CreateFrame("Button", nil, addModal, "UIPanelCloseButton")
-    aCloseBtn:SetPoint("TOPRIGHT", addModal, "TOPRIGHT", -4, -4)
-    aCloseBtn:SetSize(28, 28)
-    aCloseBtn:SetScript("OnClick", function() addModal:Hide() end)
-
-    local aTitle = addModal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    aTitle:SetPoint("TOPLEFT", addModal, "TOPLEFT", 18, -16)
-    aTitle:SetText(L["GROUP_ADD_MEMBER_TITLE"])
-    addModal.titleText = aTitle
-
-    local aSubtitle = addModal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    aSubtitle:SetPoint("TOPLEFT", aTitle, "BOTTOMLEFT", 0, -4)
-    aSubtitle:SetText("")
-    addModal.subtitle = aSubtitle
-
-    local aSep = addModal:CreateTexture(nil, "ARTWORK")
-    aSep:SetPoint("TOPLEFT", addModal, "TOPLEFT", 16, -60)
-    aSep:SetPoint("RIGHT", addModal, "RIGHT", -16, 0)
-    aSep:SetHeight(1)
-    aSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
-
-    local aSearchEB = CreateFrame("EditBox", nil, addModal, template)
-    aSearchEB:SetPoint("TOPLEFT", aSep, "BOTTOMLEFT", 0, -8)
-    aSearchEB:SetSize(364, 22)
-    styleBox(aSearchEB)
-
-    local aSearchHint = aSearchEB:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    aSearchHint:SetPoint("LEFT", aSearchEB, "LEFT", 8, 0)
-    aSearchHint:SetText(L["GROUP_ADD_MEMBER_SEARCH"])
-    addModal.searchHint = aSearchHint
-
-    aSearchEB:SetScript("OnTextChanged", function(box)
-        local txt = box:GetText()
-        if txt and txt ~= "" then aSearchHint:Hide() else aSearchHint:Show() end
-        self:filterAddMemberList(txt)
-    end)
-    addModal.searchEB = aSearchEB
-
-    local aListFrame = CreateFrame("Frame", nil, addModal, template)
-    aListFrame:SetPoint("TOPLEFT", aSearchEB, "BOTTOMLEFT", 0, -6)
-    aListFrame:SetSize(364, 180)
-    if aListFrame.SetBackdrop then
-        aListFrame:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        aListFrame:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
-        aListFrame:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.90)
+    if self._createLFGSubtitle then
+        self._createLFGSubtitle:SetText(string.format("|cffaaaaaaCada membro pode criar até 5 cards (Você possui %d/5 ativos)|r", myCardsCount))
     end
 
-    local aScroll = CreateFrame("ScrollFrame", "GM_AddMemberScroll", aListFrame, "UIPanelScrollFrameTemplate")
-    aScroll:SetPoint("TOPLEFT", aListFrame, "TOPLEFT", 2, -2)
-    aScroll:SetPoint("BOTTOMRIGHT", aListFrame, "BOTTOMRIGHT", -20, 2)
+    self._createLFGTimeBox:SetText("")
+    self._createLFGCreatorText:SetText("|cffffd200" .. (myFullName ~= "" and myFullName or (UnitName and UnitName("player")) or "") .. "|r")
+    self._createLFGDescBox:SetText("")
+    self._createLFGSelectedType = "DUNGEON"
+    self:updateCreateLFGTypeButtons()
 
-    local aChild = CreateFrame("Frame", nil, aScroll)
-    aChild:SetWidth(340)
-    aChild:SetHeight(1)
-    aScroll:SetScrollChild(aChild)
-    addModal.memberChild = aChild
-    addModal.memberRows = {}
+    self._createLFGModal:Show()
+    self._createLFGTimeBox:SetFocus()
+end
 
-    -- Seleção de Função
-    local aRoleContainer = CreateFrame("Frame", nil, addModal)
-    aRoleContainer:SetPoint("TOPLEFT", aListFrame, "BOTTOMLEFT", 0, -10)
-    aRoleContainer:SetSize(364, 50)
-    addModal.roleContainer = aRoleContainer
+function GroupView:createCreateLFGModal()
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local modal = CreateFrame("Frame", "GM_CreateLFGModal", self._frame, template)
+    modal:SetSize(480, 390)
+    modal:SetPoint("CENTER", self._frame, "CENTER", 0, 0)
+    modal:SetFrameStrata("DIALOG")
+    modal:EnableMouse(true)
+    modal:Hide()
+    self._createLFGModal = modal
 
-    local aRoleLabel = aRoleContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    aRoleLabel:SetPoint("TOPLEFT", aRoleContainer, "TOPLEFT", 0, 0)
-    aRoleLabel:SetText(L["GROUP_MEMBER_ROLE_LABEL"])
-    addModal.roleLabel = aRoleLabel
+    if modal.SetBackdrop then
+        modal:SetBackdrop(DIALOG_BACKDROP)
+        modal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
+        modal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+    end
 
-    local aRoleButtons = {}
-    addModal.selectedRole = GroupRole.DPS
-    addModal.roleDefs = roleDefs
+    local title = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", modal, "TOPLEFT", 20, -18)
+    title:SetText("Procurar Grupo (LFG)")
 
-    for i, rDef in ipairs(roleDefs) do
-        local rBtn = CreateFrame("Button", nil, aRoleContainer, template)
-        rBtn:SetSize(115, 24)
-        rBtn:SetPoint("TOPLEFT", aRoleLabel, "BOTTOMLEFT", (i - 1) * 124, -4)
-        if rBtn.SetBackdrop then rBtn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
-        local rTxt = rBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        rTxt:SetPoint("CENTER", rBtn, "CENTER", 0, 0)
-        rTxt:SetText(L[rDef.labelKey] or rDef.labelKey)
-        rBtn.txt = rTxt
-        rBtn.def = rDef
+    local subtitle = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    subtitle:SetText("|cffaaaaaaCada membro pode criar até 5 cards de Procurando Grupo|r")
+    self._createLFGSubtitle = subtitle
 
-        rBtn:SetScript("OnClick", function()
-            addModal.selectedRole = rDef.id
-            self:updateRoleButtons(aRoleButtons, rDef.id)
+    local closeBtn = CreateFrame("Button", nil, modal, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", modal, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(28, 28)
+    closeBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    -- 1. Tipo do Grupo que Procura
+    local typeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    typeLabel:SetPoint("TOPLEFT", modal, "TOPLEFT", 24, -68)
+    typeLabel:SetText("Tipo de Grupo que Procura:")
+
+    local types = {
+        { id = "DUNGEON", label = "Masmorras" },
+        { id = "RAID",    label = "Raides" },
+        { id = "MISC",    label = "Diversos" },
+        { id = "FARM",    label = "Farm" },
+        { id = "QUESTS",  label = "Missões" },
+        { id = "PVP",     label = "PvP" },
+    }
+
+    self._createLFGTypeButtons = {}
+    self._createLFGSelectedType = "DUNGEON"
+    local prevBtn = nil
+
+    for _, t in ipairs(types) do
+        local btn = CreateFrame("Button", nil, modal, template)
+        btn:SetSize(68, 22)
+        if not prevBtn then
+            btn:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -4)
+        else
+            btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
+        end
+        prevBtn = btn
+
+        if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+        local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        bText:SetText(t.label)
+        btn.label = bText
+        btn.typeId = t.id
+
+        btn:SetScript("OnClick", function()
+            self._createLFGSelectedType = t.id
+            self:updateCreateLFGTypeButtons()
         end)
-        aRoleButtons[rDef.id] = rBtn
+        table.insert(self._createLFGTypeButtons, btn)
     end
-    addModal.roleButtons = aRoleButtons
 
-    local aErrorText = addModal:CreateFontString(nil, "OVERLAY", "GameFontRedSmall")
-    aErrorText:SetPoint("BOTTOMLEFT", addModal, "BOTTOMLEFT", 18, 48)
-    aErrorText:SetPoint("BOTTOMRIGHT", addModal, "BOTTOMRIGHT", -18, 48)
-    aErrorText:SetJustifyH("CENTER")
-    aErrorText:SetText("")
-    addModal.errorText = aErrorText
+    -- 2. Horário / Disponibilidade
+    local timeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    timeLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -36)
+    timeLabel:SetText("Horário / Disponibilidade:")
 
-    local aAddBtn = CreateFrame("Button", nil, addModal, "UIPanelButtonTemplate")
-    aAddBtn:SetSize(140, 24)
-    aAddBtn:SetPoint("BOTTOMRIGHT", addModal, "BOTTOMRIGHT", -16, 16)
-    aAddBtn:SetText(L["GROUP_ADD_MEMBER_SUBMIT"])
-    aAddBtn:SetScript("OnClick", function()
-        local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-        if not addModal.selectedMember then
-            aErrorText:SetText(curL["GROUP_ERR_SELECT_MEMBER"])
-            return
-        end
-        local role = addModal.selectedRole
-        if addModal.targetGroup and addModal.targetGroup:getType() ~= GroupType.MISC then
-            if not role or role == GroupRole.NONE then
-                aErrorText:SetText(curL["GROUP_ERR_MEMBER_ROLE_REQ"])
-                return
-            end
-        else
-            role = GroupRole.NONE
-        end
+    local timeBox = CreateFrame("EditBox", nil, modal, template)
+    timeBox:SetSize(432, 26)
+    timeBox:SetPoint("TOPLEFT", timeLabel, "BOTTOMLEFT", 0, -4)
+    styleBox(timeBox)
+    self._createLFGTimeBox = timeBox
 
-        if self._onAddMemberCallback and addModal.targetGroup then
-            local ok, err = self._onAddMemberCallback(addModal.targetGroup:getId(), addModal.selectedMember:getName(), role)
+    -- 3. Criador do Card (Fixo e Não Editável)
+    local creatorLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    creatorLabel:SetPoint("TOPLEFT", timeBox, "BOTTOMLEFT", 0, -10)
+    creatorLabel:SetText("Nome do Personagem Criador (Fixo):")
+
+    local creatorBg = CreateFrame("Frame", nil, modal, template)
+    creatorBg:SetSize(432, 24)
+    creatorBg:SetPoint("TOPLEFT", creatorLabel, "BOTTOMLEFT", 0, -4)
+    if creatorBg.SetBackdrop then
+        creatorBg:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        creatorBg:SetBackdropColor(0.02, 0.015, 0.005, 0.70)
+        creatorBg:SetBackdropBorderColor(0.40, 0.28, 0.10, 0.80)
+    end
+    local creatorText = creatorBg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    creatorText:SetPoint("LEFT", creatorBg, "LEFT", 8, 0)
+    self._createLFGCreatorText = creatorText
+
+    -- 4. Descrição
+    local descLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    descLabel:SetPoint("TOPLEFT", creatorBg, "BOTTOMLEFT", 0, -10)
+    descLabel:SetText("Descrição / Atividade Desejada:")
+
+    local descBoxBg = CreateFrame("Frame", nil, modal, template)
+    descBoxBg:SetSize(432, 70)
+    descBoxBg:SetPoint("TOPLEFT", descLabel, "BOTTOMLEFT", 0, -4)
+    if descBoxBg.SetBackdrop then
+        descBoxBg:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        descBoxBg:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        descBoxBg:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+
+    local descBox = CreateFrame("EditBox", nil, descBoxBg)
+    descBox:SetPoint("TOPLEFT", descBoxBg, "TOPLEFT", 6, -4)
+    descBox:SetPoint("BOTTOMRIGHT", descBoxBg, "BOTTOMRIGHT", -6, 4)
+    descBox:SetMultiLine(true)
+    descBox:SetAutoFocus(false)
+    descBox:SetFontObject("GameFontHighlightSmall")
+    self._createLFGDescBox = descBox
+
+    -- Botões
+    local cancelBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(90, 24)
+    cancelBtn:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -24, 16)
+    cancelBtn:SetText("Cancelar")
+    cancelBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    local confirmBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    confirmBtn:SetSize(120, 24)
+    confirmBtn:SetPoint("RIGHT", cancelBtn, "LEFT", -10, 0)
+    confirmBtn:SetText("Publicar Card")
+    confirmBtn:SetScript("OnClick", function()
+        local gType = self._createLFGSelectedType or "DUNGEON"
+        local timeStr = timeBox:GetText() or ""
+        local descStr = descBox:GetText() or ""
+
+        if self._onCreateLFGCardCallback then
+            local ok, err = self._onCreateLFGCardCallback(gType, timeStr, descStr)
             if ok then
-                addModal:Hide()
+                modal:Hide()
+                timeBox:SetText("")
+                descBox:SetText("")
             else
-                aErrorText:SetText(err or curL["GROUP_ERR_ADD_MEMBER_FAIL"])
+                print("|cffff4444[GuildManager]|r " .. (err or "Falha ao publicar card."))
+            end
+        else
+            modal:Hide()
+        end
+    end)
+end
+
+function GroupView:updateCreateLFGTypeButtons()
+    for _, btn in ipairs(self._createLFGTypeButtons or {}) do
+        local isActive = (btn.typeId == self._createLFGSelectedType)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(0.25, 0.18, 0.05, 0.95)
+                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                btn.label:SetTextColor(1.0, 0.82, 0.20)
+            else
+                btn:SetBackdropColor(0.04, 0.025, 0.01, 0.75)
+                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.80)
+                btn.label:SetTextColor(0.80, 0.80, 0.80)
             end
         end
-    end)
-    addModal.addBtn = aAddBtn
-
-    local aCancelBtn = CreateFrame("Button", nil, addModal, "UIPanelButtonTemplate")
-    aCancelBtn:SetSize(100, 24)
-    aCancelBtn:SetPoint("RIGHT", aAddBtn, "LEFT", -8, 0)
-    aCancelBtn:SetText(L["CANCEL"])
-    aCancelBtn:SetScript("OnClick", function() addModal:Hide() end)
-    addModal.cancelBtn = aCancelBtn
-
-    self._addMemberModal = addModal
-
-    -- =========================================================================
-    -- 4. SUB-PICKER DE LÍDER
-    -- =========================================================================
-    local leaderPicker = CreateFrame("Frame", "GM_LeaderPickerModal", UIParent, template)
-    leaderPicker:SetSize(340, 360)
-    leaderPicker:SetFrameStrata("TOOLTIP")
-    leaderPicker:SetToplevel(true)
-    leaderPicker:SetClampedToScreen(true)
-    leaderPicker:EnableMouse(true)
-    leaderPicker:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
-    leaderPicker:Hide()
-
-    if leaderPicker.SetBackdrop then
-        leaderPicker:SetBackdrop(DIALOG_BACKDROP)
-        leaderPicker:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
-        leaderPicker:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
     end
-
-    local lpClose = CreateFrame("Button", nil, leaderPicker, "UIPanelCloseButton")
-    lpClose:SetPoint("TOPRIGHT", leaderPicker, "TOPRIGHT", -4, -4)
-    lpClose:SetSize(24, 24)
-    lpClose:SetScript("OnClick", function() leaderPicker:Hide() end)
-
-    local lpTitle = leaderPicker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    lpTitle:SetPoint("TOPLEFT", leaderPicker, "TOPLEFT", 14, -14)
-    lpTitle:SetText(L["GROUP_PICK_LEADER_TITLE"])
-    leaderPicker.titleText = lpTitle
-
-    local lpSearch = CreateFrame("EditBox", nil, leaderPicker, template)
-    lpSearch:SetPoint("TOPLEFT", lpTitle, "BOTTOMLEFT", 0, -8)
-    lpSearch:SetSize(310, 22)
-    styleBox(lpSearch)
-    leaderPicker.searchEB = lpSearch
-
-    local lpSearchHint = lpSearch:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    lpSearchHint:SetPoint("LEFT", lpSearch, "LEFT", 8, 0)
-    lpSearchHint:SetText(L["GROUP_PICK_LEADER_SEARCH"])
-    leaderPicker.searchHint = lpSearchHint
-
-    lpSearch:SetScript("OnTextChanged", function(box)
-        local txt = box:GetText()
-        if txt and txt ~= "" then lpSearchHint:Hide() else lpSearchHint:Show() end
-        self:filterLeaderPickerList(txt)
-    end)
-
-    local lpScroll = CreateFrame("ScrollFrame", "GM_LeaderPickerScroll", leaderPicker, "UIPanelScrollFrameTemplate")
-    lpScroll:SetPoint("TOPLEFT", lpSearch, "BOTTOMLEFT", 0, -6)
-    lpScroll:SetPoint("BOTTOMRIGHT", leaderPicker, "BOTTOMRIGHT", -22, 10)
-
-    local lpChild = CreateFrame("Frame", nil, lpScroll)
-    lpChild:SetWidth(290)
-    lpChild:SetHeight(1)
-    lpScroll:SetScrollChild(lpChild)
-    leaderPicker.child = lpChild
-    leaderPicker.rows = {}
-
-    self._leaderPickerModal = leaderPicker
-
-    -- Inicializa todos os textos das modais de acordo com o idioma ativo
-    self:updateDetailModalLocale()
-    self:updateCreateModalLocale()
-    self:updateAddMemberModalLocale()
-    self:updateLeaderPickerLocale()
 end
 
---- Abre a janela de detalhes / gerenciamento de membros do grupo.
----@param group Group
-function GroupView:openGroupDetailModal(group)
-    local m = self._detailModal
-    if not m or not group then return end
+-- =========================================================================
+-- MODAL 3: DETALHES DO GRUPO (Visualização & Edição pelo Criador)
+-- =========================================================================
 
-    self:updateDetailModalLocale()
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+function GroupView:openDetailModal(group)
+    if not group then return end
+    self._currentDetailGroupId = (group.getId and group:getId()) or group.id or ""
 
-    self._currentDetailGroupId = group:getId()
-    m.currentGroup = group
-    m.selectedLeaderName = group:getLeader() or ""
+    local myFullName = self:getPlayerFullName()
+    local canEdit = (group.canEdit and group:canEdit(myFullName, IsGuildLeader and IsGuildLeader())) or false
 
-    -- Ícone da categoria
-    local gType = group:getType()
-    if gType == GroupType.DUNGEON then
-        m.icon:SetTexture("Interface\\Icons\\INV_Shield_04")
-        m.subtitle:SetText(L["GROUP_DETAIL_SUB_DUNGEON"])
-    elseif gType == GroupType.RAID then
-        m.icon:SetTexture("Interface\\Icons\\INV_Helmet_06")
-        m.subtitle:SetText(L["GROUP_DETAIL_SUB_RAID"])
+    local gName = (group.getName and group:getName()) or group.name or "Detalhes do Grupo"
+    local gLeader = (group.getLeader and group:getLeader()) or group.leader or ""
+    local gCreator = (group.getCreator and group:getCreator()) or group.creator or gLeader
+    local gTime = (group.getTime and group:getTime()) or (group.getNote and group:getNote()) or group.time or group.note or ""
+    local gDesc = (group.getDescription and group:getDescription()) or group.description or ""
+    local gType = (group.getType and group:getType()) or group.type or "DUNGEON"
+
+    self._detailTitleText:SetText(gName)
+    self._detailNameBox:SetText(gName)
+    self._detailTimeBox:SetText(gTime)
+    self._detailLeaderBox:SetText(gLeader)
+    self._detailCreatorText:SetText("|cffffd200" .. gCreator .. "|r")
+    self._detailDescBox:SetText(gDesc)
+
+    self._detailSelectedType = tostring(gType):upper()
+    self:updateDetailTypeButtons()
+
+    if canEdit then
+        self._detailPermNotice:SetText("|cff00ff00Você é o criador deste grupo e pode editá-lo ou gerenciá-lo.|r")
+        self._detailNameBox:EnableMouse(true)
+        self._detailTimeBox:EnableMouse(true)
+        self._detailLeaderBox:EnableMouse(true)
+        self._detailDescBox:EnableMouse(true)
+        self._detailSaveBtn:Show()
+        self._detailAddMemberBtn:Show()
+        self._detailDeleteBtn:Show()
     else
-        m.icon:SetTexture("Interface\\Icons\\INV_Misc_GroupLooking")
-        m.subtitle:SetText(L["GROUP_DETAIL_SUB_MISC"])
+        self._detailPermNotice:SetText("|cffaaaaaa(Apenas o criador deste grupo pode editar os detalhes ou membros)|r")
+        self._detailNameBox:EnableMouse(false)
+        self._detailTimeBox:EnableMouse(false)
+        self._detailLeaderBox:EnableMouse(false)
+        self._detailDescBox:EnableMouse(false)
+        self._detailSaveBtn:Hide()
+        self._detailAddMemberBtn:Hide()
+        self._detailDeleteBtn:Hide()
     end
 
-    -- Preenche campos editáveis
-    m.nameEB:SetText(group:getName() or "")
-    m.noteEB:SetText(group:getNote() or "")
-
-    -- Líder
-    local leaderMember = self:findGuildMember(group:getLeader())
-    local lClass = self:resolveMemberClass(group:getLeader(), leaderMember and leaderMember:getClass())
-    m.selectedLeaderName = group:getLeader() or ""
-    m.leaderVal:SetText(getColoredMemberName(group:getLeader(), lClass))
-    if m.leaderClassIcon then
-        local lCoords = lClass ~= "" and CLASS_ICON_COORDS[lClass]
-        if lCoords then
-            m.leaderClassIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-            m.leaderClassIcon:SetTexCoord(lCoords[1], lCoords[2], lCoords[3], lCoords[4])
-            m.leaderClassIcon:Show()
-            m.leaderVal:SetPoint("LEFT", m.leaderClassIcon, "RIGHT", 4, 0)
-        else
-            m.leaderClassIcon:Hide()
-            m.leaderVal:SetPoint("LEFT", m.lCrown or m.icon, "RIGHT", 6, 0)
-        end
-    end
-
-    -- Renderiza membros
-    self:renderDetailMembers(group)
-
-    local canOfficer = false
-    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-    elseif IsGuildLeader and IsGuildLeader() then
-        canOfficer = true
-    elseif CanEditOfficerNote and CanEditOfficerNote() then
-        canOfficer = true
-    end
-    if m.delGroupBtn then
-        if m.delGroupBtn.SetMotionScriptsWhileDisabled then
-            m.delGroupBtn:SetMotionScriptsWhileDisabled(true)
-        end
-        if canOfficer then
-            m.delGroupBtn:Enable()
-            m.delGroupBtn:SetAlpha(1.0)
-        else
-            m.delGroupBtn:Disable()
-            m.delGroupBtn:SetAlpha(0.50)
-        end
-    end
-
-    m:Show()
-    if PlaySound then pcall(PlaySound, SOUNDKIT and SOUNDKIT.IG_CHARACTER_INFO_OPEN or 839) end
+    self:renderDetailMembers(group, canEdit)
+    self._detailModal:Show()
 end
 
---- Recarrega a tela de detalhes caso ela esteja aberta.
 function GroupView:refreshOpenDetailModal()
     if not self._detailModal or not self._detailModal:IsShown() or not self._currentDetailGroupId then
         return
     end
-
     for _, g in ipairs(self._groups or {}) do
         if g:getId() == self._currentDetailGroupId then
-            self:openGroupDetailModal(g)
-            break
+            self:openDetailModal(g)
+            return
+        end
+    end
+    self._detailModal:Hide()
+end
+
+function GroupView:createDetailModal()
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local modal = CreateFrame("Frame", "GM_GroupDetailModal", self._frame, template)
+    modal:SetSize(620, 560)
+    modal:SetPoint("CENTER", self._frame, "CENTER", 0, 0)
+    modal:SetFrameStrata("DIALOG")
+    modal:EnableMouse(true)
+    modal:Hide()
+    self._detailModal = modal
+
+    if modal.SetBackdrop then
+        modal:SetBackdrop(DIALOG_BACKDROP)
+        modal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
+        modal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+    end
+
+    local title = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", modal, "TOPLEFT", 20, -18)
+    title:SetText("Detalhes do Grupo")
+    self._detailTitleText = title
+
+    local permNotice = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    permNotice:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
+    self._detailPermNotice = permNotice
+
+    local closeBtn = CreateFrame("Button", nil, modal, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", modal, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(28, 28)
+    closeBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    -- Nome do Grupo
+    local nameLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    nameLabel:SetPoint("TOPLEFT", modal, "TOPLEFT", 24, -64)
+    nameLabel:SetText("Nome do Grupo:")
+
+    local nameBox = CreateFrame("EditBox", nil, modal, template)
+    nameBox:SetSize(270, 24)
+    nameBox:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -3)
+    styleBox(nameBox)
+    self._detailNameBox = nameBox
+
+    -- Horário
+    local timeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    timeLabel:SetPoint("LEFT", nameLabel, "RIGHT", 200, 0)
+    timeLabel:SetText("Horário Previsto:")
+
+    local timeBox = CreateFrame("EditBox", nil, modal, template)
+    timeBox:SetSize(270, 24)
+    timeBox:SetPoint("TOPLEFT", timeLabel, "BOTTOMLEFT", 0, -3)
+    styleBox(timeBox)
+    self._detailTimeBox = timeBox
+
+    -- Tipo do Grupo
+    local typeLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    typeLabel:SetPoint("TOPLEFT", nameBox, "BOTTOMLEFT", 0, -8)
+    typeLabel:SetText("Tipo do Grupo:")
+
+    local types = {
+        { id = "DUNGEON", label = "Masmorras" },
+        { id = "RAID",    label = "Raides" },
+        { id = "MISC",    label = "Diversos" },
+        { id = "FARM",    label = "Farm" },
+        { id = "QUESTS",  label = "Missões" },
+        { id = "PVP",     label = "PvP" },
+    }
+
+    self._detailTypeButtons = {}
+    self._detailSelectedType = "DUNGEON"
+    local prevBtn = nil
+
+    for _, t in ipairs(types) do
+        local btn = CreateFrame("Button", nil, modal, template)
+        btn:SetSize(66, 20)
+        if not prevBtn then
+            btn:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -3)
+        else
+            btn:SetPoint("LEFT", prevBtn, "RIGHT", 4, 0)
+        end
+        prevBtn = btn
+
+        if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+        local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        bText:SetText(t.label)
+        btn.label = bText
+        btn.typeId = t.id
+
+        btn:SetScript("OnClick", function()
+            local group = self:getCurrentDetailGroup()
+            local myFullName = self:getPlayerFullName()
+            if group and group:canEdit(myFullName, IsGuildLeader and IsGuildLeader()) then
+                self._detailSelectedType = t.id
+                self:updateDetailTypeButtons()
+            end
+        end)
+        table.insert(self._detailTypeButtons, btn)
+    end
+
+    -- Líder do Grupo
+    local leaderLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    leaderLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -32)
+    leaderLabel:SetText("Líder do Grupo:")
+
+    local leaderBox = CreateFrame("EditBox", nil, modal, template)
+    leaderBox:SetSize(270, 24)
+    leaderBox:SetPoint("TOPLEFT", leaderLabel, "BOTTOMLEFT", 0, -3)
+    styleBox(leaderBox)
+    self._detailLeaderBox = leaderBox
+
+    -- Criador do Grupo (Fixo)
+    local creatorLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    creatorLabel:SetPoint("LEFT", leaderLabel, "RIGHT", 200, 0)
+    creatorLabel:SetText("Criador do Grupo:")
+
+    local creatorBg = CreateFrame("Frame", nil, modal, template)
+    creatorBg:SetSize(270, 24)
+    creatorBg:SetPoint("TOPLEFT", creatorLabel, "BOTTOMLEFT", 0, -3)
+    if creatorBg.SetBackdrop then
+        creatorBg:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        creatorBg:SetBackdropColor(0.02, 0.015, 0.005, 0.70)
+        creatorBg:SetBackdropBorderColor(0.40, 0.28, 0.10, 0.80)
+    end
+    local creatorText = creatorBg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    creatorText:SetPoint("LEFT", creatorBg, "LEFT", 8, 0)
+    self._detailCreatorText = creatorText
+
+    -- Descrição
+    local descLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    descLabel:SetPoint("TOPLEFT", leaderBox, "BOTTOMLEFT", 0, -8)
+    descLabel:SetText("Descrição do Grupo:")
+
+    local descBg = CreateFrame("Frame", nil, modal, template)
+    descBg:SetSize(572, 44)
+    descBg:SetPoint("TOPLEFT", descLabel, "BOTTOMLEFT", 0, -3)
+    if descBg.SetBackdrop then
+        descBg:SetBackdrop(SUB_CONTAINER_BACKDROP)
+        descBg:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
+        descBg:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
+    end
+
+    local descBox = CreateFrame("EditBox", nil, descBg)
+    descBox:SetPoint("TOPLEFT", descBg, "TOPLEFT", 6, -3)
+    descBox:SetPoint("BOTTOMRIGHT", descBg, "BOTTOMRIGHT", -6, 3)
+    descBox:SetMultiLine(true)
+    descBox:SetAutoFocus(false)
+    descBox:SetFontObject("GameFontHighlightSmall")
+    self._detailDescBox = descBox
+
+    -- Membros do Grupo Header
+    local membersHeader = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    membersHeader:SetPoint("TOPLEFT", descBg, "BOTTOMLEFT", 0, -12)
+    membersHeader:SetText("Membros do Grupo:")
+
+    -- Botão "+ Adicionar Membro"
+    local addMemberBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    addMemberBtn:SetSize(130, 22)
+    addMemberBtn:SetPoint("RIGHT", modal, "RIGHT", -24, 0)
+    addMemberBtn:SetPoint("BOTTOM", membersHeader, "BOTTOM", 0, -2)
+    addMemberBtn:SetText("+ Adicionar Membro")
+    addMemberBtn:SetScript("OnClick", function()
+        self:openAddMemberModal()
+    end)
+    self._detailAddMemberBtn = addMemberBtn
+
+    -- ScrollFrame de Membros do Grupo
+    local memScroll = CreateFrame("ScrollFrame", "GM_DetailMemScrollFrame", modal, "UIPanelScrollFrameTemplate")
+    memScroll:SetPoint("TOPLEFT", membersHeader, "BOTTOMLEFT", 0, -6)
+    memScroll:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -46, 52)
+    self._detailMemScroll = memScroll
+
+    local memContent = CreateFrame("Frame", nil, memScroll)
+    memContent:SetSize(550, 10)
+    memScroll:SetScrollChild(memContent)
+    self._detailMemContent = memContent
+
+    -- Botões no Rodapé da Modal
+    local inviteWoWBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    inviteWoWBtn:SetSize(140, 24)
+    inviteWoWBtn:SetPoint("BOTTOMLEFT", modal, "BOTTOMLEFT", 24, 16)
+    inviteWoWBtn:SetText("Convidar no WoW")
+    inviteWoWBtn:SetScript("OnClick", function()
+        if self._currentDetailGroupId and self._onInviteGroupCallback then
+            self._onInviteGroupCallback(self._currentDetailGroupId)
+        end
+    end)
+
+    local deleteBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    deleteBtn:SetSize(110, 24)
+    deleteBtn:SetPoint("LEFT", inviteWoWBtn, "RIGHT", 10, 0)
+    deleteBtn:SetText("Excluir Grupo")
+    deleteBtn:SetScript("OnClick", function()
+        if self._currentDetailGroupId and self._onDeleteGroupCallback then
+            local ok = self._onDeleteGroupCallback(self._currentDetailGroupId)
+            if ok ~= false then
+                modal:Hide()
+            end
+        end
+    end)
+    self._detailDeleteBtn = deleteBtn
+
+    local saveBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    saveBtn:SetSize(120, 24)
+    saveBtn:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -24, 16)
+    saveBtn:SetText("Salvar Grupo")
+    saveBtn:SetScript("OnClick", function()
+        local gId = self._currentDetailGroupId
+        if not gId then return end
+        local name = nameBox:GetText() or ""
+        local gType = self._detailSelectedType or "DUNGEON"
+        local leader = leaderBox:GetText() or ""
+        local timeStr = timeBox:GetText() or ""
+        local descStr = descBox:GetText() or ""
+
+        if self._onUpdateGroupDetailsCallback then
+            local ok, err = self._onUpdateGroupDetailsCallback(gId, name, gType, leader, timeStr, descStr)
+            if ok then
+                modal:Hide()
+            else
+                print("|cffff4444[GuildManager]|r " .. (err or "Falha ao salvar."))
+            end
+        end
+    end)
+    self._detailSaveBtn = saveBtn
+end
+
+function GroupView:updateDetailTypeButtons()
+    for _, btn in ipairs(self._detailTypeButtons or {}) do
+        local isActive = (btn.typeId == self._detailSelectedType)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(0.25, 0.18, 0.05, 0.95)
+                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                btn.label:SetTextColor(1.0, 0.82, 0.20)
+            else
+                btn:SetBackdropColor(0.04, 0.025, 0.01, 0.75)
+                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.80)
+                btn.label:SetTextColor(0.80, 0.80, 0.80)
+            end
         end
     end
 end
 
---- Renderiza a lista de membros na janela de detalhes do grupo.
----@param group Group
-function GroupView:renderDetailMembers(group)
-    local m = self._detailModal
-    if not m then return end
-
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    local members = group:getMembers() or {}
-    local gType = group:getType()
-    local leaderName = group:getLeader() or ""
-    local roleCounts = group:getRoleCounts()
-
-    -- Resumo de funções
-    if gType == GroupType.DUNGEON or gType == GroupType.RAID then
-        m.membersSummary:SetText(string.format(
-            L["GROUP_MEMBERS_SUMMARY_ROLES"],
-            roleCounts.tank, roleCounts.healer, roleCounts.dps, #members
-        ))
-    else
-        m.membersSummary:SetText(string.format(L["GROUP_MEMBERS_SUMMARY_TOTAL"], #members))
+function GroupView:getCurrentDetailGroup()
+    if not self._currentDetailGroupId then return nil end
+    for _, g in ipairs(self._groups or {}) do
+        if g:getId() == self._currentDetailGroupId then
+            return g
+        end
     end
+    return nil
+end
 
-    local rowHeight = 26
-    for i, member in ipairs(members) do
-        local row = m.memberRows[i]
-        if not row then
-            row = CreateFrame("Frame", nil, m.memberChild)
-            row:SetHeight(rowHeight)
-            row:SetWidth(550)
+function GroupView:renderDetailMembers(group, canEdit)
+    if not self._detailMemContent then return end
 
-            local bg = row:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints(row)
-            row.bg = bg
+    if self._detailMemberFrames then
+        for _, f in ipairs(self._detailMemberFrames) do
+            f:Hide()
+        end
+    end
+    self._detailMemberFrames = {}
 
-            -- Ícone de Líder
-            local crown = row:CreateTexture(nil, "ARTWORK")
-            crown:SetSize(16, 16)
-            crown:SetPoint("LEFT", row, "LEFT", 4, 0)
-            crown:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
-            row.crown = crown
+    local members = (group.getMembers and group:getMembers()) or group.members or {}
+    local leaderName = (group.getLeader and group:getLeader()) or group.leader or ""
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local yOffset = 0
+    local rowHeight = 28
+    local myFullName = self:getPlayerFullName()
+    local myNorm = (myFullName:match("^[^-]+") or myFullName):match("^%s*(.-)%s*$"):lower()
 
-            -- Botão / Badge de Função
-            local roleBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            roleBtn:SetSize(60, 20)
-            roleBtn:SetPoint("LEFT", crown, "RIGHT", 6, 0)
-            row.roleBtn = roleBtn
+    for _, m in ipairs(members) do
+        local mName = m.name or "Membro"
+        local mRole = m.role or "NONE"
+        local mClass = self:resolveMemberClass(mName, m.class)
+        local isLeader = (leaderName ~= "" and leaderName:lower() == mName:lower())
 
-            -- Ícone da Classe
-            local classIcon = row:CreateTexture(nil, "ARTWORK")
-            classIcon:SetSize(18, 18)
-            classIcon:SetPoint("LEFT", roleBtn, "RIGHT", 6, 0)
-            classIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-            row.classIcon = classIcon
+        local row = CreateFrame("Frame", nil, self._detailMemContent, template)
+        row:SetSize(540, rowHeight)
+        row:SetPoint("TOPLEFT", self._detailMemContent, "TOPLEFT", 0, -yOffset)
 
-            -- Nome do Membro
-            local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-            nameText:SetPoint("LEFT", classIcon, "RIGHT", 6, 0)
-            nameText:SetPoint("RIGHT", row, "RIGHT", -125, 0)
-            nameText:SetJustifyH("LEFT")
-            row.nameText = nameText
+        if row.SetBackdrop then
+            row:SetBackdrop(SUB_CONTAINER_BACKDROP)
+            row:SetBackdropColor(0.04, 0.025, 0.01, 0.70)
+            row:SetBackdropBorderColor(0.40, 0.28, 0.10, 0.65)
+        end
 
-            -- Botão "Tornar Líder"
-            local makeLeaderBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            makeLeaderBtn:SetSize(90, 20)
-            makeLeaderBtn:SetPoint("RIGHT", row, "RIGHT", -30, 0)
-            makeLeaderBtn:SetText(L["GROUP_MAKE_LEADER_BTN"] or "Tornar Líder")
-            row.makeLeaderBtn = makeLeaderBtn
+        local cIcon = row:CreateTexture(nil, "ARTWORK")
+        cIcon:SetSize(20, 20)
+        cIcon:SetPoint("LEFT", row, "LEFT", 6, 0)
+        cIcon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES")
+        local coords = CLASS_ICON_COORDS[mClass] or { 0, 0.25, 0, 0.25 }
+        cIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
 
-            -- Botão "Remover" (×)
+        local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        nameText:SetPoint("LEFT", cIcon, "RIGHT", 8, 0)
+        local colored = getColoredMemberName(mName, mClass)
+        if isLeader then
+            colored = "👑 " .. colored .. " |cffffd200(Líder)|r"
+        end
+        nameText:SetText(colored .. string.format(" |cff888888(Nv %d)|r", m.level or 1))
+
+        -- Função (Role)
+        local roleText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        roleText:SetPoint("RIGHT", row, "RIGHT", canEdit and -70 or -10, 0)
+        roleText:SetText(getRoleFormatted(mRole))
+
+        -- Ações se puder editar
+        if canEdit then
             local removeBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
             removeBtn:SetSize(22, 20)
-            removeBtn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-            removeBtn:SetText("×")
-            row.removeBtn = removeBtn
-
-            m.memberRows[i] = row
-        else
-            if not row.classIcon then
-                local classIcon = row:CreateTexture(nil, "ARTWORK")
-                classIcon:SetSize(18, 18)
-                classIcon:SetPoint("LEFT", row.roleBtn, "RIGHT", 6, 0)
-                classIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-                row.classIcon = classIcon
-            end
-            if row.lvlText then
-                row.lvlText:Hide()
-            end
-            row.nameText:ClearAllPoints()
-            row.nameText:SetPoint("LEFT", row.classIcon, "RIGHT", 6, 0)
-            row.nameText:SetPoint("RIGHT", row, "RIGHT", -125, 0)
-        end
-
-        -- Cores alternadas das linhas
-        if i % 2 == 0 then
-            row.bg:SetColorTexture(0.06, 0.04, 0.02, 0.50)
-        else
-            row.bg:SetColorTexture(0.03, 0.02, 0.01, 0.35)
-        end
-
-        local isLeader = (member.name:lower() == leaderName:lower())
-        if isLeader then
-            row.crown:Show()
-            row.makeLeaderBtn:Hide()
-        else
-            row.crown:Hide()
-            row.makeLeaderBtn:SetText(L["GROUP_MAKE_LEADER_BTN"] or "Tornar Líder")
-            row.makeLeaderBtn:Show()
-            row.makeLeaderBtn:SetScript("OnClick", function()
-                if self._onSetLeaderCallback then
-                    self._onSetLeaderCallback(group:getId(), member.name)
+            removeBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+            removeBtn:SetText("X")
+            removeBtn:SetScript("OnClick", function()
+                if self._onRemoveMemberCallback then
+                    self._onRemoveMemberCallback(group:getId(), mName)
                 end
             end)
-        end
 
-        -- Função
-        if gType ~= GroupType.MISC then
-            row.roleBtn:SetText(getRoleFormatted(member.role))
-            row.roleBtn:Show()
-            row.roleBtn:SetScript("OnClick", function()
-                local nextRole = GroupRole.DPS
-                if member.role == GroupRole.TANK then
-                    nextRole = GroupRole.HEALER
-                elseif member.role == GroupRole.HEALER then
-                    nextRole = GroupRole.DPS
-                elseif member.role == GroupRole.DPS then
-                    nextRole = GroupRole.TANK
-                end
-                if self._onSetRoleCallback then
-                    self._onSetRoleCallback(group:getId(), member.name, nextRole)
-                end
-            end)
-        else
-            row.roleBtn:SetText("|cff888888" .. L["GROUP_ROLE_MEMBER"] .. "|r")
-            row.roleBtn:SetScript("OnClick", nil)
-        end
-
-        -- Resolução e atualização dinâmica da classe do membro
-        local resolvedClass = self:resolveMemberClass(member.name, member.class)
-        if (not member.class or member.class == "") and resolvedClass ~= "" then
-            member.class = resolvedClass
-            if group.updateMemberClass then
-                group:updateMemberClass(member.name, resolvedClass)
-            end
-        end
-
-        -- Ícone da Classe
-        local coords = resolvedClass ~= "" and CLASS_ICON_COORDS[resolvedClass]
-        if coords and row.classIcon then
-            row.classIcon:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
-            row.classIcon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-            row.classIcon:Show()
-        elseif row.classIcon then
-            row.classIcon:Hide()
-        end
-
-        -- Nome colorido com a cor da classe
-        row.nameText:SetText(getColoredMemberName(member.name, resolvedClass))
-
-        -- Nível removido (o usuário solicitou: "remova o nível")
-        if row.lvlText then
-            row.lvlText:Hide()
-        end
-
-        -- Botão Remover
-        row.removeBtn:SetScript("OnClick", function()
-            if self._onRemoveMemberCallback then
-                self._onRemoveMemberCallback(group:getId(), member.name)
-            end
-        end)
-
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", m.memberChild, "TOPLEFT", 0, -((i - 1) * rowHeight))
-        row:Show()
-    end
-
-    for j = #members + 1, #m.memberRows do
-        m.memberRows[j]:Hide()
-    end
-
-    m.memberChild:SetHeight(math.max(1, #members * rowHeight))
-end
-
---- Atualiza a visualização dos botões de tipo na modal de criação.
-function GroupView:updateCreateModalTypeButtons(typeButtons, activeType)
-    for tId, btn in pairs(typeButtons) do
-        local isActive = (tId == activeType)
-        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
-            if isActive then
-                btn:SetBackdropColor(PALETTE.ACTIVE_TAB_BG[1], PALETTE.ACTIVE_TAB_BG[2], PALETTE.ACTIVE_TAB_BG[3], 0.95)
-                btn:SetBackdropBorderColor(PALETTE.ACTIVE_TAB_BORDER[1], PALETTE.ACTIVE_TAB_BORDER[2], PALETTE.ACTIVE_TAB_BORDER[3], 1.0)
-                btn.txt:SetTextColor(1.0, 0.85, 0.20)
-            else
-                btn:SetBackdropColor(PALETTE.INACTIVE_TAB_BG[1], PALETTE.INACTIVE_TAB_BG[2], PALETTE.INACTIVE_TAB_BG[3], 0.80)
-                btn:SetBackdropBorderColor(PALETTE.INACTIVE_TAB_BORDER[1], PALETTE.INACTIVE_TAB_BORDER[2], PALETTE.INACTIVE_TAB_BORDER[3], 0.85)
-                btn.txt:SetTextColor(0.80, 0.80, 0.80)
-            end
-        end
-    end
-end
-
-function GroupView:updateCreateModalRoleVisibility()
-    local m = self._createModal
-    if not m or not m.roleContainer then return end
-    if m.selectedType == GroupType.MISC then
-        m.roleContainer:Hide()
-    else
-        m.roleContainer:Show()
-    end
-end
-
-function GroupView:updateRoleButtons(roleButtons, activeRole)
-    for rId, btn in pairs(roleButtons) do
-        local isActive = (rId == activeRole)
-        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
-            if isActive then
-                local c = btn.def.color or { 1.0, 0.82, 0.20 }
-                btn:SetBackdropColor(c[1] * 0.35, c[2] * 0.35, c[3] * 0.35, 0.95)
-                btn:SetBackdropBorderColor(c[1], c[2], c[3], 1.0)
-                btn.txt:SetTextColor(c[1], c[2], c[3])
-            else
-                btn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.80)
-                btn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.85)
-                btn.txt:SetTextColor(0.70, 0.70, 0.70)
-            end
-        end
-    end
-end
-
-function GroupView:autoSelectRoleForClass(roleButtons, classToken, setCallback)
-    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("autoAssignGroupRole") == false then
-        return
-    end
-    local raw = (classToken or ""):upper()
-    local upper = CLASS_NAME_TO_TOKEN[raw] or raw
-    local chosen = GroupRole.DPS
-
-    if upper == "PRIEST" then
-        chosen = GroupRole.HEALER
-    elseif upper == "WARRIOR" or upper == "DEATHKNIGHT" then
-        chosen = GroupRole.TANK
-    elseif upper == "PALADIN" or upper == "DRUID" or upper == "SHAMAN" then
-        chosen = GroupRole.HEALER
-    else
-        chosen = GroupRole.DPS
-    end
-
-    if setCallback then setCallback(chosen) end
-    self:updateRoleButtons(roleButtons, chosen)
-end
-
-function GroupView:openCreateModal(groupType)
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    local canOfficer = false
-    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-    elseif IsGuildLeader and IsGuildLeader() then
-        canOfficer = true
-    elseif CanEditOfficerNote and CanEditOfficerNote() then
-        canOfficer = true
-    end
-
-    if not canOfficer then
-        print(string.format("|cffff4444[GuildManager]|r %s", L["GROUP_ERR_OFFICER_ONLY"]))
-        return
-    end
-
-    local m = self._createModal
-    if not m then return end
-
-    self:updateCreateModalLocale()
-
-    groupType = groupType or GroupType.DUNGEON
-    m.selectedType = groupType
-    m.selectedLeader = nil
-    m.selectedLeaderRole = (groupType ~= GroupType.MISC) and GroupRole.DPS or GroupRole.NONE
-
-    m.nameEB:SetText("")
-    m.noteEB:SetText("")
-    m.leaderText:SetText(L["GROUP_LEADER_PICK_HINT"])
-    m.errorText:SetText("")
-
-    self:updateCreateModalTypeButtons(m.typeButtons, groupType)
-    self:updateRoleButtons(m.roleButtons, m.selectedLeaderRole)
-    self:updateCreateModalRoleVisibility()
-
-    m:Show()
-    m.nameEB:SetFocus()
-end
-
-function GroupView:openAddMemberModal(group)
-    local m = self._addMemberModal
-    if not m or not group then return end
-
-    self:updateAddMemberModalLocale()
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-
-    m.targetGroup = group
-    m.selectedMember = nil
-    m.selectedRole = (group:getType() ~= GroupType.MISC) and GroupRole.DPS or GroupRole.NONE
-    m.subtitle:SetText(string.format(L["GROUP_ADD_MEMBER_SUBTITLE"], group:getName() or ""))
-    m.searchEB:SetText("")
-    m.errorText:SetText("")
-
-    if group:getType() == GroupType.MISC then
-        m.roleContainer:Hide()
-    else
-        m.roleContainer:Show()
-        self:updateRoleButtons(m.roleButtons, m.selectedRole)
-    end
-
-    self:filterAddMemberList("")
-    m:Show()
-    m.searchEB:SetFocus()
-end
-
-function GroupView:filterAddMemberList(filterText)
-    local m = self._addMemberModal
-    if not m or not m.targetGroup then return end
-
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    local group = m.targetGroup
-    local search = (filterText or ""):lower():match("^%s*(.-)%s*$")
-    local candidates = {}
-
-    for _, member in ipairs(self._guildMembers or {}) do
-        local mName = member:getName()
-        if not group:hasMember(mName) then
-            if search == "" or (mName:lower():find(search, 1, true)) then
-                table.insert(candidates, member)
-            end
-        end
-    end
-
-    table.sort(candidates, function(a, b)
-        return (a:getName() or "") < (b:getName() or "")
-    end)
-
-    local rowHeight = 22
-    for i, candidate in ipairs(candidates) do
-        local row = m.memberRows[i]
-        if not row then
-            row = CreateFrame("Button", nil, m.memberChild)
-            row:SetHeight(rowHeight)
-            row:SetWidth(330)
-
-            local hl = row:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints(row)
-            hl:SetColorTexture(1.0, 0.82, 0.0, 0.15)
-            row:SetHighlightTexture(hl)
-
-            local txt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            txt:SetPoint("LEFT", row, "LEFT", 6, 0)
-            row.txt = txt
-
-            local rnk = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            rnk:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-            row.rnk = rnk
-
-            m.memberRows[i] = row
-        end
-
-        local cClass = self:resolveMemberClass(candidate:getName(), candidate:getClass())
-        local nameStr = getColoredMemberName(candidate:getName(), cClass)
-        local lvl = candidate:getLevel() or 1
-        row.txt:SetText(string.format("%s " .. L["LEVEL_ABBR_FMT"], nameStr, lvl))
-        row.rnk:SetText(candidate:getRankName() or "")
-
-        row:SetScript("OnClick", function()
-            m.selectedMember = candidate
-            m.errorText:SetText("")
-            for _, r in ipairs(m.memberRows) do
-                if r.selBg then r.selBg:Hide() end
-            end
-            if not row.selBg then
-                local sel = row:CreateTexture(nil, "BACKGROUND")
-                sel:SetAllPoints(row)
-                sel:SetColorTexture(0.2, 0.6, 1.0, 0.25)
-                row.selBg = sel
-            end
-            row.selBg:Show()
-
-            if group:getType() ~= GroupType.MISC and candidate:getClass() then
-                self:autoSelectRoleForClass(m.roleButtons, candidate:getClass(), function(r)
-                    m.selectedRole = r
+            if not isLeader then
+                local makeLeaderBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                makeLeaderBtn:SetSize(24, 20)
+                makeLeaderBtn:SetPoint("RIGHT", removeBtn, "LEFT", -4, 0)
+                makeLeaderBtn:SetText("👑")
+                makeLeaderBtn:SetScript("OnClick", function()
+                    if self._onSetLeaderCallback then
+                        self._onSetLeaderCallback(group:getId(), mName)
+                    end
                 end)
             end
-        end)
-
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", m.memberChild, "TOPLEFT", 0, -((i - 1) * rowHeight))
-        row:Show()
-    end
-
-    for j = #candidates + 1, #m.memberRows do
-        m.memberRows[j]:Hide()
-    end
-
-    m.memberChild:SetHeight(math.max(1, #candidates * rowHeight))
-end
-
-function GroupView:openLeaderPicker(onChosen)
-    local p = self._leaderPickerModal
-    if not p then return end
-
-    self:updateLeaderPickerLocale()
-    p.onChosen = onChosen
-    p.searchEB:SetText("")
-    self:filterLeaderPickerList("")
-    p:Show()
-    p.searchEB:SetFocus()
-end
-
-function GroupView:filterLeaderPickerList(filterText)
-    local p = self._leaderPickerModal
-    if not p then return end
-
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    local search = (filterText or ""):lower():match("^%s*(.-)%s*$")
-    local candidates = {}
-
-    for _, member in ipairs(self._guildMembers or {}) do
-        local mName = member:getName()
-        if search == "" or (mName:lower():find(search, 1, true)) then
-            table.insert(candidates, member)
+        else
+            -- Se não pode editar, mas é o próprio jogador: permite sair do grupo
+            local mNorm = (mName:match("^[^-]+") or mName):match("^%s*(.-)%s*$"):lower()
+            if mNorm == myNorm then
+                local leaveBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+                leaveBtn:SetSize(60, 20)
+                leaveBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+                leaveBtn:SetText("Sair")
+                leaveBtn:SetScript("OnClick", function()
+                    if self._onRemoveMemberCallback then
+                        self._onRemoveMemberCallback(group:getId(), mName)
+                    end
+                end)
+            end
         end
+
+        table.insert(self._detailMemberFrames, row)
+        yOffset = yOffset + rowHeight + 2
     end
 
-    table.sort(candidates, function(a, b)
-        return (a:getName() or "") < (b:getName() or "")
+    self._detailMemContent:SetHeight(math.max(yOffset, 10))
+end
+
+-- =========================================================================
+-- MODAL 4: ADICIONAR MEMBRO AO GRUPO
+-- =========================================================================
+
+function GroupView:openAddMemberModal()
+    if not self._addMemberModal then return end
+    self._addMemberNameBox:SetText("")
+    self._addMemberSelectedRole = GroupRole.DPS
+    self:updateAddMemberRoleButtons()
+    self._addMemberModal:Show()
+    self._addMemberNameBox:SetFocus()
+end
+
+function GroupView:createAddMemberModal()
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local modal = CreateFrame("Frame", "GM_AddMemberModal", self._frame, template)
+    modal:SetSize(380, 240)
+    modal:SetPoint("CENTER", self._frame, "CENTER", 0, 0)
+    modal:SetFrameStrata("TOOLTIP")
+    modal:EnableMouse(true)
+    modal:Hide()
+    self._addMemberModal = modal
+
+    if modal.SetBackdrop then
+        modal:SetBackdrop(DIALOG_BACKDROP)
+        modal:SetBackdropColor(PALETTE.FRAME_BG[1], PALETTE.FRAME_BG[2], PALETTE.FRAME_BG[3], 0.98)
+        modal:SetBackdropBorderColor(PALETTE.FRAME_BORDER[1], PALETTE.FRAME_BORDER[2], PALETTE.FRAME_BORDER[3], 1.0)
+    end
+
+    local title = modal:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", modal, "TOPLEFT", 20, -18)
+    title:SetText("Adicionar Membro ao Grupo")
+
+    local closeBtn = CreateFrame("Button", nil, modal, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", modal, "TOPRIGHT", -4, -4)
+    closeBtn:SetSize(28, 28)
+    closeBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    local nameLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    nameLabel:SetPoint("TOPLEFT", modal, "TOPLEFT", 24, -54)
+    nameLabel:SetText("Nome do Personagem (Guilda):")
+
+    local nameBox = CreateFrame("EditBox", nil, modal, template)
+    nameBox:SetSize(332, 26)
+    nameBox:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -4)
+    styleBox(nameBox)
+    self._addMemberNameBox = nameBox
+
+    local roleLabel = modal:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    roleLabel:SetPoint("TOPLEFT", nameBox, "BOTTOMLEFT", 0, -12)
+    roleLabel:SetText("Função no Grupo:")
+
+    local roles = {
+        { id = GroupRole.TANK,   label = "Tank" },
+        { id = GroupRole.HEALER, label = "Curador" },
+        { id = GroupRole.DPS,    label = "Dano (DPS)" },
+        { id = GroupRole.NONE,   label = "Nenhuma" },
+    }
+
+    self._addMemberRoleButtons = {}
+    self._addMemberSelectedRole = GroupRole.DPS
+    local prevBtn = nil
+
+    for _, r in ipairs(roles) do
+        local btn = CreateFrame("Button", nil, modal, template)
+        btn:SetSize(78, 22)
+        if not prevBtn then
+            btn:SetPoint("TOPLEFT", roleLabel, "BOTTOMLEFT", 0, -4)
+        else
+            btn:SetPoint("LEFT", prevBtn, "RIGHT", 6, 0)
+        end
+        prevBtn = btn
+
+        if btn.SetBackdrop then btn:SetBackdrop(SUB_CONTAINER_BACKDROP) end
+        local bText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        bText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        bText:SetText(r.label)
+        btn.label = bText
+        btn.roleId = r.id
+
+        btn:SetScript("OnClick", function()
+            self._addMemberSelectedRole = r.id
+            self:updateAddMemberRoleButtons()
+        end)
+        table.insert(self._addMemberRoleButtons, btn)
+    end
+
+    local cancelBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(80, 24)
+    cancelBtn:SetPoint("BOTTOMRIGHT", modal, "BOTTOMRIGHT", -20, 16)
+    cancelBtn:SetText("Cancelar")
+    cancelBtn:SetScript("OnClick", function() modal:Hide() end)
+
+    local confirmBtn = CreateFrame("Button", nil, modal, "UIPanelButtonTemplate")
+    confirmBtn:SetSize(100, 24)
+    confirmBtn:SetPoint("RIGHT", cancelBtn, "LEFT", -10, 0)
+    confirmBtn:SetText("Adicionar")
+    confirmBtn:SetScript("OnClick", function()
+        local gId = self._currentDetailGroupId
+        if not gId then return end
+        local memberName = nameBox:GetText() or ""
+        if memberName:match("^%s*$") then
+            print("|cffff4444[GuildManager]|r Digite o nome do membro.")
+            return
+        end
+
+        local mObj = self:findGuildMember(memberName)
+        local finalName = mObj and mObj:getName() or memberName
+
+        if self._onAddMemberCallback then
+            local ok, err = self._onAddMemberCallback(gId, finalName, self._addMemberSelectedRole)
+            if ok then
+                modal:Hide()
+            else
+                print("|cffff4444[GuildManager]|r " .. (err or "Falha ao adicionar membro."))
+            end
+        end
     end)
-
-    local rowHeight = 22
-    for i, candidate in ipairs(candidates) do
-        local row = p.rows[i]
-        if not row then
-            row = CreateFrame("Button", nil, p.child)
-            row:SetHeight(rowHeight)
-            row:SetWidth(280)
-
-            local hl = row:CreateTexture(nil, "HIGHLIGHT")
-            hl:SetAllPoints(row)
-            hl:SetColorTexture(1.0, 0.82, 0.0, 0.15)
-            row:SetHighlightTexture(hl)
-
-            local txt = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            txt:SetPoint("LEFT", row, "LEFT", 6, 0)
-            row.txt = txt
-
-            p.rows[i] = row
-        end
-
-        local cClass = self:resolveMemberClass(candidate:getName(), candidate:getClass())
-        local nameStr = getColoredMemberName(candidate:getName(), cClass)
-        local lvl = candidate:getLevel() or 1
-        row.txt:SetText(string.format("%s " .. L["LEVEL_ABBR_FMT"], nameStr, lvl))
-
-        row:SetScript("OnClick", function()
-            if p.onChosen then
-                p.onChosen(candidate)
-            end
-            p:Hide()
-        end)
-
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", p.child, "TOPLEFT", 0, -((i - 1) * rowHeight))
-        row:Show()
-    end
-
-    for j = #candidates + 1, #p.rows do
-        p.rows[j]:Hide()
-    end
-
-    p.child:SetHeight(math.max(1, #candidates * rowHeight))
 end
 
-function GroupView:setGroups(groups)
-    self._groups = groups or {}
-    self:renderGroups()
-    self:updateCreatePermissions()
-end
-
-function GroupView:setGuildMembers(members)
-    self._guildMembers = members or {}
-end
-
---- Atualiza o estado dos botões de criação de grupos conforme o cargo de Oficial ou Líder da Guilda.
-function GroupView:updateCreatePermissions()
-    local canOfficer = false
-    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
-        canOfficer = _G.GM.guildRosterService:isPlayerOfficerOrLeader()
-    elseif IsGuildLeader and IsGuildLeader() then
-        canOfficer = true
-    elseif CanEditOfficerNote and CanEditOfficerNote() then
-        canOfficer = true
-    end
-
-    for _, btn in ipairs(self._createButtons or {}) do
-        if btn.SetMotionScriptsWhileDisabled then
-            btn:SetMotionScriptsWhileDisabled(true)
-        end
-        if canOfficer then
-            btn:Enable()
-            btn:SetAlpha(1.0)
-        else
-            btn:Disable()
-            btn:SetAlpha(0.50)
-        end
-    end
-
-    if self._createModal and self._createModal.saveBtn then
-        local sBtn = self._createModal.saveBtn
-        if sBtn.SetMotionScriptsWhileDisabled then
-            sBtn:SetMotionScriptsWhileDisabled(true)
-        end
-        if canOfficer then
-            sBtn:Enable()
-            sBtn:SetAlpha(1.0)
-        else
-            sBtn:Disable()
-            sBtn:SetAlpha(0.50)
-        end
-    end
-end
-
---- Atualiza os textos da modal de criação de novo grupo.
-function GroupView:updateCreateModalLocale()
-    local m = self._createModal
-    if not m then return end
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-
-    if m.titleText then m.titleText:SetText(L["GROUP_CREATE_MODAL_TITLE"]) end
-    if m.nameLabel then m.nameLabel:SetText(L["GROUP_NAME_LABEL"]) end
-    if m.typeLabel then m.typeLabel:SetText(L["GROUP_TYPE_LABEL"]) end
-    if m.noteLabel then m.noteLabel:SetText(L["GROUP_NOTE_LABEL"]) end
-    if m.leaderLabel then m.leaderLabel:SetText(L["GROUP_LEADER_LABEL"]) end
-    if m.leaderPickBtn then m.leaderPickBtn:SetText(L["GROUP_SELECT_BTN"]) end
-    if m.roleLabel then m.roleLabel:SetText(L["GROUP_ROLE_LABEL"]) end
-    if m.saveBtn then m.saveBtn:SetText(L["GROUP_CREATE_SUBMIT"]) end
-    if m.cancelBtn then m.cancelBtn:SetText(L["CANCEL"]) end
-
-    if not m.selectedLeader and m.leaderText then
-        m.leaderText:SetText(L["GROUP_LEADER_PICK_HINT"])
-    end
-
-    if m.typeButtons and m.typeDefs then
-        for _, tDef in ipairs(m.typeDefs) do
-            local btn = m.typeButtons[tDef.id]
-            if btn and btn.txt then
-                btn.txt:SetText(L[tDef.labelKey] or tDef.labelKey)
-            end
-        end
-    end
-
-    if m.roleButtons and m.roleDefs then
-        for _, rDef in ipairs(m.roleDefs) do
-            local btn = m.roleButtons[rDef.id]
-            if btn and btn.txt then
-                btn.txt:SetText(L[rDef.labelKey] or rDef.labelKey)
+function GroupView:updateAddMemberRoleButtons()
+    for _, btn in ipairs(self._addMemberRoleButtons or {}) do
+        local isActive = (btn.roleId == self._addMemberSelectedRole)
+        if btn.SetBackdropColor and btn.SetBackdropBorderColor then
+            if isActive then
+                btn:SetBackdropColor(0.25, 0.18, 0.05, 0.95)
+                btn:SetBackdropBorderColor(1.0, 0.82, 0.20, 1.0)
+                btn.label:SetTextColor(1.0, 0.82, 0.20)
+            else
+                btn:SetBackdropColor(0.04, 0.025, 0.01, 0.75)
+                btn:SetBackdropBorderColor(0.50, 0.35, 0.15, 0.80)
+                btn.label:SetTextColor(0.80, 0.80, 0.80)
             end
         end
     end
 end
 
---- Atualiza os textos da modal de detalhes e gerenciamento do grupo.
-function GroupView:updateDetailModalLocale()
-    local m = self._detailModal
-    if not m then return end
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-
-    if m.title then m.title:SetText(L["GROUP_DETAIL_TITLE"]) end
-    if m.nameLbl then m.nameLbl:SetText(L["GROUP_NAME_LABEL_PLAIN"]) end
-    if m.noteLbl then m.noteLbl:SetText(L["GROUP_NOTE_LABEL_PLAIN"]) end
-    if m.leaderLbl then m.leaderLbl:SetText(L["GROUP_CURRENT_LEADER_LABEL"]) end
-    if m.changeLeaderBtn then m.changeLeaderBtn:SetText(L["GROUP_CHANGE_LEADER_BTN"]) end
-    if m.saveInfoBtn then m.saveInfoBtn:SetText(L["GROUP_SAVE_INFO_BTN"]) end
-    if m.membersHeader then m.membersHeader:SetText(L["GROUP_MEMBERS_HEADER"]) end
-    if m.addMemberBtn then m.addMemberBtn:SetText(L["GROUP_ADD_MEMBER_BTN"]) end
-    if m.inviteAllBtn then m.inviteAllBtn:SetText(L["INVITE_ALL"]) end
-    if m.delGroupBtn then m.delGroupBtn:SetText(L["GROUP_DELETE_BTN"]) end
-    if m.closeDetailBtn then m.closeDetailBtn:SetText(L["CLOSE"]) end
-
-    if m.currentGroup then
-        local gType = m.currentGroup:getType()
-        if gType == GroupType.DUNGEON then
-            m.subtitle:SetText(L["GROUP_DETAIL_SUB_DUNGEON"])
-        elseif gType == GroupType.RAID then
-            m.subtitle:SetText(L["GROUP_DETAIL_SUB_RAID"])
-        else
-            m.subtitle:SetText(L["GROUP_DETAIL_SUB_MISC"])
-        end
-    end
+function GroupView:createModals()
+    self:createCreateGroupModal()
+    self:createCreateLFGModal()
+    self:createDetailModal()
+    self:createAddMemberModal()
 end
-
---- Atualiza os textos da modal de adicionar membro.
-function GroupView:updateAddMemberModalLocale()
-    local m = self._addMemberModal
-    if not m then return end
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-
-    if m.titleText then m.titleText:SetText(L["GROUP_ADD_MEMBER_TITLE"]) end
-    if m.searchHint then m.searchHint:SetText(L["GROUP_ADD_MEMBER_SEARCH"]) end
-    if m.roleLabel then m.roleLabel:SetText(L["GROUP_MEMBER_ROLE_LABEL"]) end
-    if m.addBtn then m.addBtn:SetText(L["GROUP_ADD_MEMBER_SUBMIT"]) end
-    if m.cancelBtn then m.cancelBtn:SetText(L["CANCEL"]) end
-
-    if m.roleButtons and m.roleDefs then
-        for _, rDef in ipairs(m.roleDefs) do
-            local btn = m.roleButtons[rDef.id]
-            if btn and btn.txt then
-                btn.txt:SetText(L[rDef.labelKey] or rDef.labelKey)
-            end
-        end
-    end
-
-    if m.targetGroup and m.subtitle then
-        m.subtitle:SetText(string.format(L["GROUP_ADD_MEMBER_SUBTITLE"], m.targetGroup:getName() or ""))
-    end
-end
-
---- Atualiza os textos do modal picker de líderes.
-function GroupView:updateLeaderPickerLocale()
-    local p = self._leaderPickerModal
-    if not p then return end
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-
-    if p.titleText then p.titleText:SetText(L["GROUP_PICK_LEADER_TITLE"]) end
-    if p.searchHint then p.searchHint:SetText(L["GROUP_PICK_LEADER_SEARCH"]) end
-end
-
---- Atualiza dinamicamente todos os textos da interface de grupos.
-function GroupView:updateLocale()
-    local L = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    if not self._frame then return end
-
-    if self._titleText then
-        self._titleText:SetText(L["GROUPS_TITLE"])
-    end
-    if self._subtitleText then
-        self._subtitleText:SetText(L["GROUPS_SUBTITLE"])
-    end
-
-    if self._columns then
-        for colType, colData in pairs(self._columns) do
-            if colData.headerTitle and colData.def then
-                colData.headerTitle:SetText(colData.def.titleColor .. L[colData.def.titleKey] .. "|r")
-            end
-            if colData.headerSub and colData.def then
-                colData.headerSub:SetText("|cffaaaaaa" .. L[colData.def.subKey] .. "|r")
-            end
-            if colData.createBtn then
-                colData.createBtn:SetText(L["GROUP_CREATE_BTN"])
-            end
-            if colData.emptyText then
-                colData.emptyText:SetText(L["GROUP_EMPTY_COL"])
-            end
-        end
-    end
-
-    self:updateCreateModalLocale()
-    self:updateDetailModalLocale()
-    self:updateAddMemberModalLocale()
-    self:updateLeaderPickerLocale()
-
-    if self.renderGroups then
-        self:renderGroups()
-    end
-end
-
-function GroupView:show()
-    if not self._frame then self:createUI() end
-    self:updateLocale()
-    self:updateCreatePermissions()
-    self._frame:Show()
-end
-
-function GroupView:hide()
-    if self._frame then self._frame:Hide() end
-end
-
-function GroupView:toggle()
-    if self:isShown() then self:hide() else self:show() end
-end
-
-function GroupView:getFrame() return self._frame end
-function GroupView:isShown() return self._frame and self._frame:IsShown() or false end
 
 _G.GroupView = GroupView

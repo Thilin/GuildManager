@@ -14,6 +14,7 @@ Locales/Locales.lua
 Models/Member.lua
 Models/Log.lua
 Models/Group.lua
+Models/LFGCard.lua
 Models/Event.lua
 Models/Settings.lua
 Models/CraftOrder.lua
@@ -21,6 +22,7 @@ Models/CraftOrder.lua
 Repositories/MemberRepository.lua
 Repositories/LogRepository.lua
 Repositories/GroupRepository.lua
+Repositories/LFGRepository.lua
 Repositories/EventRepository.lua
 Repositories/ProfessionRepository.lua
 Repositories/CraftOrderRepository.lua

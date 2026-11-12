@@ -6,7 +6,7 @@
 GroupController = {}
 GroupController.__index = GroupController
 
---- Construtor do Controller de gerenciamento de grupos.
+--- Construtor do Controller de gerenciamento de grupos e Procurando Grupo.
 ---@param groupService GroupService @Serviço de gerenciamento de grupos
 ---@param memberService MemberService @Serviço de gerenciamento de membros
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
@@ -23,6 +23,30 @@ function GroupController:new(groupService, memberService, guildRosterService, gr
     return instance
 end
 
+--- Obtém o nome completo do jogador atual (nome e sobrenome).
+---@return string
+function GroupController:resolvePlayerFullName()
+    if self._memberService and self._memberService.resolvePlayerFullName then
+        local resolved = self._memberService:resolvePlayerFullName()
+        if resolved and resolved ~= "" then
+            return resolved
+        end
+    end
+
+    local myName = UnitName and UnitName("player")
+    if myName and myName ~= "" then
+        if self._memberService and self._memberService.resolveFullName then
+            local resolved = self._memberService:resolveFullName(myName)
+            if resolved and resolved ~= "" then
+                return resolved
+            end
+        end
+        return myName
+    end
+
+    return ""
+end
+
 --- Inicializa os ganchos da View e comandos de barra (/gmgrupos).
 function GroupController:initHooks()
     if not self._groupView then return end
@@ -34,65 +58,52 @@ function GroupController:initHooks()
         end)
     end
 
-    -- Callback de criação de grupo
+    -- Callback de criação de grupo (TODOS os membros da guilda podem criar grupos)
     if self._groupView.setOnCreateGroupCallback then
-        self._groupView:setOnCreateGroupCallback(function(name, groupType, leaderName, leaderRole, note)
+        self._groupView:setOnCreateGroupCallback(function(name, groupType, leaderName, leaderRole, timeStr, descStr)
             local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-            local canOfficer = false
-            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
-                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
-            elseif IsGuildLeader and IsGuildLeader() then
-                canOfficer = true
-            elseif CanEditOfficerNote and CanEditOfficerNote() then
-                canOfficer = true
+            if not self._groupService then
+                return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível."
             end
 
-            if not canOfficer then
-                return false, curL["GROUP_ERR_OFFICER_ONLY"] or "Apenas Oficiais ou o Líder da Guilda têm permissão para criar grupos."
-            end
-
-            if not self._groupService then return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível." end
-            local group, err = self._groupService:createGroup(name, groupType, leaderName, leaderRole, note)
+            local myFullName = self:resolvePlayerFullName()
+            local group, err = self._groupService:createGroup(name, groupType, leaderName, leaderRole, timeStr, descStr, myFullName)
             if group then
-                self:refreshGroups()
+                pcall(function() self:refreshGroups() end)
                 return true, nil
             end
             return false, err
         end)
     end
 
-    -- Callback de exclusão de grupo
+    -- Callback de exclusão de grupo (Apenas o criador ou líder da guilda pode excluir)
     if self._groupView.setOnDeleteGroupCallback then
         self._groupView:setOnDeleteGroupCallback(function(groupId)
-            local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-            local canOfficer = false
-            if self._guildRosterService and self._guildRosterService.isPlayerOfficerOrLeader then
-                canOfficer = self._guildRosterService:isPlayerOfficerOrLeader()
-            elseif IsGuildLeader and IsGuildLeader() then
-                canOfficer = true
-            elseif CanEditOfficerNote and CanEditOfficerNote() then
-                canOfficer = true
+            if not self._groupService then return false end
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:deleteGroup(groupId, myFullName)
+            if ok then
+                pcall(function() self:refreshGroups() end)
+                return true
+            else
+                print("|cffff4444[GuildManager]|r " .. (err or "Apenas o criador do grupo pode excluí-lo."))
+                return false, err
             end
-
-            if not canOfficer then
-                print("|cffff4444[GuildManager]|r " .. (curL["GROUP_ERR_OFFICER_ONLY"] or "Apenas Oficiais ou o Líder da Guilda têm permissão para excluir grupos."))
-                return
-            end
-
-            if not self._groupService then return end
-            self._groupService:deleteGroup(groupId)
-            self:refreshGroups()
         end)
     end
 
-    -- Callback de adição de membro
+    -- Callback de adição de membro (Apenas o criador pode adicionar membros)
     if self._groupView.setOnAddMemberCallback then
         self._groupView:setOnAddMemberCallback(function(groupId, memberName, role)
             local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-            if not self._groupService then return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível." end
-            local ok, err = self._groupService:addMemberToGroup(groupId, memberName, role)
+            if not self._groupService then
+                return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível."
+            end
+
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:addMemberToGroup(groupId, memberName, role, myFullName)
             if ok then
-                self:refreshGroups()
+                pcall(function() self:refreshGroups() end)
                 return true, nil
             end
             return false, err
@@ -102,41 +113,94 @@ function GroupController:initHooks()
     -- Callback de remoção de membro
     if self._groupView.setOnRemoveMemberCallback then
         self._groupView:setOnRemoveMemberCallback(function(groupId, memberName)
-            if not self._groupService then return end
-            self._groupService:removeMemberFromGroup(groupId, memberName)
-            self:refreshGroups()
+            if not self._groupService then return false end
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:removeMemberFromGroup(groupId, memberName, myFullName)
+            if ok then
+                pcall(function() self:refreshGroups() end)
+                return true
+            else
+                print("|cffff4444[GuildManager]|r " .. (err or "Sem permissão para remover este membro."))
+                return false, err
+            end
         end)
     end
 
     -- Callback de alteração de líder
     if self._groupView.setOnSetLeaderCallback then
         self._groupView:setOnSetLeaderCallback(function(groupId, newLeaderName)
-            if not self._groupService then return end
-            self._groupService:setGroupLeader(groupId, newLeaderName)
-            self:refreshGroups()
+            if not self._groupService then return false end
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:setGroupLeader(groupId, newLeaderName, myFullName)
+            if ok then
+                pcall(function() self:refreshGroups() end)
+                return true
+            else
+                print("|cffff4444[GuildManager]|r " .. (err or "Sem permissão para alterar o líder."))
+                return false, err
+            end
         end)
     end
 
     -- Callback de alteração de função
     if self._groupView.setOnSetRoleCallback then
         self._groupView:setOnSetRoleCallback(function(groupId, memberName, role)
-            if not self._groupService then return end
-            self._groupService:setMemberRole(groupId, memberName, role)
-            self:refreshGroups()
+            if not self._groupService then return false end
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:setMemberRole(groupId, memberName, role, myFullName)
+            if ok then
+                pcall(function() self:refreshGroups() end)
+                return true
+            end
+            return false, err
         end)
     end
 
-    -- Callback de atualização de detalhes do grupo (nome, nota, líder)
+    -- Callback de atualização de detalhes do grupo (nome, tipo, líder, horário, descrição)
     if self._groupView.setOnUpdateGroupDetailsCallback then
-        self._groupView:setOnUpdateGroupDetailsCallback(function(groupId, name, note, leaderName)
+        self._groupView:setOnUpdateGroupDetailsCallback(function(groupId, name, groupType, leaderName, timeStr, descStr)
             local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-            if not self._groupService then return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível." end
-            local ok, err = self._groupService:updateGroupDetails(groupId, name, note, leaderName)
+            if not self._groupService then
+                return false, curL["GROUP_CTRL_ERR_UNAVAILABLE"] or "Serviço de grupos indisponível."
+            end
+
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:updateGroupDetails(groupId, name, groupType, leaderName, timeStr, descStr, myFullName)
             if ok then
-                self:refreshGroups()
+                pcall(function() self:refreshGroups() end)
                 return true, nil
             end
             return false, err
+        end)
+    end
+
+    -- Callback de criação de card de Procurando Grupo (LFG)
+    if self._groupView.setOnCreateLFGCardCallback then
+        self._groupView:setOnCreateLFGCardCallback(function(groupType, timeStr, descStr)
+            if not self._groupService then return false, "Serviço de grupos indisponível." end
+            local myFullName = self:resolvePlayerFullName()
+            local card, err = self._groupService:createLFGCard(groupType, timeStr, descStr, myFullName)
+            if card then
+                pcall(function() self:refreshGroups() end)
+                return true, nil
+            end
+            return false, err
+        end)
+    end
+
+    -- Callback de exclusão de card de Procurando Grupo (LFG)
+    if self._groupView.setOnDeleteLFGCardCallback then
+        self._groupView:setOnDeleteLFGCardCallback(function(cardId)
+            if not self._groupService then return false end
+            local myFullName = self:resolvePlayerFullName()
+            local ok, err = self._groupService:deleteLFGCard(cardId, myFullName)
+            if ok then
+                pcall(function() self:refreshGroups() end)
+                return true
+            else
+                print("|cffff4444[GuildManager]|r " .. (err or "Falha ao excluir card."))
+                return false, err
+            end
         end)
     end
 
@@ -147,17 +211,18 @@ function GroupController:initHooks()
             if not self._groupService then return end
             local count = self._groupService:inviteGroupToParty(groupId)
             if count and count > 0 then
-                print(string.format("|cff00ff00[GuildManager]|r " .. (curL["GROUP_CTRL_INVITING_MSG"] or "Sending party invites to %d group member(s)."), count))
+                print(string.format("|cff00ff00[GuildManager]|r " .. (curL["GROUP_CTRL_INVITING_MSG"] or "Enviando convites para %d membro(s) do grupo."), count))
             else
-                print("|cffff8800[GuildManager]|r " .. (curL["GROUP_CTRL_NO_INVITE_MSG"] or "No members to invite at this time (you may be the only group member)."))
+                print("|cffff8800[GuildManager]|r " .. (curL["GROUP_CTRL_NO_INVITE_MSG"] or "Nenhum membro para convidar no momento."))
             end
         end)
     end
 
-    -- Comandos de chat /gmgrupos, /gmgroups, /gmgrupo
+    -- Comandos de chat /gmgrupos, /gmgroups, /gmgrupo, /gmlfg
     SLASH_GUILDMANAGERGROUPS1 = "/gmgrupos"
     SLASH_GUILDMANAGERGROUPS2 = "/gmgroups"
     SLASH_GUILDMANAGERGROUPS3 = "/gmgrupo"
+    SLASH_GUILDMANAGERGROUPS4 = "/gmlfg"
     SlashCmdList["GUILDMANAGERGROUPS"] = function()
         self:toggle()
     end
@@ -173,7 +238,7 @@ function GroupController:initHooks()
     self._eventFrame = eventFrame
 end
 
---- Atualiza a lista de membros e grupos carregados na View.
+--- Atualiza a lista de membros, grupos e cards de LFG carregados na View.
 function GroupController:refreshGroups()
     if not self._groupView then return end
 
@@ -193,14 +258,27 @@ function GroupController:refreshGroups()
             end
         end
     end
-    self._groupView:setGuildMembers(activeMembers)
+    if self._groupView.setGuildMembers then
+        self._groupView:setGuildMembers(activeMembers)
+    end
 
     -- Atualiza lista de grupos cadastrados
     local allGroups = {}
     if self._groupService and self._groupService.getAllGroups then
         allGroups = self._groupService:getAllGroups() or {}
     end
-    self._groupView:setGroups(allGroups)
+    if self._groupView.setGroups then
+        self._groupView:setGroups(allGroups)
+    end
+
+    -- Atualiza lista de cards de Procurando Grupo (LFG)
+    local allLFGCards = {}
+    if self._groupService and self._groupService.getAllLFGCards then
+        allLFGCards = self._groupService:getAllLFGCards() or {}
+    end
+    if self._groupView.setLFGCards then
+        self._groupView:setLFGCards(allLFGCards)
+    end
 
     -- Atualiza modal de detalhes se estiver aberta
     if self._groupView.refreshOpenDetailModal then
@@ -208,14 +286,14 @@ function GroupController:refreshGroups()
     end
 end
 
---- Abre a janela de gerenciamento de grupos.
+--- Abre a janela de gerenciamento de grupos e Procurando Grupo.
 function GroupController:show()
     if not IsInGuild or not IsInGuild() then
         if _G.GM and _G.GM.introView and _G.GM.introView.showNoGuildDialog then
             _G.GM.introView:showNoGuildDialog()
         else
             local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-            print("|cffff0000[GuildManager]|r " .. (curL["NOT_IN_GUILD"] or "You are not in a guild."))
+            print("|cffff0000[GuildManager]|r " .. (curL["NOT_IN_GUILD"] or "Você não está em uma guilda."))
         end
         return
     end
@@ -244,5 +322,4 @@ function GroupController:toggle()
     end
 end
 
--- Exportação/Alias de compatibilidade
 _G.GroupController = GroupController

@@ -2,6 +2,8 @@
 ---@field private _groupRepository GroupRepository
 ---@field private _memberService MemberService|nil
 ---@field private _guildRosterService GuildRosterService|nil
+---@field private _lfgRepository LFGRepository|nil
+---@field private _syncService SyncService|nil
 GroupService = {}
 GroupService.__index = GroupService
 
@@ -9,15 +11,66 @@ GroupService.__index = GroupService
 ---@param groupRepository GroupRepository
 ---@param memberService MemberService|nil
 ---@param guildRosterService GuildRosterService|nil
+---@param lfgRepository LFGRepository|nil
+---@param syncService SyncService|nil
 ---@return GroupService
-function GroupService:new(groupRepository, memberService, guildRosterService)
+function GroupService:new(groupRepository, memberService, guildRosterService, lfgRepository, syncService)
     local instance = setmetatable({}, self)
 
     instance._groupRepository = groupRepository
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService
+    instance._lfgRepository = lfgRepository
+    instance._syncService = syncService
 
     return instance
+end
+
+function GroupService:setLFGRepository(lfgRepository)
+    self._lfgRepository = lfgRepository
+end
+
+function GroupService:setSyncService(syncService)
+    self._syncService = syncService
+end
+
+--- Resolve o nome completo (nome e sobrenome) do personagem informado ou do jogador atual.
+---@param explicitName string|nil
+---@return string
+function GroupService:resolveCreatorName(explicitName)
+    if explicitName and explicitName ~= "" then
+        local clean = (explicitName:match("^[^-]+") or explicitName):match("^%s*(.-)%s*$")
+        if clean:find("%s") then
+            return clean
+        end
+        if self._memberService and self._memberService.resolveFullName then
+            local resolved = self._memberService:resolveFullName(clean)
+            if resolved and resolved ~= "" and resolved:find("%s") then
+                return resolved
+            end
+        end
+        return clean
+    end
+
+    if self._memberService and self._memberService.resolvePlayerFullName then
+        local pFull = self._memberService:resolvePlayerFullName()
+        if pFull and pFull ~= "" then
+            return pFull
+        end
+    end
+
+    local myName = UnitName and UnitName("player")
+    if myName and myName ~= "" then
+        if self._memberService and self._memberService.resolveFullName then
+            local resolved = self._memberService:resolveFullName(myName)
+            if resolved and resolved ~= "" then
+                return resolved
+            end
+        end
+        return myName
+    end
+
+    return ""
 end
 
 --- Busca informações de um membro (classe, nível) a partir do MemberService ou do Roster.
@@ -83,12 +136,14 @@ end
 
 --- Cria um novo grupo.
 ---@param name string @Nome do grupo
----@param groupType GroupType @Tipo (DUNGEON, RAID, MISC)
+---@param groupType GroupType @Tipo (DUNGEON, RAID, MISC, FARM, QUESTS, PVP)
 ---@param leaderName string @Nome do líder (obrigatório)
 ---@param leaderRole GroupRole|nil @Função do líder (obrigatório para Masmorra e Raide)
----@param note string|nil @Nota / Horário opcional
+---@param timeStr string|nil @Horário previsto
+---@param descStr string|nil @Descrição do grupo
+---@param creatorName string|nil @Nome do criador (resolvido automaticamente com nome e sobrenome)
 ---@return Group|nil, string|nil @grupoCriado, mensagemErro
-function GroupService:createGroup(name, groupType, leaderName, leaderRole, note)
+function GroupService:createGroup(name, groupType, leaderName, leaderRole, timeStr, descStr, creatorName)
     local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     if not name or name:match("^%s*$") then
         return nil, curL["GROUP_SVC_ERR_EMPTY_NAME"] or "O nome do grupo não pode ser vazio."
@@ -101,7 +156,7 @@ function GroupService:createGroup(name, groupType, leaderName, leaderRole, note)
     groupType = groupType or GroupType.DUNGEON
     if groupType == GroupType.DUNGEON or groupType == GroupType.RAID then
         if not leaderRole or leaderRole == GroupRole.NONE or (leaderRole ~= GroupRole.TANK and leaderRole ~= GroupRole.HEALER and leaderRole ~= GroupRole.DPS) then
-            return nil, curL["GROUP_SVC_ERR_LEADER_ROLE"] or "Para grupos de masmorra e raide, a função do líder deve ser definida (Tank, Curador ou Dano)."
+            leaderRole = GroupRole.DPS
         end
     else
         leaderRole = leaderRole or GroupRole.NONE
@@ -109,14 +164,19 @@ function GroupService:createGroup(name, groupType, leaderName, leaderRole, note)
 
     local cleanName = name:match("^%s*(.-)%s*$")
     local cleanLeader = leaderName:match("^%s*(.-)%s*$")
+    local fullCreator = self:resolveCreatorName(creatorName)
     local classToken, level = self:getMemberDetails(cleanLeader)
 
     local group = Group:new({
         name = cleanName,
         type = groupType,
         leader = cleanLeader,
-        note = note or "",
+        creator = fullCreator,
+        time = timeStr or "",
+        description = descStr or "",
+        note = timeStr or "",
         createdAt = time(),
+        updatedAt = time(),
     })
 
     group:addMember(cleanLeader, leaderRole, classToken, level)
@@ -126,131 +186,68 @@ function GroupService:createGroup(name, groupType, leaderName, leaderRole, note)
         return nil, curL["GROUP_SVC_ERR_SAVE"] or "Falha ao persistir o grupo no banco de dados."
     end
 
+    -- Dispara sincronização (primeiro Criador -> Líder da guilda -> Outros membros)
+    if self._syncService and self._syncService.syncGroup then
+        self._syncService:syncGroup(group, "CREATE")
+    end
+
     return group, nil
 end
 
 --- Deleta um grupo existente.
+--- Apenas o criador do grupo (ou líder da guilda) pode excluir o grupo.
 ---@param groupId string
----@return boolean
-function GroupService:deleteGroup(groupId)
-    if not groupId or groupId == "" then return false end
-    return self._groupRepository:delete(groupId)
-end
-
---- Adiciona um membro ao grupo.
----@param groupId string
----@param memberName string
----@param role GroupRole|nil
+---@param requesterName string|nil
 ---@return boolean, string|nil
-function GroupService:addMemberToGroup(groupId, memberName, role)
-    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    if not groupId or not memberName or memberName:match("^%s*$") then
-        return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos."
-    end
-
+function GroupService:deleteGroup(groupId, requesterName)
+    if not groupId or groupId == "" then return false, "ID inválido." end
     local group = self._groupRepository:findById(groupId)
-    if not group then
-        return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado."
+    if not group then return false, "Grupo não encontrado." end
+
+    if requesterName and not group:canEdit(requesterName) then
+        return false, "Apenas o criador do grupo pode excluí-lo."
     end
 
-    local cleanName = memberName:match("^%s*(.-)%s*$")
-    if group:hasMember(cleanName) then
-        return false, curL["GROUP_SVC_ERR_ALREADY_IN"] or "Este membro já faz parte do grupo."
+    local ok = self._groupRepository:delete(groupId)
+    if ok and self._syncService and self._syncService.syncGroupDelete then
+        self._syncService:syncGroupDelete(groupId)
     end
-
-    local gType = group:getType()
-    if gType == GroupType.DUNGEON or gType == GroupType.RAID then
-        if not role or role == GroupRole.NONE or (role ~= GroupRole.TANK and role ~= GroupRole.HEALER and role ~= GroupRole.DPS) then
-            return false, curL["GROUP_SVC_ERR_MEMBER_ROLE"] or "Defina a função do membro no grupo (Tank, Curador ou Dano)."
-        end
-    else
-        role = role or GroupRole.NONE
-    end
-
-    local classToken, level = self:getMemberDetails(cleanName)
-    group:addMember(cleanName, role, classToken, level)
-
-    local ok = self._groupRepository:save(group)
-    return ok, ok and nil or (curL["GROUP_SVC_ERR_SAVE"] or "Erro ao salvar alterações no grupo.")
+    return ok, nil
 end
 
---- Remove um membro do grupo.
----@param groupId string
----@param memberName string
----@return boolean, string|nil
-function GroupService:removeMemberFromGroup(groupId, memberName)
-    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    if not groupId or not memberName then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
-
-    local group = self._groupRepository:findById(groupId)
-    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
-
-    local removed, wasLeader = group:removeMember(memberName)
-    if not removed then
-        return false, curL["GROUP_SVC_ERR_MEMBER_NOT_IN"] or "Membro não encontrado no grupo."
-    end
-
-    self._groupRepository:save(group)
-    return true, nil
-end
-
---- Promove um membro a líder do grupo.
----@param groupId string
----@param newLeaderName string
----@return boolean, string|nil
-function GroupService:setGroupLeader(groupId, newLeaderName)
-    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    if not groupId or not newLeaderName then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
-
-    local group = self._groupRepository:findById(groupId)
-    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
-
-    if not group:hasMember(newLeaderName) then
-        return false, curL["GROUP_SVC_ERR_LEADER_MUST_IN"] or "O líder deve ser um membro pertencente ao grupo."
-    end
-
-    group:setLeader(newLeaderName)
-    self._groupRepository:save(group)
-    return true, nil
-end
-
---- Altera a função de um membro no grupo.
----@param groupId string
----@param memberName string
----@param role GroupRole
----@return boolean, string|nil
-function GroupService:setMemberRole(groupId, memberName, role)
-    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
-    if not groupId or not memberName or not role then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
-
-    local group = self._groupRepository:findById(groupId)
-    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
-
-    local ok = group:setMemberRole(memberName, role)
-    if ok then
-        self._groupRepository:save(group)
-        return true, nil
-    end
-    return false, curL["GROUP_SVC_ERR_INVALID_ROLE"] or "Função inválida."
-end
-
---- Atualiza informações básicas do grupo (nome, nota/horário e líder).
+--- Atualiza informações do grupo (nome, tipo, líder, horário e descrição).
+--- Apenas o criador do grupo (ou líder da guilda) pode editá-lo.
 ---@param groupId string
 ---@param name string|nil
----@param note string|nil
+---@param groupType GroupType|nil
 ---@param leaderName string|nil
+---@param timeStr string|nil
+---@param descStr string|nil
+---@param requesterName string|nil
 ---@return boolean, string|nil
-function GroupService:updateGroupDetails(groupId, name, note, leaderName)
+function GroupService:updateGroupDetails(groupId, name, groupType, leaderName, timeStr, descStr, requesterName)
     local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
     local group = self._groupRepository:findById(groupId)
     if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
+
+    if requesterName and not group:canEdit(requesterName) then
+        return false, "Apenas o criador do grupo tem permissão para editá-lo."
+    end
 
     if name and not name:match("^%s*$") then
         group:setName(name:match("^%s*(.-)%s*$"))
     end
 
-    if note ~= nil then
-        group:setNote(note:match("^%s*(.-)%s*$") or "")
+    if groupType and RAW_GROUP_TYPES and RAW_GROUP_TYPES[groupType] then
+        group:setType(groupType)
+    end
+
+    if timeStr ~= nil then
+        group:setTime(timeStr:match("^%s*(.-)%s*$") or "")
+    end
+
+    if descStr ~= nil then
+        group:setDescription(descStr:match("^%s*(.-)%s*$") or "")
     end
 
     if leaderName and not leaderName:match("^%s*$") then
@@ -263,21 +260,166 @@ function GroupService:updateGroupDetails(groupId, name, note, leaderName)
         group:setLeader(cleanLeader)
     end
 
-    -- Preenche classe e nível que possam estar vazios em membros existentes
-    for _, mData in ipairs(group:getMembers() or {}) do
-        if not mData.class or mData.class == "" then
-            local cTok, lvl = self:getMemberDetails(mData.name)
-            if cTok and cTok ~= "" then
-                mData.class = cTok
-            end
-            if lvl and lvl > 0 and (not mData.level or mData.level <= 1) then
-                mData.level = lvl
-            end
+    group:setUpdatedAt(time())
+
+    local ok = self._groupRepository:save(group)
+    if ok and self._syncService and self._syncService.syncGroup then
+        self._syncService:syncGroup(group, "UPDATE")
+    end
+
+    return ok, ok and nil or (curL["GROUP_SVC_ERR_SAVE"] or "Erro ao salvar alterações do grupo.")
+end
+
+--- Adiciona um membro ao grupo.
+--- Apenas o criador do grupo pode adicionar membros.
+--- Se o membro adicionado tiver um card no Procurando Grupo, o card é automaticamente excluído.
+---@param groupId string
+---@param memberName string
+---@param role GroupRole|nil
+---@param requesterName string|nil
+---@return boolean, string|nil
+function GroupService:addMemberToGroup(groupId, memberName, role, requesterName)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not memberName or memberName:match("^%s*$") then
+        return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos."
+    end
+
+    local group = self._groupRepository:findById(groupId)
+    if not group then
+        return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado."
+    end
+
+    if requesterName and not group:canEdit(requesterName) then
+        return false, "Apenas o criador do grupo tem permissão para adicionar membros."
+    end
+
+    local cleanName = memberName:match("^%s*(.-)%s*$")
+    if group:hasMember(cleanName) then
+        return false, curL["GROUP_SVC_ERR_ALREADY_IN"] or "Este membro já faz parte do grupo."
+    end
+
+    local gType = group:getType()
+    if gType == GroupType.DUNGEON or gType == GroupType.RAID then
+        if not role or role == GroupRole.NONE or (role ~= GroupRole.TANK and role ~= GroupRole.HEALER and role ~= GroupRole.DPS) then
+            role = GroupRole.DPS
+        end
+    else
+        role = role or GroupRole.NONE
+    end
+
+    local classToken, level = self:getMemberDetails(cleanName)
+    group:addMember(cleanName, role, classToken, level)
+    group:setUpdatedAt(time())
+
+    local ok = self._groupRepository:save(group)
+    if ok then
+        if self._syncService and self._syncService.syncGroup then
+            self._syncService:syncGroup(group, "UPDATE")
+        end
+        return true, nil
+    end
+
+    return false, curL["GROUP_SVC_ERR_SAVE"] or "Erro ao salvar alterações no grupo."
+end
+
+--- Remove um membro do grupo.
+--- O criador pode remover qualquer membro. Um membro pode se remover do grupo.
+---@param groupId string
+---@param memberName string
+---@param requesterName string|nil
+---@return boolean, string|nil
+function GroupService:removeMemberFromGroup(groupId, memberName, requesterName)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not memberName then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
+
+    local group = self._groupRepository:findById(groupId)
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
+
+    if requesterName then
+        local reqClean = (requesterName:match("^[^-]+") or requesterName):match("^%s*(.-)%s*$"):lower()
+        local memClean = (memberName:match("^[^-]+") or memberName):match("^%s*(.-)%s*$"):lower()
+        if reqClean ~= memClean and not group:canEdit(requesterName) then
+            return false, "Apenas o criador do grupo pode remover outros membros."
         end
     end
 
-    local ok = self._groupRepository:save(group)
-    return ok, ok and nil or (curL["GROUP_SVC_ERR_SAVE"] or "Erro ao salvar alterações do grupo.")
+    local removed, wasLeader = group:removeMember(memberName)
+    if not removed then
+        return false, curL["GROUP_SVC_ERR_MEMBER_NOT_IN"] or "Membro não encontrado no grupo."
+    end
+
+    group:setUpdatedAt(time())
+    self._groupRepository:save(group)
+
+    if self._syncService and self._syncService.syncGroup then
+        self._syncService:syncGroup(group, "UPDATE")
+    end
+
+    return true, nil
+end
+
+--- Promove um membro a líder do grupo.
+---@param groupId string
+---@param newLeaderName string
+---@param requesterName string|nil
+---@return boolean, string|nil
+function GroupService:setGroupLeader(groupId, newLeaderName, requesterName)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not newLeaderName then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
+
+    local group = self._groupRepository:findById(groupId)
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
+
+    if requesterName and not group:canEdit(requesterName) then
+        return false, "Apenas o criador do grupo pode alterar o líder."
+    end
+
+    if not group:hasMember(newLeaderName) then
+        return false, curL["GROUP_SVC_ERR_LEADER_MUST_IN"] or "O líder deve ser um membro pertencente ao grupo."
+    end
+
+    group:setLeader(newLeaderName)
+    group:setUpdatedAt(time())
+    self._groupRepository:save(group)
+
+    if self._syncService and self._syncService.syncGroup then
+        self._syncService:syncGroup(group, "UPDATE")
+    end
+
+    return true, nil
+end
+
+--- Altera a função de um membro no grupo.
+---@param groupId string
+---@param memberName string
+---@param role GroupRole
+---@param requesterName string|nil
+---@return boolean, string|nil
+function GroupService:setMemberRole(groupId, memberName, role, requesterName)
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    if not groupId or not memberName or not role then return false, curL["GROUP_SVC_ERR_INVALID"] or "Dados inválidos." end
+
+    local group = self._groupRepository:findById(groupId)
+    if not group then return false, curL["GROUP_SVC_ERR_NOT_FOUND"] or "Grupo não encontrado." end
+
+    if requesterName then
+        local reqClean = (requesterName:match("^[^-]+") or requesterName):match("^%s*(.-)%s*$"):lower()
+        local memClean = (memberName:match("^[^-]+") or memberName):match("^%s*(.-)%s*$"):lower()
+        if reqClean ~= memClean and not group:canEdit(requesterName) then
+            return false, "Sem permissão para alterar função deste membro."
+        end
+    end
+
+    local ok = group:setMemberRole(memberName, role)
+    if ok then
+        group:setUpdatedAt(time())
+        self._groupRepository:save(group)
+        if self._syncService and self._syncService.syncGroup then
+            self._syncService:syncGroup(group, "UPDATE")
+        end
+        return true, nil
+    end
+    return false, curL["GROUP_SVC_ERR_INVALID_ROLE"] or "Função inválida."
 end
 
 --- Busca um grupo pelo ID.
@@ -301,6 +443,134 @@ function GroupService:getGroupsByType(groupType)
     return self._groupRepository:findByType(groupType)
 end
 
+-- =========================================================================
+-- MÉTODOS DE PROCURANDO GRUPO (LFG DASHBOARD)
+-- =========================================================================
+
+--- Cria um card de Procurando Grupo (LFG).
+--- O nome do criador é fixo e validado automaticamente com nome e sobrenome.
+---@param groupType string
+---@param timeStr string
+---@param descStr string
+---@param creatorName string|nil
+---@return LFGCard|nil, string|nil
+function GroupService:createLFGCard(groupType, timeStr, descStr, creatorName)
+    if not self._lfgRepository then
+        return nil, "Repositório de Procurando Grupo indisponível."
+    end
+
+    local fullCreator = self:resolveCreatorName(creatorName)
+    if not fullCreator or fullCreator == "" then
+        return nil, "Nome do personagem criador não identificado."
+    end
+
+    -- REQUISITO: Cada membro pode criar até 5 cards de LFG ativos
+    local currentCount = 0
+    if self._lfgRepository and self._lfgRepository.countByCreator then
+        currentCount = self._lfgRepository:countByCreator(fullCreator)
+    elseif self._lfgRepository and self._lfgRepository.findAllByCreator then
+        currentCount = #(self._lfgRepository:findAllByCreator(fullCreator) or {})
+    end
+
+    if currentCount >= 5 then
+        return nil, "Você já atingiu o limite de 5 cards de Procurando Grupo ativos. Exclua um card existente para poder criar um novo."
+    end
+
+    local classToken, level = self:getMemberDetails(fullCreator)
+
+    local card = LFGCard:new({
+        type = groupType or "DUNGEON",
+        time = timeStr or "",
+        description = descStr or "",
+        creator = fullCreator,
+        creatorClass = classToken,
+        creatorLevel = level,
+        createdAt = time(),
+    })
+
+    local ok = self._lfgRepository:save(card)
+    if not ok then
+        return nil, "Falha ao salvar card de Procurando Grupo."
+    end
+
+    -- Sincronização em 2 tempos (Criador -> Líder da guilda -> Membros da guilda)
+    if self._syncService and self._syncService.syncLFGCard then
+        self._syncService:syncLFGCard(card, "CREATE")
+    end
+
+    return card, nil
+end
+
+--- Exclui um card de Procurando Grupo pelo ID.
+---@param cardId string
+---@param requesterName string|nil
+---@return boolean, string|nil
+function GroupService:deleteLFGCard(cardId, requesterName)
+    if not self._lfgRepository or not cardId or cardId == "" then
+        return false, "Card inválido."
+    end
+
+    local card = self._lfgRepository:findById(cardId)
+    if not card then
+        return false, "Card não encontrado."
+    end
+
+    if requesterName and not card:isCreator(requesterName) and not (IsGuildLeader and IsGuildLeader()) then
+        return false, "Apenas o criador pode excluir este card."
+    end
+
+    local ok = self._lfgRepository:delete(cardId)
+    if ok and self._syncService and self._syncService.syncLFGCardDelete then
+        self._syncService:syncLFGCardDelete(cardId)
+    end
+    return ok, nil
+end
+
+--- Exclui card criado pelo membro informado.
+---@param memberName string
+---@return boolean
+function GroupService:deleteLFGCardByCreator(memberName)
+    if not self._lfgRepository or not memberName or memberName == "" then
+        return false
+    end
+
+    local card = self._lfgRepository:findByCreator(memberName)
+    if card then
+        return self:deleteLFGCard(card:getId())
+    end
+    return false
+end
+
+--- Limpa cards expirados (> 72 horas).
+---@return number @Quantidade de cards expirados removidos
+function GroupService:cleanExpiredCards()
+    if self._lfgRepository and self._lfgRepository.cleanExpired then
+        return self._lfgRepository:cleanExpired()
+    end
+    return 0
+end
+
+--- Retorna todos os cards de Procurando Grupo cadastrados.
+---@return LFGCard[]
+function GroupService:getAllLFGCards()
+    if not self._lfgRepository then return {} end
+    if self._lfgRepository.cleanExpired then
+        self._lfgRepository:cleanExpired()
+    end
+    return self._lfgRepository:findAll()
+end
+
+--- Retorna cards filtrados por tipo.
+---@param groupType string|nil
+---@return LFGCard[]
+function GroupService:getLFGCardsByType(groupType)
+    if not self._lfgRepository then return {} end
+    if self._lfgRepository.cleanExpired then
+        self._lfgRepository:cleanExpired()
+    end
+    return self._lfgRepository:findByType(groupType)
+end
+
 --- Convida todos os membros do grupo para o grupo/raide no World of Warcraft.
 ---@param groupId string
 ---@return number @Quantidade de membros convidados
@@ -312,7 +582,6 @@ function GroupService:inviteGroupToParty(groupId)
     local myName = UnitName and UnitName("player") or ""
     local invited = 0
 
-    -- Se o grupo tem mais de 5 membros, converte para raide se possível
     local totalMembers = #members
     if totalMembers > 5 and ConvertToRaid then
         local inGroup = (IsInRaid and IsInRaid()) or (IsInGroup and IsInGroup()) or (GetNumGroupMembers and GetNumGroupMembers() > 0)
@@ -338,5 +607,4 @@ function GroupService:inviteGroupToParty(groupId)
     return invited
 end
 
--- Exportação/Alias de compatibilidade
 _G.GroupService = GroupService
