@@ -708,10 +708,11 @@ function SettingsView:createSettingsColumns()
     defTimeLabel:SetText(L["SETTINGS_DEFAULT_EVENT_TIME"])
     self._widgets.defTimeLabel = defTimeLabel
 
-    local defTimeEB = CreateFrame("EditBox", "GM_DefaultEventTimeEditBox", rChild)
+    local defTimeEB = CreateFrame("EditBox", "GM_DefaultEventTimeEditBox", rChild, template)
     defTimeEB:SetSize(70, 20)
     defTimeEB:SetPoint("LEFT", defTimeLabel, "RIGHT", 8, 0)
     defTimeEB:SetMaxLetters(5)
+    defTimeEB:SetJustifyH("CENTER")
     styleBox(defTimeEB)
     self._widgets.defaultEventTime = defTimeEB
 
@@ -1203,6 +1204,16 @@ function SettingsView:updateLocale()
     if self._widgets.rankPromoDesc then
         self._widgets.rankPromoDesc:SetText(curL["SETTINGS_RANK_DAYS_DESC"])
     end
+    for _, row in ipairs(self._widgets.rankRows or {}) do
+        if row then
+            if row.label and row.rankName then
+                row.label:SetText(string.format(curL["SETTINGS_RANK_DAYS_LABEL"] or "Promover para |cffffff00%s|r após:", row.rankName))
+            end
+            if row.suffix then
+                row.suffix:SetText(curL["SETTINGS_RANK_DAYS_SUFFIX"] or "dias")
+            end
+        end
+    end
 
     -- Seção 6
     if self._widgets.s6Header then self._widgets.s6Header:SetText(curL["SETTINGS_S6_HEADER"]) end
@@ -1425,7 +1436,7 @@ function SettingsView:renderRankPromotionRows(settings)
         return
     end
 
-    local rowHeight = 24
+    local rowHeight = 26
     local yOffset = 0
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
 
@@ -1433,24 +1444,33 @@ function SettingsView:renderRankPromotionRows(settings)
         local row = self._widgets.rankRows[idx]
         if not row then
             row = CreateFrame("Frame", nil, container, template)
-            row:SetSize(360, rowHeight)
+            row:SetSize(380, rowHeight)
 
-            local bullet = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            bullet:SetPoint("LEFT", row, "LEFT", 4, 0)
-            bullet:SetText("|cffffd200▪|r")
+            if idx % 2 == 1 then
+                local rowBg = row:CreateTexture(nil, "BACKGROUND")
+                rowBg:SetAllPoints(row)
+                rowBg:SetColorTexture(1.0, 0.82, 0.2, 0.04)
+            end
+
+            local bullet = row:CreateTexture(nil, "ARTWORK")
+            bullet:SetSize(4, 4)
+            bullet:SetPoint("LEFT", row, "LEFT", 6, 0)
+            bullet:SetColorTexture(1.0, 0.82, 0.0, 1.0)
             row.bullet = bullet
 
             local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            label:SetPoint("LEFT", bullet, "RIGHT", 6, 0)
-            label:SetWidth(160)
+            label:SetPoint("LEFT", bullet, "RIGHT", 8, 0)
+            label:SetWidth(215)
             label:SetJustifyH("LEFT")
+            if label.SetWordWrap then label:SetWordWrap(false) end
             row.label = label
 
-            local eb = CreateFrame("EditBox", nil, row)
-            eb:SetSize(50, 20)
+            local eb = CreateFrame("EditBox", nil, row, template)
+            eb:SetSize(54, 20)
             eb:SetPoint("LEFT", label, "RIGHT", 6, 0)
             eb:SetNumeric(true)
             eb:SetMaxLetters(4)
+            eb:SetJustifyH("CENTER")
             styleBox(eb)
             row.eb = eb
 
@@ -1476,6 +1496,7 @@ function SettingsView:renderRankPromotionRows(settings)
             row.eb:SetText("")
         end
 
+        row.rankName = rDef.name
         row.eb.rankName = rDef.name
         row.eb.rankIndex = rDef.index
         self._widgets.rankEditBoxes[rDef.name] = row.eb
