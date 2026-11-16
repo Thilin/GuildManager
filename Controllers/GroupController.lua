@@ -298,6 +298,10 @@ function GroupController:show()
         return
     end
 
+    if _G.GM and _G.GM.minimapButton and _G.GM.minimapButton.clearGroupNotifications then
+        _G.GM.minimapButton:clearGroupNotifications()
+    end
+
     self:refreshGroups()
     if self._groupView then
         self._groupView:show()

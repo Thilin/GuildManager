@@ -533,6 +533,10 @@ Locales.strings["enUS"] = {
     ["MINIMAP_TOOLTIP_RCLICK"] = "|cffffff00Right-Click:|r Settings & Options",
     ["MINIMAP_TOOLTIP_CMDS"] = "|cffaaaaaaCommands: /gm, /gmaudit, /gmlogs, /gmgrupos, /gmagenda|r",
     ["MINIMAP_TOOLTIP_DRAG"] = "|cff888888Drag: Move button around minimap|r",
+    ["MINIMAP_NOTIF_GROUP_HEADER"] = "|cff20ff20New Groups / LFG (%d):|r",
+    ["MINIMAP_NOTIF_GROUP_FMT"] = "Group created: |cffffd200%s|r by %s",
+    ["MINIMAP_NOTIF_LFG_FMT"] = "LFG card created by |cffffd200%s|r",
+    ["MINIMAP_NOTIF_CLICK_OPEN"] = "|cff00ff00Left-Click to open Groups & LFG|r",
 
     -- Mapa Mundial
     ["MAP_BUTTON_TOOLTIP_TITLE"] = "Guild Manager - Radar",
@@ -1749,6 +1753,10 @@ Locales.strings["ptBR"] = {
     ["MINIMAP_TOOLTIP_RCLICK"] = "|cffffff00Clique Direito:|r Configurações do Addon",
     ["MINIMAP_TOOLTIP_CMDS"] = "|cffaaaaaaComandos: /gm, /gmaudit, /gmlogs, /gmgrupos, /gmagenda|r",
     ["MINIMAP_TOOLTIP_DRAG"] = "|cff888888Arraste com o botão esquerdo para orbitar a borda do minimapa|r",
+    ["MINIMAP_NOTIF_GROUP_HEADER"] = "|cff20ff20Novos Grupos / Procurando Grupo (%d):|r",
+    ["MINIMAP_NOTIF_GROUP_FMT"] = "Grupo criado: |cffffd200%s|r por %s",
+    ["MINIMAP_NOTIF_LFG_FMT"] = "Card de LFG criado por |cffffd200%s|r",
+    ["MINIMAP_NOTIF_CLICK_OPEN"] = "|cff00ff00Clique Esquerdo para abrir Grupos & LFG|r",
 
     -- Mapa Mundial
     ["MAP_BUTTON_TOOLTIP_TITLE"] = "Guild Manager - Radar",

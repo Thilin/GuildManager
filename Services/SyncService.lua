@@ -155,6 +155,8 @@ function SyncService:new(memberService, locationService, settingsService, guildR
     instance._lastRetransmitTick = 0
     instance._deferredPeerSyncs = {}
     instance._lastFullSyncWithPeer = {}
+    instance._notifiedGroupIds = {}
+    instance._notifiedLFGIds = {}
     instance._syncChatFrame = nil
 
     return instance
@@ -568,13 +570,13 @@ function SyncService:syncWithPeer(peerName)
         end)
     end
 
-    -- Sincroniza Grupos e Cards de LFG com o peer conectado
+    -- Sincroniza Grupos e Cards de LFG com o peer conectado (inclui Líder e demais membros)
     if isLeader then
         pcall(function()
             self:broadcastAllGroups()
             self:broadcastAllLFGCards()
         end)
-    elseif self:isSenderGuildLeader(peerName) then
+    else
         pcall(function()
             local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
             if _G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll then
@@ -1602,11 +1604,10 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         end
 
     -- =========================================================================
-    -- PROPOSTA DE GRUPO (GRP_PROP: Criador -> Líder da Guilda)
+    -- PROPOSTA DE GRUPO (GRP_PROP: Criador -> Todos os membros + Líder da Guilda)
     -- =========================================================================
     elseif tag == "GRP_PROP" then
         local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
-        if not isLocalLeader then return end
 
         local action = arg1 or "UPDATE"
         local groupId = arg2
@@ -1616,8 +1617,10 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             if _G.GM and _G.GM.groupRepository then
                 _G.GM.groupRepository:delete(groupId)
             end
-            local payload = string.format("GRP_DATA~DELETE~%s", groupId)
-            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            if isLocalLeader then
+                local payload = string.format("GRP_DATA~DELETE~%s", groupId)
+                safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            end
             self:refreshActiveViews()
             return
         end
@@ -1664,18 +1667,26 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             _G.GM.groupRepository:save(group)
         end
 
-        -- Líder replica para toda a guilda como verdade oficial (GRP_DATA)
-        local payload = string.format("GRP_DATA~%s~%s~%s~%s~%s~%s~%d~%s~%s~%s",
-            action, groupId, gType, gTime, gLeader, gCreator, gUpdatedAt, gName, gDesc, membersCsv)
-        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        if action == "CREATE" and not self:isSelf(senderClean) and not self._notifiedGroupIds[groupId] then
+            self._notifiedGroupIds[groupId] = true
+            if _G.GM and _G.GM.minimapButton and _G.GM.minimapButton.notifyGroupOrLFG then
+                local author = (gCreator ~= "" and gCreator) or (gLeader ~= "" and gLeader) or senderClean
+                _G.GM.minimapButton:notifyGroupOrLFG("GROUP", gName, author)
+            end
+        end
+
+        -- Líder também replica como dado oficial para persistência (GRP_DATA)
+        if isLocalLeader then
+            local payload = string.format("GRP_DATA~%s~%s~%s~%s~%s~%s~%d~%s~%s~%s",
+                action, groupId, gType, gTime, gLeader, gCreator, gUpdatedAt, gName, gDesc, membersCsv)
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        end
         self:refreshActiveViews()
 
     -- =========================================================================
-    -- DADOS OFICIAIS DE GRUPO (GRP_DATA: Líder da Guilda -> Todos os membros)
+    -- DADOS OFICIAIS DE GRUPO (GRP_DATA: Líder/Membros -> Todos os membros)
     -- =========================================================================
     elseif tag == "GRP_DATA" then
-        if not self:isSenderGuildLeader(senderClean) then return end
-
         local action = arg1 or "UPDATE"
         local groupId = arg2
         if not groupId or groupId == "" then return end
@@ -1730,14 +1741,21 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             _G.GM.groupRepository:save(group)
         end
 
+        if action == "CREATE" and not self:isSelf(senderClean) and not self._notifiedGroupIds[groupId] then
+            self._notifiedGroupIds[groupId] = true
+            if _G.GM and _G.GM.minimapButton and _G.GM.minimapButton.notifyGroupOrLFG then
+                local author = (gCreator ~= "" and gCreator) or (gLeader ~= "" and gLeader) or senderClean
+                _G.GM.minimapButton:notifyGroupOrLFG("GROUP", gName, author)
+            end
+        end
+
         self:refreshActiveViews()
 
     -- =========================================================================
-    -- PROPOSTA DE CARD LFG (LFG_PROP: Jogador -> Líder da Guilda)
+    -- PROPOSTA DE CARD LFG (LFG_PROP: Jogador -> Todos os membros + Líder da Guilda)
     -- =========================================================================
     elseif tag == "LFG_PROP" then
         local isLocalLeader = (IsGuildLeader and IsGuildLeader() == true) or false
-        if not isLocalLeader then return end
 
         local action = arg1 or "UPDATE"
         local cardId = arg2
@@ -1747,8 +1765,10 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             if _G.GM and _G.GM.lfgRepository then
                 _G.GM.lfgRepository:delete(cardId)
             end
-            local payload = string.format("LFG_DATA~DELETE~%s", cardId)
-            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            if isLocalLeader then
+                local payload = string.format("LFG_DATA~DELETE~%s", cardId)
+                safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+            end
             self:refreshActiveViews()
             return
         end
@@ -1776,18 +1796,26 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             _G.GM.lfgRepository:save(card)
         end
 
-        -- Líder replica para toda a guilda (LFG_DATA)
-        local payload = string.format("LFG_DATA~%s~%s~%s~%s~%s~%s~%d~%d~%s",
-            action, cardId, cType, cTime, cCreator, cClass, cLevel, cCreatedAt, cDesc)
-        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        if action == "CREATE" and not self:isSelf(senderClean) and not self._notifiedLFGIds[cardId] then
+            self._notifiedLFGIds[cardId] = true
+            if _G.GM and _G.GM.minimapButton and _G.GM.minimapButton.notifyGroupOrLFG then
+                local author = (cCreator ~= "" and cCreator) or senderClean
+                _G.GM.minimapButton:notifyGroupOrLFG("LFG", nil, author)
+            end
+        end
+
+        -- Líder também replica para persistência na guilda (LFG_DATA)
+        if isLocalLeader then
+            local payload = string.format("LFG_DATA~%s~%s~%s~%s~%s~%s~%d~%d~%s",
+                action, cardId, cType, cTime, cCreator, cClass, cLevel, cCreatedAt, cDesc)
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        end
         self:refreshActiveViews()
 
     -- =========================================================================
-    -- DADOS OFICIAIS DE CARD LFG (LFG_DATA: Líder da Guilda -> Todos os membros)
+    -- DADOS OFICIAIS DE CARD LFG (LFG_DATA: Líder/Membros -> Todos os membros)
     -- =========================================================================
     elseif tag == "LFG_DATA" then
-        if not self:isSenderGuildLeader(senderClean) then return end
-
         local action = arg1 or "UPDATE"
         local cardId = arg2
         if not cardId or cardId == "" then return end
@@ -1821,6 +1849,14 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         if _G.GM and _G.GM.lfgRepository then
             _G.GM.lfgRepository:save(card)
+        end
+
+        if action == "CREATE" and not self:isSelf(senderClean) and not self._notifiedLFGIds[cardId] then
+            self._notifiedLFGIds[cardId] = true
+            if _G.GM and _G.GM.minimapButton and _G.GM.minimapButton.notifyGroupOrLFG then
+                local author = (cCreator ~= "" and cCreator) or senderClean
+                _G.GM.minimapButton:notifyGroupOrLFG("LFG", nil, author)
+            end
         end
 
         self:refreshActiveViews()

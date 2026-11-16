@@ -112,6 +112,26 @@ function MinimapButton:createUI()
     local animFrame = CreateFrame("Frame", nil, button)
     button.animFrame = animFrame
 
+    -- Badge numérico de notificação (ex: novo grupo ou card LFG criado na guilda)
+    local notifBadge = CreateFrame("Frame", nil, button)
+    notifBadge:SetSize(15, 15)
+    notifBadge:SetPoint("TOPRIGHT", button, "TOPRIGHT", 2, 2)
+    notifBadge:SetFrameLevel(button:GetFrameLevel() + 6)
+    local badgeBg = notifBadge:CreateTexture(nil, "ARTWORK")
+    badgeBg:SetAllPoints(notifBadge)
+    badgeBg:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    badgeBg:SetBlendMode("BLEND")
+    badgeBg:SetVertexColor(0.05, 0.72, 0.22, 1.0)
+    local badgeText = notifBadge:CreateFontString(nil, "OVERLAY", nil, 1)
+    badgeText:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+    badgeText:SetPoint("CENTER", notifBadge, "CENTER", 0, 0)
+    badgeText:SetText("!")
+    badgeText:SetTextColor(1.0, 1.0, 1.0, 1.0)
+    notifBadge.text = badgeText
+    notifBadge:Hide()
+    button.notifBadge = notifBadge
+    self._pendingGroupNotifications = self._pendingGroupNotifications or {}
+
     -- Highlight suave ao passar o mouse (100% concêntrico sobre o botão)
     local highlight = button:CreateTexture(nil, "HIGHLIGHT")
     highlight:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
@@ -195,6 +215,11 @@ function MinimapButton:createUI()
         wasDragged = false
 
         if btn == "LeftButton" then
+            if self._pendingGroupNotifications and #self._pendingGroupNotifications > 0 and _G.GM and _G.GM.groupController then
+                self:clearGroupNotifications()
+                _G.GM.groupController:toggle()
+                return
+            end
             local defTab = (_G.GM_DB and _G.GM_DB.settings and _G.GM_DB.settings.defaultTab) or "audit"
             local inGuild = IsInGuild and IsInGuild()
             if not inGuild and defTab ~= "settings" then
@@ -240,6 +265,26 @@ function MinimapButton:createUI()
         GameTooltip:AddLine(L["MINIMAP_TOOLTIP_CMDS"] or "|cffaaaaaaCommands: /gm, /gmaudit, /gmlogs, /gmgrupos, /gmagenda|r")
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(L["MINIMAP_TOOLTIP_DRAG"] or "|cff888888Drag: Move button around minimap|r", 0.8, 0.8, 0.8, true)
+
+        -- Notificações de Novos Grupos / Cards LFG
+        if self._pendingGroupNotifications and #self._pendingGroupNotifications > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(string.format(L["MINIMAP_NOTIF_GROUP_HEADER"] or "|cff20ff20New Groups / LFG (%d):|r", #self._pendingGroupNotifications), 1, 1, 1)
+            local shownCount = 0
+            for i = #self._pendingGroupNotifications, 1, -1 do
+                local n = self._pendingGroupNotifications[i]
+                if n then
+                    if n.kind == "GROUP" then
+                        GameTooltip:AddLine("  • " .. string.format(L["MINIMAP_NOTIF_GROUP_FMT"] or "Group created: |cffffd200%s|r by %s", n.title or "Grupo", n.creator or "?"), 1, 1, 1)
+                    else
+                        GameTooltip:AddLine("  • " .. string.format(L["MINIMAP_NOTIF_LFG_FMT"] or "LFG card created by |cffffd200%s|r", n.creator or "?"), 1, 1, 1)
+                    end
+                    shownCount = shownCount + 1
+                    if shownCount >= 5 then break end
+                end
+            end
+            GameTooltip:AddLine(L["MINIMAP_NOTIF_CLICK_OPEN"] or "|cff00ff00Left-Click to open Groups & LFG|r", 0.2, 1, 0.2)
+        end
 
         -- Seção informativa dos membros conectados com o Addon (exibida exclusivamente no mouseover)
         local locService = _G.GM and _G.GM.locationService
@@ -314,6 +359,11 @@ function MinimapButton:pulseButton(mode)
         R_tgt, G_tgt, B_tgt = 0.95, 0.04, 0.04       -- Fundo vermelho vivo
         RB_tgt, GB_tgt, BB_tgt = 1.00, 0.18, 0.18    -- Borda vermelha brilhante
         G_r, G_g, G_b = 1.00, 0.10, 0.10             -- Aura vermelha
+    elseif mode == "GROUP" then
+        -- NOVO GRUPO / LFG: Verde esmeralda / dourado vibrante
+        R_tgt, G_tgt, B_tgt = 0.06, 0.72, 0.25
+        RB_tgt, GB_tgt, BB_tgt = 0.30, 1.00, 0.45
+        G_r, G_g, G_b = 0.20, 1.00, 0.35
     else
         -- LOGAR: Azul vibrante
         R_tgt, G_tgt, B_tgt = 0.05, 0.45, 0.95       -- Fundo azul profundo
@@ -400,6 +450,38 @@ end
 ---@param mode string
 function MinimapButton:pulseBubble(mode)
     self:pulseButton(mode)
+end
+
+--- Notifica no botão do minimapa que um grupo ou card de LFG foi criado na guilda.
+---@param kind string @"GROUP" ou "LFG"
+---@param title string|nil
+---@param creator string|nil
+function MinimapButton:notifyGroupOrLFG(kind, title, creator)
+    self._pendingGroupNotifications = self._pendingGroupNotifications or {}
+    table.insert(self._pendingGroupNotifications, {
+        kind = kind or "GROUP",
+        title = title,
+        creator = creator,
+        time = GetTime and GetTime() or 0,
+    })
+    -- Mantém no máximo os últimos 15 avisos
+    while #self._pendingGroupNotifications > 15 do
+        table.remove(self._pendingGroupNotifications, 1)
+    end
+    if self._button and self._button.notifBadge then
+        local count = #self._pendingGroupNotifications
+        self._button.notifBadge.text:SetText(count > 9 and "9+" or tostring(count))
+        self._button.notifBadge:Show()
+    end
+    self:pulseButton("GROUP")
+end
+
+--- Limpa as notificações pendentes de Grupo / LFG no botão do minimapa.
+function MinimapButton:clearGroupNotifications()
+    self._pendingGroupNotifications = {}
+    if self._button and self._button.notifBadge then
+        self._button.notifBadge:Hide()
+    end
 end
 
 --- Disparado quando ocorre um evento de peers no LocationService
