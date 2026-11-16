@@ -123,7 +123,7 @@ function MemberController:initHooks()
                 member:setRole(updatedFields.role)
                 local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
                 if member.setRolePendingLeaderConfirm then
-                    member:setRolePendingLeaderConfirm(not isLeader)
+                    member:setRolePendingLeaderConfirm(false)
                 end
                 hasCustomFieldChanged = true
             end

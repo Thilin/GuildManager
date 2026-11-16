@@ -518,7 +518,7 @@ function SyncService:syncWithPeer(peerName)
         local rec = m:getRecruiter() or ""
         local alts = m:getAlts() or {}
         local role = (m.getRole and m:getRole()) or ""
-        local roleShouldSync = isLeader or (m.isRolePendingLeaderConfirm and m:isRolePendingLeaderConfirm())
+        local roleShouldSync = (role ~= "")
         if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or (role ~= "" and roleShouldSync) then
             local mName = cleanName(m:getName())
             local memberLower = mName:lower()
@@ -704,16 +704,13 @@ function SyncService:broadcastMemberCustomData(member, force)
     local role = ""
 
     -- Regra 1: Data de entrada e Lista de Alts só sincronizam a partir do Líder da guilda!
-    -- A Função (Role) é compartilhada para todos a partir do addon do Líder da Guilda,
-    -- e qualquer atualização feita pelos membros é enviada ao Líder para confirmação.
+    -- A Função (Role) é compartilhada diretamente por todos os membros e também redirecionada ao Líder.
+    role = (member.getRole and member:getRole()) or ""
     if isLeader then
         dateJoin = member:getDateJoin() or ""
         local alts = member:getAlts() or {}
         altsCsv = table.concat(alts, ",")
         isMain = member:isMain()
-        role = (member.getRole and member:getRole()) or ""
-    elseif member.isRolePendingLeaderConfirm and member:isRolePendingLeaderConfirm() then
-        role = (member.getRole and member:getRole()) or ""
     end
 
     -- Regra 2: Aniversário e Recrutador continuam sendo syncados entre todos os membros
@@ -1128,37 +1125,6 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
                     recruiter = currentRec .. " | " .. recruiter
                 end
             end
-
-            -- Verificação de Alteração em Função (Role) - Exige confirmação do Líder sempre que houver alteração
-            local currentRole = (member.getRole and member:getRole()) or ""
-            if role ~= "" and role ~= currentRole then
-                local conflictKey = mClean:lower() .. "~" .. role:upper()
-                local lastResolvedTs = self._resolvedLeaderRoleConflicts and self._resolvedLeaderRoleConflicts[conflictKey]
-                if not lastResolvedTs or appliedTimestamp > lastResolvedTs then
-                    if self._syncConflictView then
-                        local curL = (_G.GM and _G.GM.L) or _G.L or L
-                        local emptyRoleLabel = curL["STATS_UNASSIGNED"] or "Sem Função"
-                        self._syncConflictView:enqueueConflict({
-                            memberName = mClean,
-                            sender = senderClean,
-                            fieldKey = "role",
-                            fieldName = curL["SYNC_CONFLICT_FIELD_ROLE"] or "Função",
-                            oldValue = (currentRole ~= "" and currentRole) or emptyRoleLabel,
-                            newValue = role,
-                            rawOldValue = currentRole,
-                            rawNewValue = role,
-                            timestamp = appliedTimestamp,
-                            member = member,
-                        })
-                    end
-                end
-                -- Mantém a função atual do banco do Líder até a confirmação do Líder
-                role = currentRole
-            elseif role ~= "" and role == currentRole then
-                if member.setRolePendingLeaderConfirm then
-                    member:setRolePendingLeaderConfirm(false)
-                end
-            end
         end
 
         -- Aplica os dados permitidos:
@@ -1167,14 +1133,14 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
             member:setDateJoin(dateJoin)
         end
 
-        -- 2. Função / Role (os outros membros salvam a partir do que existe no addon do Guild Líder)
-        if senderIsLeader then
-            member:setRole(role or "")
+        -- 2. Função / Role (retransmitida para todos os membros e também redirecionada para o Líder da Guilda)
+        if role and role ~= "" then
+            member:setRole(role)
             if member.setRolePendingLeaderConfirm then
                 member:setRolePendingLeaderConfirm(false)
             end
-        elseif isLocalLeader and role and role ~= "" then
-            member:setRole(role)
+        elseif senderIsLeader then
+            member:setRole("")
             if member.setRolePendingLeaderConfirm then
                 member:setRolePendingLeaderConfirm(false)
             end
@@ -2311,7 +2277,7 @@ function SyncService:forceSyncAll()
         local rec = m:getRecruiter() or ""
         local alts = m:getAlts() or {}
         local role = (m.getRole and m:getRole()) or ""
-        local roleShouldSync = isLeader or (m.isRolePendingLeaderConfirm and m:isRolePendingLeaderConfirm())
+        local roleShouldSync = (role ~= "")
         if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or (role ~= "" and roleShouldSync) then
             -- Limpa assinatura em cache para permitir reenvio forçado
             local mLower = cleanName(m:getName()):lower()

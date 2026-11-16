@@ -73,7 +73,7 @@ function AuditController:initHooks()
                 member:setRole(fields.role)
                 local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
                 if member.setRolePendingLeaderConfirm then
-                    member:setRolePendingLeaderConfirm(not isLeader)
+                    member:setRolePendingLeaderConfirm(false)
                 end
                 hasChanged = true
             end
