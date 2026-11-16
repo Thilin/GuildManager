@@ -856,7 +856,7 @@ function MinimapPinManager:getOrCreatePin(name)
     end
 
     pin = CreateFrame("Button", "GM_MinimapPin_" .. safeName, Minimap)
-    pin:SetSize(22, 22)
+    pin:SetSize(14, 14)
     pin:SetFrameStrata("HIGH")
     pin:SetFrameLevel((Minimap:GetFrameLevel() or 8) + 10)
     pin:EnableMouse(true)
@@ -865,7 +865,7 @@ function MinimapPinManager:getOrCreatePin(name)
     -- 1. Glow pulsante na cor da classe
     local glow = pin:CreateTexture(nil, "BACKGROUND", nil, -1)
     glow:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-    glow:SetSize(30, 30)
+    glow:SetSize(18, 18)
     glow:SetPoint("CENTER", pin, "CENTER", 0, 0)
     glow:SetBlendMode("ADD")
     pin.glow = glow
@@ -873,21 +873,21 @@ function MinimapPinManager:getOrCreatePin(name)
     -- 2. Seta direcional GPS atrás do ícone (aponta para o rumo da bússola ou direção radial)
     local arrow = pin:CreateTexture(nil, "BORDER", nil, 1)
     arrow:SetTexture("Interface\\Minimap\\MinimapArrow")
-    arrow:SetSize(26, 26)
+    arrow:SetSize(16, 16)
     arrow:SetPoint("CENTER", pin, "CENTER", 0, 0)
     pin.arrow = arrow
 
     -- 3. Ícone circular oficial da classe no centro
     local classIcon = pin:CreateTexture(nil, "ARTWORK", nil, 2)
-    classIcon:SetSize(17, 17)
+    classIcon:SetSize(11, 11)
     classIcon:SetPoint("CENTER", pin, "CENTER", 0, 0)
     pin.classIcon = classIcon
 
-    -- 4. Borda metálica clássica de rastreamento do minimapa
+    -- 4. Borda metálica clássica de rastreamento do minimapa (proporcional ao tamanho padrão de grupo)
     local border = pin:CreateTexture(nil, "OVERLAY", nil, 3)
     border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    border:SetSize(40, 40)
-    border:SetPoint("CENTER", pin, "CENTER", 7, -7)
+    border:SetSize(24, 24)
+    border:SetPoint("CENTER", pin, "CENTER", 4, -4)
     pin.border = border
 
     pin:SetScript("OnEnter", function(p)
