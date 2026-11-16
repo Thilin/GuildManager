@@ -40,6 +40,10 @@ function GuildRosterService:scanRoster(force)
         return 0
     end
 
+    if not force and InCombatLockdown and InCombatLockdown() then
+        return self._activeMemberList and #self._activeMemberList or 0
+    end
+
     local now = GetTime and GetTime() or 0
     if not force and self._activeMemberList and #self._activeMemberList > 0 and (now - (self._lastScanTime or 0)) < 1.5 then
         return #self._activeMemberList

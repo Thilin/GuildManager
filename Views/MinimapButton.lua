@@ -778,8 +778,17 @@ function MinimapPinManager:start(locService)
         end)
 
         f:SetScript("OnUpdate", function(_, elapsed)
+            if InCombatLockdown and InCombatLockdown() then return end
+            if IsInInstance and IsInInstance() then
+                if not self._pinsClearedInInstance then
+                    self._pinsClearedInInstance = true
+                    self:clearPins()
+                end
+                return
+            end
+            self._pinsClearedInInstance = false
             self._lastThrottle = self._lastThrottle + elapsed
-            if self._lastThrottle >= 0.05 or self._forceUpdate then
+            if self._lastThrottle >= 0.25 or self._forceUpdate then
                 self._lastThrottle = 0
                 self._forceUpdate = false
                 self:updatePins()
@@ -820,9 +829,6 @@ function MinimapPinManager:onPeerEvent(event, peerName, peerData)
         self._pins[peerName]:Hide()
     end
     self._forceUpdate = true
-    if self._showPins then
-        self:updatePins()
-    end
 end
 
 --- Limpa e oculta todos os pinos atualmente criados no Minimapa
@@ -955,6 +961,8 @@ end
 --- Atualiza a renderização contínua de todos os membros no Minimapa
 function MinimapPinManager:updatePins()
     if not Minimap or not Minimap:IsShown() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    if IsInInstance and IsInInstance() then return end
 
     if not self._showPins then
         self:clearPins()

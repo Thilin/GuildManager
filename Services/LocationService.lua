@@ -548,18 +548,21 @@ end
 ---@param message string
 ---@param channel string
 ---@param sender string
+local MAP_NAME_CACHE = {}
+
 function LocationService:onAddonMessage(prefix, message, channel, sender)
-    if not prefix or not message or isSecretValue(prefix) or isSecretValue(message) or (sender and isSecretValue(sender)) then
+    if not prefix or isSecretValue(prefix) then
         return
     end
-    if type(message) ~= "string" then return end
-
-    local pUpper = prefix:upper()
-    if pUpper ~= PRIMARY_PREFIX and pUpper ~= FALLBACK_PREFIX and pUpper ~= "GUILDMANAGER" and pUpper ~= SYNC_PREFIX then
+    if prefix ~= PRIMARY_PREFIX and prefix ~= FALLBACK_PREFIX and prefix ~= "GuildManager" and prefix ~= "GUILDMANAGER" and prefix ~= SYNC_PREFIX then
         return
     end
+    if not message or isSecretValue(message) or (sender and isSecretValue(sender)) then
+        return
+    end
+    if type(message) ~= "string" or not sender or sender == "" then return end
 
-    if not sender or sender == "" then return end
+    local pUpper = prefix
 
     local senderClean = sender:match("^([^-]+)") or sender
     senderClean = senderClean:match("^%s*(.-)%s*$") or senderClean
@@ -622,11 +625,18 @@ function LocationService:onAddonMessage(prefix, message, channel, sender)
 
         local finalName = resolvedFullName or senderClean
 
-        -- Nome amigÃ¡vel da zona
+        -- Nome amigável da zona (com cache local para evitar alocações repetidas)
         local zoneName = "Azeroth"
-        if mapID and mapID > 0 and C_Map and C_Map.GetMapInfo then
-            local ok, info = pcall(C_Map.GetMapInfo, mapID)
-            if ok and info and info.name then zoneName = info.name end
+        if mapID and mapID > 0 then
+            if MAP_NAME_CACHE[mapID] then
+                zoneName = MAP_NAME_CACHE[mapID]
+            elseif C_Map and C_Map.GetMapInfo then
+                local ok, info = pcall(C_Map.GetMapInfo, mapID)
+                if ok and info and info.name then
+                    zoneName = info.name
+                    MAP_NAME_CACHE[mapID] = zoneName
+                end
+            end
         end
 
         local isNewPeer = (self._peers[finalName] == nil and self._peers[senderClean] == nil)
@@ -872,16 +882,23 @@ function LocationService:initHooks()
     local purgeTicker = 0
 
     frame:SetScript("OnUpdate", function(_, elapsed)
+        if InCombatLockdown and InCombatLockdown() then
+            return
+        end
+
+        local inInstance = IsInInstance and IsInInstance()
         ticker = ticker + elapsed
         purgeTicker = purgeTicker + elapsed
 
-        if ticker >= 0.75 then
+        if not inInstance and ticker >= 0.75 then
             ticker = 0
             self:sendPosition(false)
+        elseif inInstance and ticker >= 0.75 then
+            ticker = 0
         end
 
         -- Animação em tempo real para peer de teste se ativo
-        local testPeer = self._peers["AventureiroTeste"]
+        local testPeer = not inInstance and self._peers["AventureiroTeste"]
         if testPeer and testPeer.isTest then
             local now = GetTime and GetTime() or 0
             testPeer.lastSeen = now

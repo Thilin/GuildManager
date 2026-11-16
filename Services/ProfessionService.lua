@@ -69,6 +69,7 @@ function ProfessionService:initHooks()
 
     safeRegister("PLAYER_ENTERING_WORLD")
     safeRegister("SKILL_LINES_CHANGED")
+    safeRegister("PLAYER_REGEN_ENABLED")
     safeRegister("TRADE_SKILL_SHOW")
     safeRegister("TRADE_SKILL_LIST_UPDATE")
     safeRegister("TRADE_SKILL_DATA_SOURCE_CHANGED")
@@ -78,9 +79,37 @@ function ProfessionService:initHooks()
     safeRegister("CRAFT_CLOSE")
     safeRegister("ADDON_LOADED")
 
-    frame:SetScript("OnEvent", function(_, event, arg1, ...)
-        if event == "PLAYER_ENTERING_WORLD" or event == "SKILL_LINES_CHANGED" then
+    local function scheduleSkillScan(delay)
+        if self._skillScanPending then return end
+        if C_Timer and C_Timer.After then
+            self._skillScanPending = true
+            C_Timer.After(delay or 0.5, function()
+                self._skillScanPending = false
+                if InCombatLockdown and InCombatLockdown() then
+                    self._pendingSkillScanAfterCombat = true
+                    return
+                end
+                self:scanAll()
+            end)
+        else
             self:scanAll()
+        end
+    end
+
+    frame:SetScript("OnEvent", function(_, event, arg1, ...)
+        if event == "PLAYER_ENTERING_WORLD" then
+            self:scanAll()
+        elseif event == "SKILL_LINES_CHANGED" then
+            if InCombatLockdown and InCombatLockdown() then
+                self._pendingSkillScanAfterCombat = true
+            else
+                scheduleSkillScan(0.5)
+            end
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            if self._pendingSkillScanAfterCombat then
+                self._pendingSkillScanAfterCombat = false
+                scheduleSkillScan(1.5)
+            end
         elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
             self:scanTradeSkillFrame()
         elseif event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then

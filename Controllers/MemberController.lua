@@ -185,6 +185,7 @@ function MemberController:initHooks()
         frame:RegisterEvent("CHAT_MSG_SYSTEM")
         frame:RegisterEvent("CHAT_MSG_ADDON")
         frame:RegisterEvent("GUILD_EVENT_LOG_UPDATE")
+        frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
         frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             if event == "ADDON_LOADED" then
@@ -226,24 +227,33 @@ function MemberController:initHooks()
                         end)
                     end
 
-                    -- Inicia varredura periódica do log de eventos a cada 60 segundos
+                    -- Inicia varredura periódica do log de eventos a cada 60 segundos (pausa em combate)
                     if not self._eventLogTicker and C_Timer and C_Timer.NewTicker then
                         self._eventLogTicker = C_Timer.NewTicker(60, function()
+                            if InCombatLockdown and InCombatLockdown() then
+                                self._pendingRosterScanAfterCombat = true
+                                return
+                            end
                             if IsInGuild and IsInGuild() then
                                 self:requestGuildEventLog()
                             end
                         end)
                     end
 
-                    -- Inicia varredura periódica do Roster da guilda para capturar eventos de LEVELED a cada 60 segundos
+                    -- Inicia varredura periódica do Roster da guilda para capturar eventos de LEVELED a cada 60 segundos (pausa em combate)
                     if not self._rosterTicker and C_Timer and C_Timer.NewTicker then
                         self._rosterTicker = C_Timer.NewTicker(60, function()
+                            if InCombatLockdown and InCombatLockdown() then
+                                self._pendingRosterScanAfterCombat = true
+                                return
+                            end
                             self:onPeriodicRosterScan()
                         end)
                     end
                     if not (C_Timer and C_Timer.NewTicker) then
                         local elapsedAccum = 0
                         frame:SetScript("OnUpdate", function(_, elapsed)
+                            if InCombatLockdown and InCombatLockdown() then return end
                             elapsedAccum = elapsedAccum + (elapsed or 0)
                             if elapsedAccum >= 60 then
                                 elapsedAccum = 0
@@ -254,6 +264,10 @@ function MemberController:initHooks()
                 end
                 self:registerAllHooks()
             elseif event == "GUILD_ROSTER_UPDATE" then
+                if InCombatLockdown and InCombatLockdown() then
+                    self._pendingRosterScanAfterCombat = true
+                    return
+                end
                 if _G.GM and _G.GM.switchActiveGuild then
                     _G.GM.switchActiveGuild()
                 end
@@ -262,6 +276,10 @@ function MemberController:initHooks()
                         self._rosterDebouncePending = true
                         C_Timer.After(0.5, function()
                             self._rosterDebouncePending = false
+                            if InCombatLockdown and InCombatLockdown() then
+                                self._pendingRosterScanAfterCombat = true
+                                return
+                            end
                             if IsInGuild and IsInGuild() then
                                 self._guildRosterService:scanRoster()
                                 self:requestGuildEventLog()
@@ -289,7 +307,37 @@ function MemberController:initHooks()
                     self:handleAddonChatMessage(arg1, arg2, arg3, arg4)
                 end
             elseif event == "GUILD_EVENT_LOG_UPDATE" then
-                self:checkGuildEventLog()
+                if InCombatLockdown and InCombatLockdown() then
+                    self._pendingEventLogAfterCombat = true
+                else
+                    self:checkGuildEventLog()
+                end
+            elseif event == "PLAYER_REGEN_ENABLED" then
+                if self._pendingRosterScanAfterCombat or self._pendingEventLogAfterCombat then
+                    local runRoster = self._pendingRosterScanAfterCombat
+                    local runEventLog = self._pendingEventLogAfterCombat
+                    self._pendingRosterScanAfterCombat = false
+                    self._pendingEventLogAfterCombat = false
+                    local execDeferred = function()
+                        if InCombatLockdown and InCombatLockdown() then
+                            if runRoster then self._pendingRosterScanAfterCombat = true end
+                            if runEventLog then self._pendingEventLogAfterCombat = true end
+                            return
+                        end
+                        if runRoster and IsInGuild and IsInGuild() then
+                            self._guildRosterService:scanRoster()
+                            self:requestGuildEventLog()
+                        end
+                        if runEventLog then
+                            self:checkGuildEventLog()
+                        end
+                    end
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(2.0, execDeferred)
+                    else
+                        execDeferred()
+                    end
+                end
             end
         end)
     end

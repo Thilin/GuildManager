@@ -153,6 +153,8 @@ function SyncService:new(memberService, locationService, settingsService, guildR
     instance._channelNumber = nil
     instance._eventFrame = nil
     instance._lastRetransmitTick = 0
+    instance._deferredPeerSyncs = {}
+    instance._lastFullSyncWithPeer = {}
     instance._syncChatFrame = nil
 
     return instance
@@ -415,7 +417,11 @@ function SyncService:touchPeer(peerName)
         local lastNotice = self._lastLoginDetected[lower] or 0
         if (now - lastNotice) > PEER_LIVENESS_WINDOW then
             self._lastLoginDetected[lower] = now
-            self:onPeerLoggedIn(cName)
+            if InCombatLockdown and InCombatLockdown() then
+                self._deferredPeerSyncs[lower] = cName
+            else
+                self:onPeerLoggedIn(cName)
+            end
         end
     end
 end
@@ -473,6 +479,33 @@ function SyncService:syncWithPeer(peerName)
     local cName = cleanName(peerName)
     local peerLower = cName:lower()
 
+    if InCombatLockdown and InCombatLockdown() then
+        self._deferredPeerSyncs[peerLower] = cName
+        return 0
+    end
+
+    local now = GetTime and GetTime() or 0
+    local lastSync = self._lastFullSyncWithPeer and self._lastFullSyncWithPeer[peerLower] or 0
+    if lastSync > 0 and (now - lastSync) < 120 then
+        return 0
+    end
+    self._lastFullSyncWithPeer = self._lastFullSyncWithPeer or {}
+    self._lastFullSyncWithPeer[peerLower] = now
+
+    -- Indexa a outbox uma única vez (O(M)) para evitar loops aninhados O(N*M)
+    local outboxCustomByMember = {}
+    local outboxProfByKey = {}
+    for _, u in pairs(self._pendingOutbox) do
+        if u.memberName then
+            local mLow = u.memberName:lower()
+            if u.type == "PROFESSION" and u.profKey then
+                outboxProfByKey[mLow .. ":" .. u.profKey] = u
+            elseif not u.type or u.type == "CUSTOM" then
+                outboxCustomByMember[mLow] = u
+            end
+        end
+    end
+
     local members = self._memberService:getAllMembers()
     local count = 0
     local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
@@ -487,15 +520,7 @@ function SyncService:syncWithPeer(peerName)
         if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or (role ~= "" and roleShouldSync) then
             local mName = cleanName(m:getName())
             local memberLower = mName:lower()
-
-            -- Encontra ou cria a entrada na outbox
-            local existingUpdate = nil
-            for _, u in pairs(self._pendingOutbox) do
-                if u.memberName:lower() == memberLower then
-                    existingUpdate = u
-                    break
-                end
-            end
+            local existingUpdate = outboxCustomByMember[memberLower]
 
             if existingUpdate then
                 -- Remove a confirmação anterior deste peer para garantir retransmissão até confirmação do novo login
@@ -518,13 +543,7 @@ function SyncService:syncWithPeer(peerName)
             local mLower = mName:lower()
             for profKey, pData in pairs(profs) do
                 if (pData.rank or 0) > 0 or (pData.recipes and next(pData.recipes) ~= nil) then
-                    local existingUpdate = nil
-                    for _, u in pairs(self._pendingOutbox) do
-                        if u.type == "PROFESSION" and u.memberName:lower() == mLower and u.profKey == profKey then
-                            existingUpdate = u
-                            break
-                        end
-                    end
+                    local existingUpdate = outboxProfByKey[mLower .. ":" .. profKey]
 
                     if existingUpdate then
                         existingUpdate.acknowledgedPeers[peerLower] = nil
@@ -948,7 +967,13 @@ end
 ---@param channel string
 ---@param sender string
 function SyncService:onAddonMessage(prefix, message, channel, sender)
-    if not prefix or not message or isSecretValue(prefix) or isSecretValue(message) or (sender and isSecretValue(sender)) then
+    if not prefix or isSecretValue(prefix) then
+        return
+    end
+    if prefix ~= SYNC_PREFIX and prefix ~= "GM_POS" and prefix ~= "AJ_POS" then
+        return
+    end
+    if not message or isSecretValue(message) or (sender and isSecretValue(sender)) then
         return
     end
     if type(message) ~= "string" or not sender or sender == "" then return end
@@ -958,12 +983,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         return
     end
 
-    local pUpper = prefix:upper()
-    if pUpper ~= SYNC_PREFIX then
+    if prefix ~= SYNC_PREFIX then
         -- Se recebeu sinal de presença do LocationService de outro jogador, aproveita para registrar liveness do peer
-        if pUpper == "GM_POS" or pUpper == "AJ_POS" then
-            self:touchPeer(sender)
-        end
+        self:touchPeer(sender)
         return
     end
 
@@ -2483,9 +2505,25 @@ function SyncService:initHooks()
     local sendQueueTicker = 0
     local retransmitTicker = 0
     local cleanupTicker = 0
+    local deferredSyncTicker = 0
+    local wasInCombat = false
+    local postCombatGrace = 0
+
     frame:SetScript("OnUpdate", function(_, elapsed)
         -- Regra de Performance: Pausa total de processamento em combate para zero stuttering e FPS máximo!
         if InCombatLockdown and InCombatLockdown() then
+            wasInCombat = true
+            return
+        end
+
+        if wasInCombat then
+            wasInCombat = false
+            postCombatGrace = 2.5
+            return
+        end
+
+        if postCombatGrace > 0 then
+            postCombatGrace = postCombatGrace - elapsed
             return
         end
 
@@ -2499,6 +2537,18 @@ function SyncService:initHooks()
         if retransmitTicker >= RETRANSMIT_INTERVAL then
             retransmitTicker = 0
             self:processRetransmission()
+        end
+
+        if self._deferredPeerSyncs and next(self._deferredPeerSyncs) ~= nil then
+            deferredSyncTicker = deferredSyncTicker + elapsed
+            if deferredSyncTicker >= 1.5 then
+                deferredSyncTicker = 0
+                local k, peerName = next(self._deferredPeerSyncs)
+                if k then
+                    self._deferredPeerSyncs[k] = nil
+                    self:onPeerLoggedIn(peerName)
+                end
+            end
         end
 
         cleanupTicker = cleanupTicker + elapsed
@@ -2535,6 +2585,8 @@ function SyncService:processRetransmission()
 
     local now = GetTime and GetTime() or 0
     local toRemove = nil
+    local sentThisPass = 0
+    local MAX_RETRANSMITS_PER_PASS = 10
 
     for updateId, update in pairs(self._pendingOutbox) do
         -- Verifica se todos os pares ativos já confirmaram (reutilizando a lista de peers)
@@ -2545,7 +2597,10 @@ function SyncService:processRetransmission()
             -- Retransmite se passou tempo suficiente desde o último envio
             if (now - (update.lastSent or 0)) >= RETRANSMIT_INTERVAL then
                 if (update.sendCount or 0) < MAX_RETRANSMIT_ATTEMPTS then
-                    self:sendUpdatePacket(update)
+                    if sentThisPass < MAX_RETRANSMITS_PER_PASS then
+                        self:sendUpdatePacket(update)
+                        sentThisPass = sentThisPass + 1
+                    end
                 else
                     -- Proteção após limite máximo de tentativas
                     toRemove = toRemove or {}
