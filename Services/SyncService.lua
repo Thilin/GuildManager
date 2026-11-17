@@ -748,7 +748,7 @@ function SyncService:broadcastMemberCustomData(member, force)
 
     -- Cancela envios anteriores do mesmo membro que ainda estavam pendentes na fila
     for id, u in pairs(self._pendingOutbox) do
-        if u.memberName:lower() == memberLower then
+        if not u.type and u.memberName and u.memberName:lower() == memberLower then
             self._pendingOutbox[id] = nil
         end
     end
