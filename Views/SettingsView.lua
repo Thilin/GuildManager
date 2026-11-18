@@ -1285,7 +1285,7 @@ function SettingsView:updateLocale()
     if self._lastStats and self._widgets.gStatsText then
         self._widgets.gStatsText:SetText(string.format(
             curL["SETTINGS_STATS_FORMAT"] or "|cffaaaaaaMembers: |cffffff00%d|r  •  Groups: |cffffff00%d|r  •  Logs: |cffffff00%d|r  •  v%s|r",
-            self._lastStats.totalMembers or 0, self._lastStats.totalGroups or 0, self._lastStats.totalLogs or 0, self._lastStats.version or "1.2"
+            self._lastStats.totalMembers or 0, self._lastStats.totalGroups or 0, self._lastStats.totalLogs or 0, self._lastStats.version or "1.2.4"
         ))
     end
 

@@ -49,6 +49,70 @@ end
 
 --- Dados do Changelog por versão do addon (com suporte multilíngue ptBR e enUS).
 local CHANGELOG_DATA = {
+    ["1.2.4"] = {
+        ptBR = {
+            title = "Guild Manager Forever v1.2.4",
+            date = "18/11/2026",
+            dateFmt = "Data da atualização: %s",
+            sections = {
+                {
+                    category = "PEDIDOS DE CRIAÇÃO (CRAFTING)",
+                    color = "|cffff9900",
+                    items = {
+                        "Desativação temporária da aba e atalhos de Pedidos de Criação enquanto a funcionalidade passa por reformulações e melhorias.",
+                        "Os dados e estruturas do sistema permanecem preservados para o futuro relançamento.",
+                    }
+                },
+                {
+                    category = "TRADUÇÕES & LOCALIZAÇÃO",
+                    color = "|cff33ccff",
+                    items = {
+                        "Corrigido algumas traduções para o inglês (enUS) e português (ptBR).",
+                    }
+                },
+                {
+                    category = "SINCRONIZAÇÃO DE GRUPOS & LFG",
+                    color = "|cff2ecc71",
+                    items = {
+                        "Ajuste no período de sincronia de cards de LFG e de Grupos.",
+                    }
+                }
+            },
+            disclaimerTitle = "DISCLAIMER",
+            disclaimer = "A funcionalidade de pedidos de criação foi desativada e voltará em um futuro breve reformulada. Novas funcionalidades interessantes virão na próxima semana, fique ligado e obrigado por usar o addon.\n\nQualquer bug report ou sugestão, você pode me encontrar no meu Discord: |cffffd200thillin_|r",
+        },
+        enUS = {
+            title = "Guild Manager Forever v1.2.4",
+            date = "11/18/2026",
+            dateFmt = "Update date: %s",
+            sections = {
+                {
+                    category = "CRAFTING & ORDERS",
+                    color = "|cffff9900",
+                    items = {
+                        "Temporary deactivation of the Crafting & Orders tab and menu shortcuts while the feature undergoes improvements and redesign.",
+                        "Internal data and system structures remain safely preserved for the upcoming relaunch.",
+                    }
+                },
+                {
+                    category = "TRANSLATIONS & LOCALIZATION",
+                    color = "|cff33ccff",
+                    items = {
+                        "Fixed some translations for English (enUS) and Portuguese (ptBR).",
+                    }
+                },
+                {
+                    category = "GROUPS & LFG SYNCHRONIZATION",
+                    color = "|cff2ecc71",
+                    items = {
+                        "Adjustment in synchronization period for LFG cards and Groups.",
+                    }
+                }
+            },
+            disclaimerTitle = "DISCLAIMER",
+            disclaimer = "The crafting orders feature has been temporarily disabled and will return redesigned in the near future. Exciting new features are coming next week, stay tuned and thank you for using the addon.\n\nFor any bug reports or suggestions, you can find me on Discord: |cffffd200thillin_|r",
+        }
+    },
     ["1.2"] = {
         ptBR = {
             title = "Guild Manager Forever v1.2",
@@ -159,9 +223,9 @@ local function getAddonVersion()
         ver = GetAddOnMetadata(addonName or "GuildManagerForever", "Version")
     end
     if not ver or ver == "" or ver:find("@") then
-        ver = "1.2"
+        ver = "1.2.4"
     end
-    return ver:match("^%s*(.-)%s*$") or "1.2"
+    return ver:match("^%s*(.-)%s*$") or "1.2.4"
 end
 
 --- Construtor da View do Changelog.
@@ -356,9 +420,9 @@ end
 function ChangelogView:populateChangelog(version)
     if not self._scrollChild then return end
 
-    local targetVersion = version or self._version or "1.2"
+    local targetVersion = version or self._version or "1.2.4"
     local locale = getCurrentLocale()
-    local verData = CHANGELOG_DATA[targetVersion] or CHANGELOG_DATA["1.2"]
+    local verData = CHANGELOG_DATA[targetVersion] or CHANGELOG_DATA["1.2.4"] or CHANGELOG_DATA["1.2"]
     local data = (verData and verData[locale]) or (verData and verData.ptBR) or verData
 
     -- Remove widgets antigos do scrollChild
@@ -429,6 +493,39 @@ function ChangelogView:populateChangelog(version)
         end
 
         local finalBoxHeight = math.abs(currentY) + 6
+        box:SetHeight(finalBoxHeight)
+        table.insert(self._entryFrames, box)
+        yOffset = yOffset + finalBoxHeight + 10
+    end
+
+    -- Disclaimer (se houver)
+    if data.disclaimer then
+        local dCategory = data.disclaimerTitle or "DISCLAIMER"
+        local sTitle = self._scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        sTitle:SetPoint("TOPLEFT", self._scrollChild, "TOPLEFT", 6, -yOffset)
+        sTitle:SetText(string.format("|cffff9900▶ %s|r", dCategory))
+        table.insert(self._entryFrames, sTitle)
+        yOffset = yOffset + 20
+
+        local box = CreateFrame("Frame", nil, self._scrollChild, template)
+        box:SetSize(446, 30)
+        box:SetPoint("TOPLEFT", self._scrollChild, "TOPLEFT", 2, -yOffset)
+        if box.SetBackdrop then
+            box:SetBackdrop(SUB_CONTAINER_BACKDROP)
+            box:SetBackdropColor(0.06, 0.035, 0.015, 0.90)
+            box:SetBackdropBorderColor(0.85, 0.55, 0.15, 0.85)
+        end
+
+        local discText = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        discText:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -8)
+        discText:SetPoint("RIGHT", box, "RIGHT", -10, 0)
+        discText:SetJustifyH("LEFT")
+        discText:SetWordWrap(true)
+        discText:SetText(string.format("|cffffffff%s|r", data.disclaimer))
+
+        local strHeight = discText:GetStringHeight()
+        if not strHeight or strHeight < 14 then strHeight = 14 end
+        local finalBoxHeight = strHeight + 16
         box:SetHeight(finalBoxHeight)
         table.insert(self._entryFrames, box)
         yOffset = yOffset + finalBoxHeight + 10
