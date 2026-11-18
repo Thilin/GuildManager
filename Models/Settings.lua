@@ -79,7 +79,11 @@ end
 -- Getters
 function GMSettings:getLanguage() return self._language or "enUS" end
 function GMSettings:getGuildTagline() return self._guildTagline or "" end
-function GMSettings:getDefaultTab() return self._defaultTab or "audit" end
+function GMSettings:getDefaultTab()
+    local t = self._defaultTab or "audit"
+    if t == "professions" then return "audit" end
+    return t
+end
 function GMSettings:isTimeFormat24() return self._timeFormat24 == true end
 function GMSettings:isChatMentionsEnabled() return self._enableChatMentions ~= false end
 function GMSettings:isMentionSoundEnabled() return self._enableMentionSound ~= false end
@@ -132,7 +136,11 @@ function GMSettings:setLanguage(val)
     end
 end
 function GMSettings:setGuildTagline(val) self._guildTagline = tostring(val or "") end
-function GMSettings:setDefaultTab(val) self._defaultTab = tostring(val or "audit") end
+function GMSettings:setDefaultTab(val)
+    local t = tostring(val or "audit")
+    if t == "professions" then t = "audit" end
+    self._defaultTab = t
+end
 function GMSettings:setTimeFormat24(val) self._timeFormat24 = (val == true) end
 function GMSettings:setChatMentionsEnabled(val) self._enableChatMentions = (val == true) end
 function GMSettings:setMentionSoundEnabled(val) self._enableMentionSound = (val == true) end

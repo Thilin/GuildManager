@@ -91,12 +91,6 @@ function IntroController:setupCallbacks()
         end
     end)
 
-    view:setOnOpenProfessionsCallback(function()
-        if _G.GM and _G.GM.professionController then
-            _G.GM.professionController:show()
-        end
-    end)
-
     view:setOnOpenWorldMapCallback(function()
         if ToggleWorldMap then
             ToggleWorldMap()

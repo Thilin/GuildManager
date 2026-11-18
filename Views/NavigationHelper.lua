@@ -144,21 +144,6 @@ local NAV_TABS = {
         end,
     },
     {
-        id = "professions",
-        name = "Professions",
-        icon = "Interface\\Icons\\Trade_BlackSmithing",
-        texCoord = { 0.08, 0.92, 0.08, 0.92 },
-        tooltipKey = "TAB_PROFESSIONS_TOOLTIP",
-        tooltipDescKey = "TAB_PROFESSIONS_TOOLTIP_DESC",
-        fallbackTitle = "Pedidos de Profissão",
-        fallbackDesc = "Consulte receitas, veja quem faz na guilda e faça pedidos de fabricação.",
-        getController = function() return (_G.GM and _G.GM.professionController) or _G.professionController end,
-        getViewFrame = function()
-            local v = (_G.GM and _G.GM.professionView) or _G.professionView
-            return (v and v.getFrame and v:getFrame()) or (v and v._frame)
-        end,
-    },
-    {
         id = "settings",
         name = "Settings",
         icon = "Interface\\Icons\\Trade_Engineering",
@@ -175,9 +160,9 @@ local NAV_TABS = {
     },
 }
 
---- Cria e padroniza as 6 abas laterais de navegação para qualquer tela principal do GuildManager.
+--- Cria e padroniza as 5 abas laterais de navegação para qualquer tela principal do GuildManager.
 ---@param parentFrame table
----@param activeTabId string @"audit"|"logs"|"groups"|"agenda"|"professions"|"settings"
+---@param activeTabId string @"audit"|"logs"|"groups"|"agenda"|"settings"
 ---@param viewInstance table|nil
 ---@return table @Lista de botões criados
 function _G.GM.createNavigationSideTabs(parentFrame, activeTabId, viewInstance)

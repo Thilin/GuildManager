@@ -75,7 +75,7 @@ function IntroView:new()
     instance._introFrame = nil
     instance._noGuildFrame = nil
     instance._currentStep = 1
-    instance._maxSteps = 8
+    instance._maxSteps = 7
     instance._stepContainers = {}
     instance._stepButtons = {}
     instance._birthdayEB = nil
@@ -307,16 +307,15 @@ function IntroView:createIntroUI()
     headerSep:SetHeight(1)
     headerSep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
 
-    -- Barra de Passos (8 abas superiores de navegação rápida)
+    -- Barra de Passos (7 abas superiores de navegação rápida)
     local stepTabs = {
         { id = 1, key = "INTRO_STEP1_TAB", fallback = "1. Auditoria" },
         { id = 2, key = "INTRO_STEP2_TAB", fallback = "2. Atividades" },
         { id = 3, key = "INTRO_STEP3_TAB", fallback = "3. Agenda" },
         { id = 4, key = "INTRO_STEP4_TAB", fallback = "4. Grupos" },
-        { id = 5, key = "INTRO_STEP5_TAB", fallback = "5. Profissões" },
-        { id = 6, key = "INTRO_STEP6_TAB", fallback = "6. Menções (@)" },
-        { id = 7, key = "INTRO_STEP7_TAB", fallback = "7. Mapa" },
-        { id = 8, key = "INTRO_STEP8_TAB", fallback = "8. Config & Aniv" },
+        { id = 5, key = "INTRO_STEP6_TAB", fallback = "5. Menções (@)" },
+        { id = 6, key = "INTRO_STEP7_TAB", fallback = "6. Mapa" },
+        { id = 7, key = "INTRO_STEP8_TAB", fallback = "7. Config & Aniv" },
     }
     self._stepTabsDefs = stepTabs
     self._stepButtons = {}
@@ -354,7 +353,7 @@ function IntroView:createIntroUI()
     end
     self._contentFrame = contentFrame
 
-    -- Criação dos 8 containers de etapas
+    -- Criação dos 7 containers de etapas
     self:createStep1UI(contentFrame)
     self:createStep2UI(contentFrame)
     self:createStep3UI(contentFrame)
@@ -362,7 +361,6 @@ function IntroView:createIntroUI()
     self:createStep5UI(contentFrame)
     self:createStep6UI(contentFrame)
     self:createStep7UI(contentFrame)
-    self:createStep8UI(contentFrame)
 
     -- =========================================================================
     -- RODAPÉ DE NAVEGAÇÃO
@@ -820,114 +818,13 @@ function IntroView:createStep4UI(parent)
 end
 
 -- =========================================================================
--- PASSO 5: PEDIDOS DE PROFISSÃO & ARTESÃOS
+-- PASSO 5: MENÇÕES NO CHAT COM @ E ALERTA SONORO
 -- =========================================================================
 function IntroView:createStep5UI(parent)
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local p = CreateFrame("Frame", nil, parent)
     p:SetAllPoints(parent)
     self._stepContainers[5] = p
-
-    local icon = p:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(32, 32)
-    icon:SetPoint("TOPLEFT", p, "TOPLEFT", 16, -16)
-    icon:SetTexture("Interface\\Icons\\Trade_BlackSmithing")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-    local title = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, -2)
-    local curL = (_G.GM and _G.GM.L) or _G.L or L
-    title:SetText(curL["INTRO_STEP5_TITLE"] or "Pedidos de Profissão & Artesãos da Guilda")
-    p.title = title
-
-    local desc = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    desc:SetPoint("TOPLEFT", icon, "BOTTOMLEFT", 0, -12)
-    desc:SetPoint("RIGHT", p, "RIGHT", -16, 0)
-    desc:SetJustifyH("LEFT")
-    desc:SetSpacing(4)
-    p.desc = desc
-
-    -- Card Ilustrativo de Pedido de Profissão
-    local card = CreateFrame("Frame", nil, p, template)
-    card:SetPoint("TOPLEFT", desc, "BOTTOMLEFT", 0, -12)
-    card:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -16, 48)
-    if card.SetBackdrop then
-        card:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        card:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], PALETTE.SUB_BOX_BG[4])
-        card:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], PALETTE.SUB_BOX_BORDER[4])
-    end
-
-    local cardHeader = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    cardHeader:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -10)
-    cardHeader:SetText(curL["INTRO_STEP5_MOCK_HEADER"] or "|cffffd200Crafting Work Order on Guild Board Example:|r")
-    p.cardHeader = cardHeader
-
-    local mockOrders = {
-        { item = "|cffa335ee[Frasco de Poder Titânico]|r", crafter = "Artesão: Sylphira", tip = "Comissão: |cffffd70015 Ouro|r", status = "|cff40ff40Pendente|r" },
-        { item = "|cff0070dd[Armadura de Placas de Ferro Negro]|r", crafter = "Artesão: Thorgrimm", tip = "Comissão: |cffffd70025 Ouro|r", status = "|cffffff00Em Fabricação|r" },
-        { item = "|cffa335ee[Manto de Feitiçaria]|r", crafter = "Qualquer Artesão", tip = "Comissão: |cffffd70010 Ouro|r", status = "|cff40ff40Aberto à Guilda|r" },
-    }
-
-    p.mockRows = {}
-    local lastRow = nil
-    for i, oData in ipairs(mockOrders) do
-        local row = CreateFrame("Frame", nil, card, template)
-        row:SetHeight(24)
-        if i == 1 then
-            row:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -32)
-            row:SetPoint("RIGHT", card, "RIGHT", -12, 0)
-        else
-            row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -4)
-            row:SetPoint("RIGHT", card, "RIGHT", -12, 0)
-        end
-        if row.SetBackdrop then
-            row:SetBackdrop(SUB_CONTAINER_BACKDROP)
-            row:SetBackdropColor(0.04, 0.03, 0.015, 0.60)
-            row:SetBackdropBorderColor(0.40, 0.28, 0.10, 0.50)
-        end
-
-        local tItem = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tItem:SetPoint("LEFT", row, "LEFT", 8, 0)
-        tItem:SetText(oData.item)
-
-        local tCrafter = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        tCrafter:SetPoint("LEFT", row, "LEFT", 220, 0)
-        tCrafter:SetText(oData.crafter)
-
-        local tTip = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tTip:SetPoint("LEFT", row, "LEFT", 380, 0)
-        tTip:SetText(oData.tip)
-
-        local tStatus = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        tStatus:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-        tStatus:SetText(oData.status)
-
-        p.mockRows[i] = { row = row, tItem = tItem, tCrafter = tCrafter, tTip = tTip, tStatus = tStatus }
-        lastRow = row
-    end
-
-    local openBtn = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    openBtn:SetSize(230, 24)
-    openBtn:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 16, 14)
-    openBtn:SetText(curL["INTRO_STEP5_OPEN_BTN"] or "Abrir Pedidos de Profissão (/gmcraft)")
-    openBtn:SetScript("OnClick", function()
-        if self._onOpenProfessionsCallback then
-            self._onOpenProfessionsCallback()
-        elseif _G.GM and _G.GM.professionController then
-            _G.GM.professionController:show()
-        end
-    end)
-    p.openBtn = openBtn
-end
-
--- =========================================================================
--- PASSO 6: MENÇÕES NO CHAT COM @ E ALERTA SONORO
--- =========================================================================
-function IntroView:createStep6UI(parent)
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local p = CreateFrame("Frame", nil, parent)
-    p:SetAllPoints(parent)
-    self._stepContainers[6] = p
 
     local icon = p:CreateTexture(nil, "ARTWORK")
     icon:SetSize(32, 32)
@@ -1000,13 +897,13 @@ function IntroView:createStep6UI(parent)
 end
 
 -- =========================================================================
--- PASSO 7: MAPA MUNDIAL & MEMBROS POR REGIÃO
+-- PASSO 6: MAPA MUNDIAL & MEMBROS POR REGIÃO
 -- =========================================================================
-function IntroView:createStep7UI(parent)
+function IntroView:createStep6UI(parent)
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local p = CreateFrame("Frame", nil, parent)
     p:SetAllPoints(parent)
-    self._stepContainers[7] = p
+    self._stepContainers[6] = p
 
     local icon = p:CreateTexture(nil, "ARTWORK")
     icon:SetSize(32, 32)
@@ -1096,13 +993,13 @@ function IntroView:createStep7UI(parent)
 end
 
 -- =========================================================================
--- PASSO 8: CONFIGURAÇÕES & DATA DE ANIVERSÁRIO
+-- PASSO 7: CONFIGURAÇÕES & DATA DE ANIVERSÁRIO
 -- =========================================================================
-function IntroView:createStep8UI(parent)
+function IntroView:createStep7UI(parent)
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local p = CreateFrame("Frame", nil, parent)
     p:SetAllPoints(parent)
-    self._stepContainers[8] = p
+    self._stepContainers[7] = p
 
     local icon = p:CreateTexture(nil, "ARTWORK")
     icon:SetSize(32, 32)
@@ -1334,8 +1231,8 @@ function IntroView:goToStep(step)
         end
     end
 
-    -- Atualiza hints específicos do passo 8 (aniversário)
-    if target == 8 and self._birthdayHint then
+    -- Atualiza hints específicos do passo 7 (aniversário)
+    if target == 7 and self._birthdayHint then
         local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
         local hintText = isEn and (curL["INTRO_STEP8_BDAY_FORMAT_HINT"] or "Format: MM/dd (e.g. 07/15)") or (curL["INTRO_STEP8_BDAY_FORMAT_HINT"] or "Formato: dd/MM (Exemplo: 15/07)")
         self._birthdayHint:SetText("|cffaaaaaa" .. hintText .. "|r")
@@ -1464,56 +1361,43 @@ function IntroView:updateLocale()
         if p4.openBtn then p4.openBtn:SetText(curL["INTRO_STEP4_OPEN_BTN"] or "Abrir Gerenciamento de Grupos (/gmgrupos)") end
     end
 
-    -- Passo 5
+    -- Passo 5 (Menções no Chat)
     local p5 = self._stepContainers[5]
     if p5 then
-        if p5.title then p5.title:SetText(curL["INTRO_STEP5_TITLE"] or "Pedidos de Profissão & Artesãos da Guilda") end
+        if p5.title then p5.title:SetText(curL["INTRO_STEP6_TITLE"] or "Menções no Chat com @ e Alerta Sonoro") end
         if p5.desc then
-            local d1 = curL["INTRO_STEP5_DESC1"] or ""
-            local d2 = curL["INTRO_STEP5_DESC2"] or ""
-            local d3 = curL["INTRO_STEP5_DESC3"] or ""
-            p5.desc:SetText(d1 .. "\n\n" .. d2 .. "\n\n" .. d3)
-        end
-        if p5.openBtn then p5.openBtn:SetText(curL["INTRO_STEP5_OPEN_BTN"] or "Abrir Pedidos de Profissão (/gmcraft)") end
-    end
-
-    -- Passo 6
-    local p6 = self._stepContainers[6]
-    if p6 then
-        if p6.title then p6.title:SetText(curL["INTRO_STEP6_TITLE"] or "Menções no Chat com @ e Alerta Sonoro") end
-        if p6.desc then
             local d1 = curL["INTRO_STEP6_DESC1"] or ""
             local d2 = curL["INTRO_STEP6_DESC2"] or ""
-            p6.desc:SetText(d1 .. "\n\n" .. d2)
+            p5.desc:SetText(d1 .. "\n\n" .. d2)
         end
-        if p6.soundBtn then p6.soundBtn:SetText(curL["INTRO_STEP6_TEST_SOUND"] or "Ouvir Som da Notificação") end
-        if p6.chatMsg then
+        if p5.soundBtn then p5.soundBtn:SetText(curL["INTRO_STEP6_TEST_SOUND"] or "Ouvir Som da Notificação") end
+        if p5.chatMsg then
             local myName = UnitName("player") or (curL["YOU_PLAIN"] or "You")
-            p6.chatMsg:SetText(string.format(curL["INTRO_STEP6_CHAT_PREVIEW"] or "[Guild] [Leader]: Hey @%s, join our dungeon group now!", myName))
+            p5.chatMsg:SetText(string.format(curL["INTRO_STEP6_CHAT_PREVIEW"] or "[Guild] [Leader]: Hey @%s, join our dungeon group now!", myName))
         end
     end
 
-    -- Passo 7
-    local p7 = self._stepContainers[7]
-    if p7 then
-        if p7.title then p7.title:SetText(curL["INTRO_STEP7_TITLE"] or "Mapa Mundial & Membros por Região") end
-        if p7.desc then
+    -- Passo 6 (Mapa Mundial)
+    local p6 = self._stepContainers[6]
+    if p6 then
+        if p6.title then p6.title:SetText(curL["INTRO_STEP7_TITLE"] or "Mapa Mundial & Membros por Região") end
+        if p6.desc then
             local d1 = curL["INTRO_STEP7_DESC1"] or ""
             local d2 = curL["INTRO_STEP7_DESC2"] or ""
-            p7.desc:SetText(d1 .. "\n\n" .. d2)
+            p6.desc:SetText(d1 .. "\n\n" .. d2)
         end
-        if p7.openBtn then p7.openBtn:SetText(curL["INTRO_STEP7_OPEN_MAP"] or "Abrir Mapa Mundial (M)") end
+        if p6.openBtn then p6.openBtn:SetText(curL["INTRO_STEP7_OPEN_MAP"] or "Abrir Mapa Mundial (M)") end
     end
 
-    -- Passo 8
-    local p8 = self._stepContainers[8]
-    if p8 then
-        if p8.title then p8.title:SetText(curL["INTRO_STEP8_TITLE"] or "Configurações Gerais & Seu Aniversário") end
-        if p8.desc then p8.desc:SetText(curL["INTRO_STEP8_DESC1"] or "") end
-        if p8.bdayTitle then p8.bdayTitle:SetText(curL["INTRO_STEP8_BDAY_TITLE"] or "Comemore seu Aniversário com a Guilda!") end
-        if p8.bdayDesc then p8.bdayDesc:SetText(curL["INTRO_STEP8_BDAY_DESC"] or "Informe sua data de aniversário para receber os parabéns da guilda e figurar na Agenda:") end
-        if p8.openConfigBtn then p8.openConfigBtn:SetText(curL["INTRO_STEP8_OPEN_CONFIG"] or "Abrir Configurações (/gmconfig)") end
-        if self._saveBdayBtn then p8.saveBdayBtn = self._saveBdayBtn end
+    -- Passo 7 (Configurações Gerais & Seu Aniversário)
+    local p7 = self._stepContainers[7]
+    if p7 then
+        if p7.title then p7.title:SetText(curL["INTRO_STEP8_TITLE"] or "Configurações Gerais & Seu Aniversário") end
+        if p7.desc then p7.desc:SetText(curL["INTRO_STEP8_DESC1"] or "") end
+        if p7.bdayTitle then p7.bdayTitle:SetText(curL["INTRO_STEP8_BDAY_TITLE"] or "Comemore seu Aniversário com a Guilda!") end
+        if p7.bdayDesc then p7.bdayDesc:SetText(curL["INTRO_STEP8_BDAY_DESC"] or "Informe sua data de aniversário para receber os parabéns da guilda e figurar na Agenda:") end
+        if p7.openConfigBtn then p7.openConfigBtn:SetText(curL["INTRO_STEP8_OPEN_CONFIG"] or "Abrir Configurações (/gmconfig)") end
+        if self._saveBdayBtn then p7.saveBdayBtn = self._saveBdayBtn end
         if self._saveBdayBtn then self._saveBdayBtn:SetText(curL["INTRO_SAVE_BDAY_BTN"] or "Save Birthday") end
     end
 
@@ -1521,8 +1405,7 @@ function IntroView:updateLocale()
     self:updateStep2Mock(curL)
     self:updateStep3Mock(curL)
     self:updateStep4Mock(curL)
-    self:updateStep5Mock(curL)
-    self:updateStep7Mock(curL)
+    self:updateStep6Mock(curL)
 
     self:goToStep(self._currentStep or 1)
 end
@@ -1629,33 +1512,8 @@ function IntroView:updateStep4Mock(curL)
     end
 end
 
-function IntroView:updateStep5Mock(curL)
-    local p = self._stepContainers and self._stepContainers[5]
-    if not p or not p.mockRows then return end
-    local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
-    if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP5_MOCK_HEADER"] or "|cffffd200Crafting Work Order on Guild Board Example:|r") end
-    local defs = isPt and {
-        { item = "|cffa335ee[Frasco de Poder Titânico]|r", crafter = "Artesão: Sylphira", tip = "Comissão: |cffffd70015 Ouro|r", status = "|cff40ff40Pendente|r" },
-        { item = "|cff0070dd[Armadura de Placas de Ferro Negro]|r", crafter = "Artesão: Thorgrimm", tip = "Comissão: |cffffd70025 Ouro|r", status = "|cffffff00Em Fabricação|r" },
-        { item = "|cffa335ee[Manto de Feitiçaria]|r", crafter = "Qualquer Artesão", tip = "Comissão: |cffffd70010 Ouro|r", status = "|cff40ff40Aberto à Guilda|r" },
-    } or {
-        { item = "|cffa335ee[Flask of the Titans]|r", crafter = "Crafter: Sylphira", tip = "Tip: |cffffd70015 Gold|r", status = "|cff40ff40Pending|r" },
-        { item = "|cff0070dd[Dark Iron Plate Armor]|r", crafter = "Crafter: Thorgrimm", tip = "Tip: |cffffd70025 Gold|r", status = "|cffffff00In Progress|r" },
-        { item = "|cffa335ee[Robe of the Archmage]|r", crafter = "Any Crafter", tip = "Tip: |cffffd70010 Gold|r", status = "|cff40ff40Open to Guild|r" },
-    }
-    for i, oData in ipairs(defs) do
-        local r = p.mockRows[i]
-        if r then
-            r.tItem:SetText(oData.item)
-            r.tCrafter:SetText(oData.crafter)
-            r.tTip:SetText(oData.tip)
-            r.tStatus:SetText(oData.status)
-        end
-    end
-end
-
-function IntroView:updateStep7Mock(curL)
-    local p = self._stepContainers and self._stepContainers[7]
+function IntroView:updateStep6Mock(curL)
+    local p = self._stepContainers and self._stepContainers[6]
     if not p or not p.mockRows then return end
     local isPt = (GM.GetLocale and GM.GetLocale() == "ptBR")
     if p.cardHeader then p.cardHeader:SetText(curL["INTRO_STEP7_MOCK_HEADER"] or "|cffffd200World Map (M) Live Tracking View:|r") end
