@@ -121,8 +121,8 @@ local function normalizeRace(raceStr, isEn)
     if not raceStr or raceStr == "" then return isEn and "Unknown" or "Desconhecido" end
     local clean = raceStr:match("^%s*(.-)%s*$") or raceStr
     local lower = clean:lower()
-    if lower:find("celonat") or lower:find("highborne") or lower:find("alta ordem") then
-        return isEn and "Highborne" or "Celonato da Alta Ordem"
+    if lower:find("celonat") or lower:find("skyborne") or lower:find("highborne") or lower:find("alta ordem") then
+        return isEn and "Skyborne" or "Celonato da Alta Ordem"
     elseif lower:find("high elf") or lower:find("elf[oa] superior") or lower:find("altonat") or lower:find("quel'dorei") then
         return isEn and "High Elf" or "Elfo Superior"
     elseif lower:find("blood elf") or lower:find("elf[oa] sangrent") or lower:find("sin'dorei") then

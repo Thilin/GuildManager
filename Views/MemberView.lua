@@ -27,7 +27,10 @@ local RACE_TRANSLATION_PT = {
     ["highelf"] = "Elfo Superior",
     ["high elf"] = "Elfo Superior",
     ["elfo superior"] = "Elfo Superior",
+    ["skyborne"] = "Celonato da Alta Ordem",
+    ["skyborne of the high order"] = "Celonato da Alta Ordem",
     ["highborne"] = "Celonato da Alta Ordem",
+    ["celonato"] = "Celonato da Alta Ordem",
     ["celonato da alta ordem"] = "Celonato da Alta Ordem",
 }
 
@@ -129,8 +132,8 @@ local function getRaceInPortuguese(race)
     local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS")
     local clean = (race:match("^%s*(.-)%s*$") or race):lower()
     if isEn then
-        if clean:find("celonat") or clean:find("highborne") or clean:find("alta ordem") then
-            return "Highborne"
+        if clean:find("celonat") or clean:find("skyborne") or clean:find("highborne") or clean:find("alta ordem") then
+            return "Skyborne"
         elseif clean:find("high elf") or clean:find("elf[oa] superior") or clean:find("altonat") or clean:find("quel'dorei") then
             return "High Elf"
         elseif clean:find("blood elf") or clean:find("elf[oa] sangrent") or clean:find("sin'dorei") then
@@ -1301,7 +1304,7 @@ function MemberView:showMember(member, isLocked)
             local r = (m.getRace and m:getRace() or ""):lower()
             if r:find("orc") or r:find("troll") or r:find("tauren") or r:find("undead") or r:find("renegad") or r:find("morto") or r:find("sangrent") or r:find("blood") or r:find("goblin") then
                 faction = "Horde"
-            elseif r:find("human") or r:find("dwarf") or r:find("anão") or r:find("anao") or r:find("elf") or r:find("gnom") or r:find("draenei") or r:find("worgen") then
+            elseif r:find("human") or r:find("dwarf") or r:find("anão") or r:find("anao") or r:find("elf") or r:find("gnom") or r:find("draenei") or r:find("worgen") or r:find("celonat") or r:find("skyborne") or r:find("highborne") then
                 faction = "Alliance"
             end
         end
