@@ -230,6 +230,7 @@ function GroupController:initHooks()
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE")
     eventFrame:RegisterEvent("PLAYER_GUILD_UPDATE")
+    eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
     eventFrame:SetScript("OnEvent", function()
         if self._groupView and self._groupView:isShown() then
             self:refreshGroups()

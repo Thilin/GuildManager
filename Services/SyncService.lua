@@ -82,6 +82,8 @@ local SEND_QUEUE_INTERVAL = 0.8       -- Intervalo compassado de envio de pacote
 local PEER_LIVENESS_WINDOW = 35.0     -- Tempo em segundos sem sinal para considerar peer offline (35s)
 local MAX_RETRANSMIT_ATTEMPTS = 60    -- Limite máximo de tentativas por atualização (evita loop infinito)
 local MAX_QUEUE_SIZE = 250            -- Capacidade máxima da fila compassada para proteção contra vazamento de memória
+local LFG_SYNC_INTERVAL = 20 * 60     -- Transmissão periódica de cards de LFG ativos (20 minutos = 1200s)
+local GROUPS_SYNC_INTERVAL = 60 * 60  -- Sincronização periódica de grupos criados (1 hora = 3600s)
 
 --- Envia mensagem de addon com suporte a ChatThrottleLib para proteção total contra limite de mensagens
 local function safeSendAddonMessage(prefix, text, channel, target, prio)
@@ -158,6 +160,7 @@ function SyncService:new(memberService, locationService, settingsService, guildR
     instance._notifiedGroupIds = {}
     instance._notifiedLFGIds = {}
     instance._syncChatFrame = nil
+    instance._previousGroupMembers = nil
 
     return instance
 end
@@ -2241,12 +2244,42 @@ function SyncService:syncLFGCardDelete(cardId)
     end
 end
 
---- O Líder da guilda transmite todos os grupos para a guilda.
+--- Transmite todos os grupos criados para a guilda (sincronização periódica a cada 1 hora).
 function SyncService:broadcastAllGroups()
+    if not IsInGuild or not IsInGuild() then return end
     if not (_G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll) then return end
+
+    local myFullName = self._myFullName or (self._memberService and self._memberService.resolvePlayerFullName and self._memberService:resolvePlayerFullName()) or ""
+    local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
+    local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+
     local groups = _G.GM.groupRepository:findAll()
-    for _, g in ipairs(groups) do
-        self:syncGroup(g, "UPDATE")
+    for _, g in ipairs(groups or {}) do
+        local canBroadcast = isLeader or (g.canEdit and (g:canEdit(myFullName) or g:canEdit(myName)))
+        if canBroadcast then
+            self:syncGroup(g, "UPDATE")
+        end
+    end
+end
+
+--- Transmite cards de LFG ativos para a guilda (sincronização periódica a cada 20 minutos se o membro tiver card ativo).
+--- REQUISITO: Toda vez que um membro tiver um card de LFG, ele precisa enviar a informação para os outros membros a cada 20 minutos.
+function SyncService:syncActiveLFGCards()
+    if not IsInGuild or not IsInGuild() then return end
+    if not (_G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll) then return end
+
+    local myFullName = self._myFullName or (self._memberService and self._memberService.resolvePlayerFullName and self._memberService:resolvePlayerFullName()) or ""
+    local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
+    local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+
+    local cards = _G.GM.lfgRepository:findAll()
+    for _, c in ipairs(cards or {}) do
+        if not (c.isExpired and c:isExpired()) then
+            local isMyCard = (c.isCreator and (c:isCreator(myFullName) or c:isCreator(myName)))
+            if isMyCard or isLeader then
+                self:syncLFGCard(c, "UPDATE")
+            end
+        end
     end
 end
 
@@ -2255,8 +2288,142 @@ function SyncService:broadcastAllLFGCards()
     if not (_G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll) then return end
     local cards = _G.GM.lfgRepository:findAll()
     for _, c in ipairs(cards) do
-        self:syncLFGCard(c, "UPDATE")
+        if not (c.isExpired and c:isExpired()) then
+            self:syncLFGCard(c, "UPDATE")
+        end
     end
+end
+
+--- Obtém a lista de membros atuais do grupo (party ou raid) do jogador.
+---@return table<string, string> @Tabela [nomeMinusculo] = nomeOriginal
+function SyncService:getCurrentPartyOrRaidMembers()
+    local members = {}
+    local myName = self._myPlayerName or (UnitName and UnitName("player"))
+    if myName and myName ~= "" then
+        members[myName:lower()] = myName
+    end
+
+    local numGroup = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+    if numGroup > 0 then
+        local isRaid = IsInRaid and IsInRaid()
+        local prefix = isRaid and "raid" or "party"
+        local count = isRaid and numGroup or (numGroup - 1)
+        for i = 1, count do
+            local unit = prefix .. i
+            local name = UnitName(unit)
+            if name and name ~= "" and name ~= "Unknown" then
+                members[name:lower()] = name
+            end
+        end
+    else
+        local numRaid = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+        if numRaid > 0 then
+            for i = 1, numRaid do
+                local name = UnitName("raid" .. i)
+                if name and name ~= "" and name ~= "Unknown" then
+                    members[name:lower()] = name
+                end
+            end
+        else
+            local numParty = (GetNumPartyMembers and GetNumPartyMembers()) or 0
+            if numParty > 0 then
+                for i = 1, numParty do
+                    local name = UnitName("party" .. i)
+                    if name and name ~= "" and name ~= "Unknown" then
+                        members[name:lower()] = name
+                    end
+                end
+            end
+        end
+    end
+
+    return members
+end
+
+--- Chamado quando a composição do grupo in-game muda (GROUP_ROSTER_UPDATE).
+--- REQUISITO: Se um membro entrar no grupo, a atualização deve acontecer na hora!
+function SyncService:onGroupRosterUpdate()
+    if not IsInGuild or not IsInGuild() then return end
+
+    local currentMembers = self:getCurrentPartyOrRaidMembers()
+    if not self._previousGroupMembers then
+        self._previousGroupMembers = currentMembers
+        return
+    end
+
+    local newlyJoined = {}
+    for lowerName, originalName in pairs(currentMembers) do
+        if not self._previousGroupMembers[lowerName] then
+            table.insert(newlyJoined, originalName)
+        end
+    end
+
+    self._previousGroupMembers = currentMembers
+
+    if #newlyJoined == 0 then
+        return
+    end
+
+    local myFullName = self._myFullName or (self._memberService and self._memberService.resolvePlayerFullName and self._memberService:resolvePlayerFullName()) or ""
+    local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
+
+    -- Se o jogador local agora está em um grupo com outros membros, remove seu próprio card de LFG na hora
+    local groupCount = 0
+    for _ in pairs(currentMembers) do groupCount = groupCount + 1 end
+    if groupCount > 1 and _G.GM and _G.GM.groupService and _G.GM.groupService.deleteLFGCardByCreator then
+        pcall(function()
+            _G.GM.groupService:deleteLFGCardByCreator(myName)
+            if myFullName ~= "" and myFullName ~= myName then
+                _G.GM.groupService:deleteLFGCardByCreator(myFullName)
+            end
+        end)
+    end
+
+    for _, newMemberName in ipairs(newlyJoined) do
+        -- 1. Se o membro que entrou possuía card ativo de LFG, remove na hora e sincroniza a exclusão
+        if _G.GM and _G.GM.groupService and _G.GM.groupService.deleteLFGCardByCreator then
+            pcall(function()
+                _G.GM.groupService:deleteLFGCardByCreator(newMemberName)
+            end)
+        end
+
+        -- 2. Se o jogador local for líder/criador de um grupo do addon, adiciona o novo membro na hora
+        if _G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll then
+            for _, g in ipairs(_G.GM.groupRepository:findAll()) do
+                local isLeaderOfGroup = (g.getLeader and (g:getLeader():lower() == myName:lower() or g:getLeader():lower() == myFullName:lower()))
+                local isCreatorOfGroup = (g.getCreator and (g:getCreator():lower() == myName:lower() or g:getCreator():lower() == myFullName:lower()))
+                if isLeaderOfGroup or isCreatorOfGroup then
+                    if not g:hasMember(newMemberName) then
+                        local isGuildMember = false
+                        if self._memberService and self._memberService.getMember then
+                            isGuildMember = (self._memberService:getMember(newMemberName) ~= nil)
+                        end
+                        if not isGuildMember and UnitIsInMyGuild then
+                            for i = 1, 40 do
+                                local u = (IsInRaid and IsInRaid() and ("raid" .. i)) or ("party" .. i)
+                                if UnitName(u) == newMemberName then
+                                    isGuildMember = UnitIsInMyGuild(u)
+                                    break
+                                end
+                            end
+                        end
+                        if isGuildMember and _G.GM.groupService and _G.GM.groupService.addMemberToGroup then
+                            local role = "DPS"
+                            if UnitGroupRolesAssigned then
+                                local r = UnitGroupRolesAssigned(newMemberName)
+                                if r and r ~= "NONE" then role = r end
+                            end
+                            _G.GM.groupService:addMemberToGroup(g:getId(), newMemberName, role, myFullName)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Dispara sincronização imediata dos grupos e atualização de telas na hora!
+    self:broadcastAllGroups()
+    self:refreshActiveViews()
 end
 
 --- Força manualmente a sincronização de todos os dados customizados de todos os membros da guilda.
@@ -2475,6 +2642,8 @@ function SyncService:initHooks()
                 C_Timer.After(4.0, function()
                     if IsInGuild and IsInGuild() then
                         pcall(function() self:broadcastMemberProfessions() end)
+                        pcall(function() self:syncActiveLFGCards() end)
+                        pcall(function() self:broadcastAllGroups() end)
                     end
                 end)
             end)
@@ -2487,6 +2656,8 @@ function SyncService:initHooks()
         elseif event == "CHAT_MSG_ADDON" then
             local prefix, msg, ch, sender = ...
             self:onAddonMessage(prefix, msg, ch, sender)
+        elseif event == "GROUP_ROSTER_UPDATE" then
+            self:onGroupRosterUpdate()
         end
     end)
 
@@ -2508,6 +2679,8 @@ function SyncService:initHooks()
     local retransmitTicker = 0
     local cleanupTicker = 0
     local deferredSyncTicker = 0
+    local lfgSyncTicker = 0
+    local groupsSyncTicker = 0
     local wasInCombat = false
     local postCombatGrace = 0
 
@@ -2539,6 +2712,20 @@ function SyncService:initHooks()
         if retransmitTicker >= RETRANSMIT_INTERVAL then
             retransmitTicker = 0
             self:processRetransmission()
+        end
+
+        -- Sincronização periódica de LFG (A cada 20 minutos se o membro tiver card ativo)
+        lfgSyncTicker = lfgSyncTicker + elapsed
+        if lfgSyncTicker >= LFG_SYNC_INTERVAL then
+            lfgSyncTicker = 0
+            pcall(function() self:syncActiveLFGCards() end)
+        end
+
+        -- Sincronização periódica de Grupos Criados (A cada 1 hora)
+        groupsSyncTicker = groupsSyncTicker + elapsed
+        if groupsSyncTicker >= GROUPS_SYNC_INTERVAL then
+            groupsSyncTicker = 0
+            pcall(function() self:broadcastAllGroups() end)
         end
 
         if self._deferredPeerSyncs and next(self._deferredPeerSyncs) ~= nil then

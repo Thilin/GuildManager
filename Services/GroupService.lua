@@ -186,6 +186,11 @@ function GroupService:createGroup(name, groupType, leaderName, leaderRole, timeS
         return nil, curL["GROUP_SVC_ERR_SAVE"] or "Falha ao persistir o grupo no banco de dados."
     end
 
+    -- Se o líder possuía card de LFG ativo, remove na hora
+    pcall(function()
+        self:deleteLFGCardByCreator(cleanLeader)
+    end)
+
     -- Dispara sincronização (primeiro Criador -> Líder da guilda -> Outros membros)
     if self._syncService and self._syncService.syncGroup then
         self._syncService:syncGroup(group, "CREATE")
@@ -313,9 +318,22 @@ function GroupService:addMemberToGroup(groupId, memberName, role, requesterName)
 
     local ok = self._groupRepository:save(group)
     if ok then
+        -- REQUISITO: Se o membro entrar no grupo, a atualização deve acontecer na hora!
+        -- 1. Se o membro possuía card no Procurando Grupo, exclui e sincroniza a remoção imediatamente
+        pcall(function()
+            self:deleteLFGCardByCreator(cleanName)
+        end)
+
+        -- 2. Sincroniza a alteração do grupo imediatamente
         if self._syncService and self._syncService.syncGroup then
             self._syncService:syncGroup(group, "UPDATE")
         end
+
+        -- 3. Atualiza as telas na hora
+        if self._syncService and self._syncService.refreshActiveViews then
+            self._syncService:refreshActiveViews()
+        end
+
         return true, nil
     end
 
@@ -526,7 +544,7 @@ function GroupService:deleteLFGCard(cardId, requesterName)
     return ok, nil
 end
 
---- Exclui card criado pelo membro informado.
+--- Exclui cards criados pelo membro informado.
 ---@param memberName string
 ---@return boolean
 function GroupService:deleteLFGCardByCreator(memberName)
@@ -534,11 +552,15 @@ function GroupService:deleteLFGCardByCreator(memberName)
         return false
     end
 
-    local card = self._lfgRepository:findByCreator(memberName)
-    if card then
-        return self:deleteLFGCard(card:getId())
+    local all = (self._lfgRepository.findAll and self._lfgRepository:findAll()) or {}
+    local anyDeleted = false
+    for _, card in ipairs(all) do
+        if card and card.isCreator and card:isCreator(memberName) then
+            local ok = self:deleteLFGCard(card:getId())
+            if ok then anyDeleted = true end
+        end
     end
-    return false
+    return anyDeleted
 end
 
 --- Limpa cards expirados (> 72 horas).
