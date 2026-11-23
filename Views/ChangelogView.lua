@@ -49,6 +49,80 @@ end
 
 --- Dados do Changelog por versão do addon (com suporte multilíngue ptBR e enUS).
 local CHANGELOG_DATA = {
+    ["1.2.5"] = {
+        ptBR = {
+            title = "Guild Manager Forever v1.2.5",
+            date = "23/11/2026",
+            dateFmt = "Data da atualização: %s",
+            sections = {
+                {
+                    category = "AUDITORIA & PERMISSÕES",
+                    color = "|cffffd200",
+                    items = {
+                        "Nova ordenação na tela de Auditoria clicando nos cabeçalhos: Nível, Função, Cargo, Online/Offline, Data de Entrada, Recrutador, Aniversário e Personagem.",
+                        "Tela de Logs agora é restrita exclusivamente a Oficiais e Líder da Guilda.",
+                        "Vínculo e gerenciamento de Alts restrito a Oficiais e Líder da Guilda, com aviso explicativo ao passar o mouse para os demais membros.",
+                    }
+                },
+                {
+                    category = "MAPA MUNDIAL",
+                    color = "|cff33ccff",
+                    items = {
+                        "Nova opção nas Configurações para desativar completamente os pins de membros no Mapa Mundial (com recarregamento opcional via /reload), sem alterar o Minimapa.",
+                        "Tamanho dos pins de membros no Mapa Mundial padronizado em 40% e interface simplificada (removidos os botões Guild, Members e Escanear Mapa).",
+                        "Janela 'Membros na Região' agora pode ser movida livremente pela tela e volta à posição padrão ao reabrir o mapa.",
+                    }
+                },
+                {
+                    category = "PERFORMANCE & CORREÇÕES",
+                    color = "|cff2ecc71",
+                    items = {
+                        "Corrigidos picos elevados de CPU e memória ao fim de lutas contra chefes em todas as masmorras e raides (otimização da sincronização P2P, cache de receitas e escalonamento pós-combate).",
+                        "Corrigido problema de chave da guilda que causava perda de datas de entrada e vínculos de Alts, com mesclagem automática dos dados.",
+                        "Corrigido erro de interface (Lua) ao passar o mouse sobre os botões da janela de gerenciamento de Alts.",
+                    }
+                }
+            },
+            disclaimerTitle = "AVISO",
+            disclaimer = "Obrigado por reportar bugs e ajudar a melhorar o Guild Manager Forever!\n\nQualquer bug report ou sugestão, você pode me encontrar no Discord: |cffffd200thillin_|r",
+        },
+        enUS = {
+            title = "Guild Manager Forever v1.2.5",
+            date = "11/23/2026",
+            dateFmt = "Update date: %s",
+            sections = {
+                {
+                    category = "AUDIT & PERMISSIONS",
+                    color = "|cffffd200",
+                    items = {
+                        "Added column sorting in the Audit screen by clicking headers: Level, Role, Rank, Online/Offline, Join Date, Recruiter, Birthday, and Character.",
+                        "Logs screen is now restricted exclusively to Guild Officers and the Guild Leader.",
+                        "Alt linking and management is now restricted to Officers and the Guild Leader, with an explanatory tooltip for non-officer members.",
+                    }
+                },
+                {
+                    category = "WORLD MAP",
+                    color = "|cff33ccff",
+                    items = {
+                        "Added a Settings option to completely disable World Map member pins (with optional /reload confirmation) without affecting Minimap pins.",
+                        "World Map member pin size is now fixed at 40% and the map UI was streamlined (removed Guild, Members, and Scan Map buttons).",
+                        "The 'Members in Region' panel is now freely movable while open and resets to its default position whenever the map is reopened.",
+                    }
+                },
+                {
+                    category = "PERFORMANCE & BUG FIXES",
+                    color = "|cff2ecc71",
+                    items = {
+                        "Fixed severe CPU and memory spikes after boss fights across all dungeons and raids (paced P2P sync paused inside instances, recipe lookup caching, and staggered post-combat scans).",
+                        "Fixed a guild database key split issue that caused join dates and Alt links to reset, adding automatic lossless data merge.",
+                        "Fixed a Lua tooltip error when hovering over buttons in the Alt Manager window.",
+                    }
+                }
+            },
+            disclaimerTitle = "NOTE",
+            disclaimer = "Thank you for reporting bugs and helping improve Guild Manager Forever!\n\nFor bug reports or suggestions, find me on Discord: |cffffd200thillin_|r",
+        }
+    },
     ["1.2.4"] = {
         ptBR = {
             title = "Guild Manager Forever v1.2.4",
@@ -223,9 +297,9 @@ local function getAddonVersion()
         ver = GetAddOnMetadata(addonName or "GuildManagerForever", "Version")
     end
     if not ver or ver == "" or ver:find("@") then
-        ver = "1.2.4"
+        ver = "1.2.5"
     end
-    return ver:match("^%s*(.-)%s*$") or "1.2.4"
+    return ver:match("^%s*(.-)%s*$") or "1.2.5"
 end
 
 --- Construtor da View do Changelog.
@@ -420,9 +494,9 @@ end
 function ChangelogView:populateChangelog(version)
     if not self._scrollChild then return end
 
-    local targetVersion = version or self._version or "1.2.4"
+    local targetVersion = version or self._version or "1.2.5"
     local locale = getCurrentLocale()
-    local verData = CHANGELOG_DATA[targetVersion] or CHANGELOG_DATA["1.2.4"] or CHANGELOG_DATA["1.2"]
+    local verData = CHANGELOG_DATA[targetVersion] or CHANGELOG_DATA["1.2.5"] or CHANGELOG_DATA["1.2.4"] or CHANGELOG_DATA["1.2"]
     local data = (verData and verData[locale]) or (verData and verData.ptBR) or verData
 
     -- Remove widgets antigos do scrollChild
