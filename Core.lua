@@ -372,6 +372,9 @@ function GM.switchActiveGuild(guildName, realmName, force)
         if GM.memberService and GM.memberService.clearRosterCache then
             GM.memberService:clearRosterCache()
         end
+        if GM.memberService and GM.memberService.healAltFamilyConsistency then
+            GM.memberService:healAltFamilyConsistency()
+        end
         if GM.locationService and GM.locationService.clearPeers then
             GM.locationService:clearPeers()
         end
