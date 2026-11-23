@@ -733,19 +733,33 @@ for _, profKey in ipairs(ProfessionData.ORDER) do
     DYNAMIC_RECIPES[profKey] = {}
 end
 
+local _normTextCache = {}
+local _normTextCacheCount = 0
+local _recipesForProfCache = {}
+
 --- Normaliza textos removendo acentos e pontuação para busca resiliente no WoW Classic
 ---@param txt string|nil
 ---@return string
 function ProfessionData.normalizeText(txt)
     if not txt or type(txt) ~= "string" then return "" end
+    local cached = _normTextCache[txt]
+    if cached ~= nil then return cached end
+
     local s = txt:lower()
-    s = s:gsub("á", "a"):gsub("à", "a"):gsub("ã", "a"):gsub("â", "a"):gsub("ä", "a")
-    s = s:gsub("é", "e"):gsub("è", "e"):gsub("ê", "e"):gsub("ë", "e")
-    s = s:gsub("í", "i"):gsub("ì", "i"):gsub("î", "i"):gsub("ï", "i")
-    s = s:gsub("ó", "o"):gsub("ò", "o"):gsub("õ", "o"):gsub("ô", "o"):gsub("ö", "o")
-    s = s:gsub("ú", "u"):gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
-    s = s:gsub("ç", "c"):gsub("ñ", "n")
+    if s:find("[\128-\255]") then
+        s = s:gsub("á", "a"):gsub("à", "a"):gsub("ã", "a"):gsub("â", "a"):gsub("ä", "a")
+        s = s:gsub("é", "e"):gsub("è", "e"):gsub("ê", "e"):gsub("ë", "e")
+        s = s:gsub("í", "i"):gsub("ì", "i"):gsub("î", "i"):gsub("ï", "i")
+        s = s:gsub("ó", "o"):gsub("ò", "o"):gsub("õ", "o"):gsub("ô", "o"):gsub("ö", "o")
+        s = s:gsub("ú", "u"):gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
+        s = s:gsub("ç", "c"):gsub("ñ", "n")
+    end
     s = s:gsub("[^%w%s]", ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+
+    if _normTextCacheCount < 4096 then
+        _normTextCache[txt] = s
+        _normTextCacheCount = _normTextCacheCount + 1
+    end
     return s
 end
 
@@ -776,10 +790,14 @@ for _, r in ipairs(RECIPES) do
     end
 end
 
---- Retorna a lista de todas as receitas de uma profissão com deduplicação estrita
+--- Retorna a lista de todas as receitas de uma profissão com deduplicação estrita (com cache em memória)
 ---@param profKey string
 ---@return table[]
 function ProfessionData.getRecipesForProfession(profKey)
+    if profKey and _recipesForProfCache[profKey] then
+        return _recipesForProfCache[profKey]
+    end
+
     local list = {}
     local seenId = {}
     local seenName = {}
@@ -859,10 +877,13 @@ function ProfessionData.getRecipesForProfession(profKey)
         end
         return (a.name or "") < (b.name or "")
     end)
+    if profKey then
+        _recipesForProfCache[profKey] = list
+    end
     return list
 end
 
---- Retorna uma receita pelo seu identificador único (ID de feitiço, itemId ou nome)
+--- Retorna uma receita pelo seu identificador único (ID de feitiço, itemId ou nome) em O(1)
 ---@param recipeId number|string
 ---@param profKey string|nil
 ---@return table|nil
@@ -886,39 +907,43 @@ function ProfessionData.getRecipeById(recipeId, profKey)
         return RECIPES_BY_ITEM_ID[recipeId]
     end
 
-    -- 3. Busca nas receitas dinâmicas
-    if profKey and DYNAMIC_RECIPES[profKey] and DYNAMIC_RECIPES[profKey][recipeId] then
-        return DYNAMIC_RECIPES[profKey][recipeId]
+    -- 3. Busca nas receitas dinâmicas (por chave exata ou numérica)
+    if profKey and DYNAMIC_RECIPES[profKey] then
+        local dyn = DYNAMIC_RECIPES[profKey][recipeId] or (numId and DYNAMIC_RECIPES[profKey][numId])
+        if dyn then return dyn end
     end
     if _G.GM_DB and _G.GM_DB.dynamicRecipes then
-        if profKey and _G.GM_DB.dynamicRecipes[profKey] and _G.GM_DB.dynamicRecipes[profKey][recipeId] then
-            return _G.GM_DB.dynamicRecipes[profKey][recipeId]
+        if profKey and _G.GM_DB.dynamicRecipes[profKey] then
+            local dbRec = _G.GM_DB.dynamicRecipes[profKey][recipeId] or (numId and _G.GM_DB.dynamicRecipes[profKey][numId])
+            if dbRec then return dbRec end
         end
         for _, pKey in ipairs(ProfessionData.ORDER) do
-            if _G.GM_DB.dynamicRecipes[pKey] and _G.GM_DB.dynamicRecipes[pKey][recipeId] then
-                return _G.GM_DB.dynamicRecipes[pKey][recipeId]
+            local bucket = _G.GM_DB.dynamicRecipes[pKey]
+            if bucket then
+                local dbRec = bucket[recipeId] or (numId and bucket[numId])
+                if dbRec then return dbRec end
             end
         end
     end
     for _, pKey in ipairs(ProfessionData.ORDER) do
-        if DYNAMIC_RECIPES[pKey] and DYNAMIC_RECIPES[pKey][recipeId] then
-            return DYNAMIC_RECIPES[pKey][recipeId]
+        local bucket = DYNAMIC_RECIPES[pKey]
+        if bucket then
+            local dyn = bucket[recipeId] or (numId and bucket[numId])
+            if dyn then return dyn end
         end
     end
 
-    -- 4. Fallback: Busca pelo nome da receita (em inglês ou português normalizado)
+    -- IDs numéricos (incluindo strings numéricas como "25001") nunca correspondem a nomes de receita:
+    -- evita varredura linear desnecessária no catálogo inteiro.
+    if numId then
+        return nil
+    end
+
+    -- 4. Fallback O(1): Busca pelo nome normalizado no índice pré-calculado RECIPES_BY_NAME
     if type(recipeId) == "string" then
-        local rawLower = recipeId:lower()
         local normInput = ProfessionData.normalizeText(recipeId)
-        local staticList = profKey and RECIPES_BY_PROF[profKey] or RECIPES
-        for _, r in ipairs(staticList) do
-            if (r.name and r.name:lower() == rawLower) or (r.namePT and r.namePT:lower() == rawLower) then
-                return r
-            end
-            if normInput ~= "" then
-                if r.name and ProfessionData.normalizeText(r.name) == normInput then return r end
-                if r.namePT and ProfessionData.normalizeText(r.namePT) == normInput then return r end
-            end
+        if normInput ~= "" and RECIPES_BY_NAME[normInput] then
+            return RECIPES_BY_NAME[normInput]
         end
     end
 
@@ -959,11 +984,15 @@ function ProfessionData.registerDynamicRecipe(profKey, recipeData)
     end
     if not DYNAMIC_RECIPES[profKey][recipeData.id] then
         DYNAMIC_RECIPES[profKey][recipeData.id] = recipeData
+        _recipesForProfCache[profKey] = nil
     end
     if _G.GM_DB then
         _G.GM_DB.dynamicRecipes = _G.GM_DB.dynamicRecipes or {}
         _G.GM_DB.dynamicRecipes[profKey] = _G.GM_DB.dynamicRecipes[profKey] or {}
-        _G.GM_DB.dynamicRecipes[profKey][recipeData.id] = recipeData
+        if not _G.GM_DB.dynamicRecipes[profKey][recipeData.id] then
+            _G.GM_DB.dynamicRecipes[profKey][recipeData.id] = recipeData
+            _recipesForProfCache[profKey] = nil
+        end
     end
 end
 

@@ -128,7 +128,7 @@ function GuildRosterService:scanRoster(force)
                 pcall(_G.GM.database.migrateLegacyCustomData, _G.GM.database, db, activeRosterNames)
             end
         end
-        if (now - (self._lastLogCleanTime or 0)) >= 300 then
+        if not (IsInInstance and IsInInstance()) and (now - (self._lastLogCleanTime or 0)) >= 300 then
             self._lastLogCleanTime = now
             if _G.GM and _G.GM.logService then
                 if _G.GM.logService.cleanInvalidInviteJoinedLogs then

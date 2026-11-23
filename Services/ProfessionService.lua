@@ -81,34 +81,55 @@ function ProfessionService:initHooks()
 
     local function scheduleSkillScan(delay)
         if self._skillScanPending then return end
+        local now = GetTime and GetTime() or 0
+        if self._suppressSkillEventUntil and now < self._suppressSkillEventUntil then
+            return
+        end
+        if self._lastAutoSkillScan and (now - self._lastAutoSkillScan) < 10.0 then
+            return
+        end
         if C_Timer and C_Timer.After then
             self._skillScanPending = true
-            C_Timer.After(delay or 0.5, function()
+            C_Timer.After(delay or 0.8, function()
                 self._skillScanPending = false
                 if InCombatLockdown and InCombatLockdown() then
                     self._pendingSkillScanAfterCombat = true
                     return
                 end
+                self._lastAutoSkillScan = GetTime and GetTime() or 0
+                -- Durante masmorras/raides, apenas verifica alterações reais de perícia sem varredura completa pesada
+                if IsInInstance and IsInInstance() and self._initialScanDone then
+                    self:scanPlayerSkills(nil, true)
+                    return
+                end
                 self:scanAll()
             end)
         else
+            self._lastAutoSkillScan = now
             self:scanAll()
         end
     end
 
     frame:SetScript("OnEvent", function(_, event, arg1, ...)
         if event == "PLAYER_ENTERING_WORLD" then
-            self:scanAll()
+            if not self._initialScanDone then
+                self._initialScanDone = true
+                self:scanAll()
+            end
         elseif event == "SKILL_LINES_CHANGED" then
+            local now = GetTime and GetTime() or 0
+            if self._suppressSkillEventUntil and now < self._suppressSkillEventUntil then
+                return
+            end
             if InCombatLockdown and InCombatLockdown() then
                 self._pendingSkillScanAfterCombat = true
             else
-                scheduleSkillScan(0.5)
+                scheduleSkillScan(1.0)
             end
         elseif event == "PLAYER_REGEN_ENABLED" then
             if self._pendingSkillScanAfterCombat then
                 self._pendingSkillScanAfterCombat = false
-                scheduleSkillScan(1.5)
+                scheduleSkillScan(3.5)
             end
         elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_LIST_UPDATE" or event == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
             self:scanTradeSkillFrame()
@@ -336,18 +357,33 @@ end
 --- Detecta quais das 6 profissões primárias o jogador possui e seus níveis atuais
 ---@param member Member|nil
 ---@return number @Quantidade de profissões primárias detectadas
-function ProfessionService:scanPlayerSkills(member)
+function ProfessionService:scanPlayerSkills(member, skipExpand)
     member = member or self:getLocalPlayerMember()
     if not member then return 0 end
 
-    -- Expande todos os cabeçalhos para garantir que as perícias filhas estejam visíveis na listagem
-    if ExpandSkillHeader then
-        pcall(ExpandSkillHeader, 0)
+    -- Expande cabeçalhos apenas se algum estiver realmente recolhido (evita loop de SKILL_LINES_CHANGED)
+    if not skipExpand and ExpandSkillHeader and GetNumSkillLines and GetSkillLineInfo then
+        local hasCollapsed = false
+        local n = GetNumSkillLines() or 0
+        for i = 1, n do
+            local _, isHeader, isExpanded = GetSkillLineInfo(i)
+            local isH = (isHeader == 1 or isHeader == true or isHeader == "1")
+            local isExp = (isExpanded == 1 or isExpanded == true or isExpanded == "1")
+            if isH and not isExp then
+                hasCollapsed = true
+                break
+            end
+        end
+        if hasCollapsed then
+            self._suppressSkillEventUntil = (GetTime and GetTime() or 0) + 2.0
+            pcall(ExpandSkillHeader, 0)
+        end
     end
 
     local detectedCount = 0
     local foundPrimary = {}
     local anySkillLinesFound = 0
+    local changed = false
 
     if GetNumSkillLines and GetSkillLineInfo then
         local numSkills = GetNumSkillLines()
@@ -363,11 +399,14 @@ function ProfessionService:scanPlayerSkills(member)
                     if profKey then
                         local uKey = profKey:upper()
                         foundPrimary[uKey] = true
-                        local existing = member:getProfession(uKey) or {}
-                        local currentRecipes = existing.recipes or {}
-                        local r = tonumber(skillRank) or existing.rank or 1
-                        local mr = tonumber(skillMaxRank) or existing.maxRank or 300
-                        member:setProfession(uKey, r, mr, currentRecipes)
+                        local existing = member:getProfession(uKey)
+                        local currentRecipes = (existing and existing.recipes) or {}
+                        local r = tonumber(skillRank) or (existing and existing.rank) or 1
+                        local mr = tonumber(skillMaxRank) or (existing and existing.maxRank) or 300
+                        if not existing or existing.rank ~= r or existing.maxRank ~= mr then
+                            member:setProfession(uKey, r, mr, currentRecipes)
+                            changed = true
+                        end
                         detectedCount = detectedCount + 1
                     end
                 end
@@ -383,12 +422,13 @@ function ProfessionService:scanPlayerSkills(member)
             local uKey = pKey:upper()
             if not foundPrimary[uKey] and member:hasProfession(uKey) then
                 member:removeProfession(uKey)
+                changed = true
             end
         end
     end
 
-    if self._memberService then
-        self._memberService:saveMember(member, true)
+    if changed and self._memberService then
+        self._memberService:saveMember(member, false)
     end
 
     return detectedCount
@@ -931,9 +971,9 @@ function ProfessionService:scanAll()
     -- 6. Scan pela janela de Craft (Encantamento) ativa
     self:scanCraftFrame(member)
 
-    -- Salva o membro no banco local
+    -- Salva o membro no banco local (sem disparar sync de dados customizados em loop)
     if self._memberService then
-        self._memberService:saveMember(member, true)
+        self._memberService:saveMember(member, false)
     end
     self:notifyChanged()
 

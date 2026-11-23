@@ -79,9 +79,13 @@ end
 local SYNC_PREFIX = "GM_SYNC"
 local RETRANSMIT_INTERVAL = 4.0       -- Intervalo entre retransmissões de pacotes pendentes (4.0s)
 local SEND_QUEUE_INTERVAL = 0.8       -- Intervalo compassado de envio de pacotes (1.25 pkt/s, tráfego super suave e zero throttle)
-local PEER_LIVENESS_WINDOW = 35.0     -- Tempo em segundos sem sinal para considerar peer offline (35s)
-local MAX_RETRANSMIT_ATTEMPTS = 60    -- Limite máximo de tentativas por atualização (evita loop infinito)
+local PEER_LIVENESS_WINDOW = 180.0    -- Tempo em segundos sem sinal para considerar peer offline (3 min - evita falsos logins em masmorras/parado)
+local PEER_SYNC_COOLDOWN = 600.0      -- Intervalo mínimo (10 min) entre sincronizações completas automáticas com o mesmo peer
+local COUNTER_BROADCAST_COOLDOWN = 60.0 -- Cooldown por membro/profissão contra ping-pong de retransmissão LWW
+local MAX_RETRANSMIT_ATTEMPTS = 25    -- Limite máximo de tentativas por atualização (evita retenção excessiva de memória)
+local MAX_OUTBOX_SIZE = 150           -- Limite máximo de itens simultâneos na outbox para controle estrito de RAM
 local MAX_QUEUE_SIZE = 250            -- Capacidade máxima da fila compassada para proteção contra vazamento de memória
+local BULK_SYNC_BATCH_SIZE = 4        -- Quantidade de membros processados por tick durante sync completo (zero travamento de frame)
 local LFG_SYNC_INTERVAL = 20 * 60     -- Transmissão periódica de cards de LFG ativos (20 minutos = 1200s)
 local GROUPS_SYNC_INTERVAL = 60 * 60  -- Sincronização periódica de grupos criados (1 hora = 3600s)
 
@@ -132,6 +136,16 @@ function SyncService:new(memberService, locationService, settingsService, guildR
 
     -- Fila de envio pendente de confirmações (retransmissão): [updateId] = updateData
     instance._pendingOutbox = {}
+    -- Índices O(1) para evitar varreduras O(N^2) na outbox durante sync em lote
+    instance._outboxByCustomMember = {}
+    instance._outboxByProfKey = {}
+    instance._outboxCount = 0
+
+    -- Cooldown contra ping-pong de counter-broadcasts e cache O(1) do líder da guilda
+    instance._lastCounterBroadcast = {}
+    instance._cachedGuildLeaderLower = nil
+    instance._cachedGuildLeaderTime = 0
+    instance._bulkSyncJob = nil
 
     -- Fila sequencial compassada de pacotes para envio (desenfileiramento O(1) com ponteiros de índice)
     instance._sendQueue = {}
@@ -257,7 +271,7 @@ function SyncService:onLeaderResolveConflict(conflict, action)
     end
 end
 
---- Verifica se o remetente é comprovadamente o Líder da Guilda (Guild Master, rankIndex 0).
+--- Verifica se o remetente é comprovadamente o Líder da Guilda (Guild Master, rankIndex 0) em O(1) com cache.
 ---@param sender string|nil
 ---@return boolean
 function SyncService:isSenderGuildLeader(sender)
@@ -270,32 +284,42 @@ function SyncService:isSenderGuildLeader(sender)
 
     if self._guildRosterService and self._guildRosterService.getGuildLeaderName then
         local leaderName = self._guildRosterService:getGuildLeaderName()
-        if leaderName and cleanName(leaderName):lower() == sClean then
-            return true
+        if leaderName and leaderName ~= "" then
+            local leaderLower = cleanName(leaderName):lower()
+            self._cachedGuildLeaderLower = leaderLower
+            self._cachedGuildLeaderTime = GetTime and GetTime() or 0
+            return leaderLower == sClean
         end
     end
 
+    local now = GetTime and GetTime() or 0
+    if self._cachedGuildLeaderLower and (now - (self._cachedGuildLeaderTime or 0)) < 30.0 then
+        return self._cachedGuildLeaderLower == sClean
+    end
+
+    local resolvedLeader = nil
     local numMembers = GetNumGuildMembers and GetNumGuildMembers() or 0
     for i = 1, numMembers do
-        local name, rankName, rankIndex = GetGuildRosterInfo(i)
+        local name, _, rankIndex = GetGuildRosterInfo(i)
         if name and rankIndex == 0 then
-            local clean = cleanName(name):lower()
-            if clean == sClean then
-                return true
-            end
+            resolvedLeader = cleanName(name):lower()
+            break
         end
     end
 
-    if self._memberService and self._memberService.getAllMembers then
+    if not resolvedLeader and self._memberService and self._memberService.getAllMembers then
         local members = self._memberService:getAllMembers()
         for _, m in ipairs(members) do
-            if m:getRankIndex() == 0 and cleanName(m:getName()):lower() == sClean then
-                return true
+            if m:getRankIndex() == 0 then
+                resolvedLeader = cleanName(m:getName()):lower()
+                break
             end
         end
     end
 
-    return false
+    self._cachedGuildLeaderLower = resolvedLeader or ""
+    self._cachedGuildLeaderTime = now
+    return (resolvedLeader ~= nil and resolvedLeader == sClean)
 end
 
 --- Verifica se a exibição de logs de sincronização no chat está ativada nas configurações.
@@ -397,7 +421,7 @@ function SyncService:touchPeer(peerName)
     local existing = self._peers[lower]
 
     local isNewlyOnline = false
-    if not existing or not existing.isActive or (now - (existing.lastSeen or 0)) > PEER_LIVENESS_WINDOW then
+    if not existing or not existing.isActive or (now - (existing.lastSeen or 0)) > PEER_SYNC_COOLDOWN then
         isNewlyOnline = true
     end
 
@@ -413,16 +437,18 @@ function SyncService:touchPeer(peerName)
         }
     end
 
-    -- Notifica o LocationService imediatamente para registrar que este membro Ã© usuÃ¡rio ativo do AddOn!
+    -- Notifica o LocationService imediatamente para registrar que este membro é usuário ativo do AddOn!
     if self._locationService and self._locationService.touchPeer then
         self._locationService:touchPeer(cName)
     end
 
     if isNewlyOnline then
+        -- Dentro de masmorras/raides não inicia sync completo pesado (evita picos de CPU ao fim de chefes)
+        local inInstance = (IsInInstance and IsInInstance()) or false
         local lastNotice = self._lastLoginDetected[lower] or 0
-        if (now - lastNotice) > PEER_LIVENESS_WINDOW then
+        if (now - lastNotice) > PEER_SYNC_COOLDOWN then
             self._lastLoginDetected[lower] = now
-            if InCombatLockdown and InCombatLockdown() then
+            if (InCombatLockdown and InCombatLockdown()) or inInstance then
                 self._deferredPeerSyncs[lower] = cName
             else
                 self:onPeerLoggedIn(cName)
@@ -474,132 +500,230 @@ function SyncService:onPeerLoggedIn(peerName)
     self:syncWithPeer(cName)
 end
 
---- Sincroniza todos os dados customizados com um peer específico que acabou de logar.
---- Enfileira todos os membros cadastrados que possuem dados customizados (Entrada, Aniversário, Recrutador, Alts)
---- e garante que o novo peer esteja na lista de confirmações pendentes (ACK).
+--- Remove uma entrada da outbox mantendo os índices O(1) sincronizados.
+---@param updateId string
+function SyncService:_removeOutboxEntry(updateId)
+    local u = self._pendingOutbox[updateId]
+    if not u then return end
+    self._pendingOutbox[updateId] = nil
+    if self._outboxCount and self._outboxCount > 0 then
+        self._outboxCount = self._outboxCount - 1
+    end
+    if u.memberName then
+        local mLow = u.memberName:lower()
+        if u.type == "PROFESSION" and u.profKey then
+            local pk = mLow .. ":" .. u.profKey
+            if self._outboxByProfKey and self._outboxByProfKey[pk] == updateId then
+                self._outboxByProfKey[pk] = nil
+            end
+        elseif not u.type or u.type == "CUSTOM" then
+            if self._outboxByCustomMember and self._outboxByCustomMember[mLow] == updateId then
+                self._outboxByCustomMember[mLow] = nil
+            end
+        end
+    end
+end
+
+--- Registra uma entrada na outbox respeitando o limite MAX_OUTBOX_SIZE e atualizando os índices O(1).
+---@param updateData table
+function SyncService:_putOutboxEntry(updateData)
+    if not updateData or not updateData.updateId then return end
+    local updateId = updateData.updateId
+
+    if updateData.memberName then
+        local mLow = updateData.memberName:lower()
+        if updateData.type == "PROFESSION" and updateData.profKey then
+            local pk = mLow .. ":" .. updateData.profKey
+            local prevId = self._outboxByProfKey and self._outboxByProfKey[pk]
+            if prevId and prevId ~= updateId then
+                self:_removeOutboxEntry(prevId)
+            end
+            self._outboxByProfKey = self._outboxByProfKey or {}
+            self._outboxByProfKey[pk] = updateId
+        elseif not updateData.type or updateData.type == "CUSTOM" then
+            local prevId = self._outboxByCustomMember and self._outboxByCustomMember[mLow]
+            if prevId and prevId ~= updateId then
+                self:_removeOutboxEntry(prevId)
+            end
+            self._outboxByCustomMember = self._outboxByCustomMember or {}
+            self._outboxByCustomMember[mLow] = updateId
+        end
+    end
+
+    if not self._pendingOutbox[updateId] then
+        -- Limita o tamanho máximo da outbox descartando a entrada mais antiga se necessário
+        if (self._outboxCount or 0) >= MAX_OUTBOX_SIZE then
+            local oldestId, oldestTime = nil, math.huge
+            for id, entry in pairs(self._pendingOutbox) do
+                local t = entry.createdAt or 0
+                if t < oldestTime then
+                    oldestTime = t
+                    oldestId = id
+                end
+            end
+            if oldestId then
+                self:_removeOutboxEntry(oldestId)
+            end
+        end
+        self._outboxCount = (self._outboxCount or 0) + 1
+    end
+    self._pendingOutbox[updateId] = updateData
+end
+
+--- Sincroniza todos os dados customizados com um peer específico de forma incremental (em lotes pequenos),
+--- eliminando congelamentos de frame e picos de CPU após combates ou em masmorras.
 ---@param peerName string
----@return number @Quantidade de membros com dados customizados enfileirados
+---@return number @Quantidade de itens agendados
 function SyncService:syncWithPeer(peerName)
     if not self._memberService or not peerName or peerName == "" then return 0 end
     local cName = cleanName(peerName)
     local peerLower = cName:lower()
 
-    if InCombatLockdown and InCombatLockdown() then
+    -- Nunca dispara sincronização pesada em combate ou dentro de instâncias (masmorras/raides)
+    if (InCombatLockdown and InCombatLockdown()) or (IsInInstance and IsInInstance()) then
         self._deferredPeerSyncs[peerLower] = cName
         return 0
     end
 
     local now = GetTime and GetTime() or 0
     local lastSync = self._lastFullSyncWithPeer and self._lastFullSyncWithPeer[peerLower] or 0
-    if lastSync > 0 and (now - lastSync) < 120 then
+    if lastSync > 0 and (now - lastSync) < PEER_SYNC_COOLDOWN then
         return 0
     end
     self._lastFullSyncWithPeer = self._lastFullSyncWithPeer or {}
     self._lastFullSyncWithPeer[peerLower] = now
 
-    -- Indexa a outbox uma única vez (O(M)) para evitar loops aninhados O(N*M)
-    local outboxCustomByMember = {}
-    local outboxProfByKey = {}
-    for _, u in pairs(self._pendingOutbox) do
-        if u.memberName then
-            local mLow = u.memberName:lower()
-            if u.type == "PROFESSION" and u.profKey then
-                outboxProfByKey[mLow .. ":" .. u.profKey] = u
-            elseif not u.type or u.type == "CUSTOM" then
-                outboxCustomByMember[mLow] = u
-            end
-        end
+    -- Se já existe um job incremental em andamento, apenas adiciona o novo peer para limpeza de ACKs
+    if self._bulkSyncJob and not self._bulkSyncJob.done then
+        self._bulkSyncJob.peers[peerLower] = true
+        return 0
     end
 
-    local members = self._memberService:getAllMembers()
-    local count = 0
-    local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
-
-    for _, m in ipairs(members) do
-        local dateJoin = m:getDateJoin() or ""
-        local bday = m:getBirthday() or ""
-        local rec = m:getRecruiter() or ""
-        local alts = m:getAlts() or {}
-        local role = (m.getRole and m:getRole()) or ""
-        local roleShouldSync = (role ~= "")
-        if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or (role ~= "" and roleShouldSync) then
-            local mName = cleanName(m:getName())
-            local memberLower = mName:lower()
-            local existingUpdate = outboxCustomByMember[memberLower]
-
-            if existingUpdate then
-                -- Remove a confirmação anterior deste peer para garantir retransmissão até confirmação do novo login
-                existingUpdate.acknowledgedPeers[peerLower] = nil
-                self:sendUpdatePacket(existingUpdate)
-                count = count + 1
-            else
-                -- Cria novo update e transmite
-                local ok = self:broadcastMemberCustomData(m, true)
-                if ok then count = count + 1 end
-            end
-        end
+    local members = self._memberService:getAllMembers() or {}
+    local snapshot = {}
+    for i = 1, #members do
+        snapshot[i] = members[i]
     end
 
-    -- Sincroniza profissões e receitas de todos os membros cadastrados com o colega
-    for _, m in ipairs(members) do
-        local profs = m.getProfessions and m:getProfessions()
-        if type(profs) == "table" then
-            local mName = cleanName(m:getName())
-            local mLower = mName:lower()
-            for profKey, pData in pairs(profs) do
-                if (pData.rank or 0) > 0 or (pData.recipes and next(pData.recipes) ~= nil) then
-                    local existingUpdate = outboxProfByKey[mLower .. ":" .. profKey]
+    self._bulkSyncJob = {
+        peers = { [peerLower] = true },
+        members = snapshot,
+        index = 1,
+        phase = "MEMBERS",
+        done = false,
+    }
+    return #snapshot
+end
 
+--- Processa um pequeno lote do job de sincronização em segundo plano (máx. BULK_SYNC_BATCH_SIZE membros por tick).
+function SyncService:processBulkSyncStep()
+    local job = self._bulkSyncJob
+    if not job or job.done then
+        self._bulkSyncJob = nil
+        return
+    end
+    if (InCombatLockdown and InCombatLockdown()) or (IsInInstance and IsInInstance()) then
+        return
+    end
+
+    if job.phase == "MEMBERS" then
+        local members = job.members
+        local total = #members
+        local startIdx = job.index
+        local endIdx = math.min(startIdx + BULK_SYNC_BATCH_SIZE - 1, total)
+
+        for i = startIdx, endIdx do
+            local m = members[i]
+            if m then
+                local mName = cleanName(m:getName())
+                local memberLower = mName:lower()
+
+                -- 1. Dados customizados do membro (enfileirados via _sendQueue, sem bypass imediato)
+                local dateJoin = m:getDateJoin() or ""
+                local bday = m:getBirthday() or ""
+                local rec = m:getRecruiter() or ""
+                local alts = m:getAlts() or {}
+                local role = (m.getRole and m:getRole()) or ""
+                if dateJoin ~= "" or bday ~= "" or rec ~= "" or #alts > 0 or role ~= "" then
+                    local existingId = self._outboxByCustomMember and self._outboxByCustomMember[memberLower]
+                    local existingUpdate = existingId and self._pendingOutbox[existingId]
                     if existingUpdate then
-                        existingUpdate.acknowledgedPeers[peerLower] = nil
-                        self:sendUpdatePacket(existingUpdate)
-                        count = count + 1
+                        for pLow in pairs(job.peers) do
+                            existingUpdate.acknowledgedPeers[pLow] = nil
+                        end
+                        self:sendUpdatePacket(existingUpdate, false)
                     else
-                        local ok = self:broadcastMemberProfessions(m, profKey, true)
-                        if ok then count = count + 1 end
+                        self:broadcastMemberCustomData(m, true, true)
+                    end
+                end
+
+                -- 2. Profissões e receitas do membro (enfileirados via _sendQueue)
+                local profs = m.getProfessions and m:getProfessions()
+                if type(profs) == "table" then
+                    for profKey, pData in pairs(profs) do
+                        if (pData.rank or 0) > 0 or (pData.recipes and next(pData.recipes) ~= nil) then
+                            local pk = memberLower .. ":" .. profKey
+                            local existingProfId = self._outboxByProfKey and self._outboxByProfKey[pk]
+                            local existingProfUpdate = existingProfId and self._pendingOutbox[existingProfId]
+                            if existingProfUpdate then
+                                for pLow in pairs(job.peers) do
+                                    existingProfUpdate.acknowledgedPeers[pLow] = nil
+                                end
+                                self:sendUpdatePacket(existingProfUpdate, false)
+                            else
+                                self:broadcastMemberProfessions(m, profKey, true, true)
+                            end
+                        end
                     end
                 end
             end
         end
-    end
-    if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
-        pcall(function()
-            local orders = _G.GM.craftOrderRepository:findAll()
-            for _, ord in ipairs(orders) do
-                if ord:getStatus() ~= "CANCELLED" then
-                    self:broadcastCraftOrder(ord, "UPDATE", false)
-                end
-            end
-        end)
-    end
 
-    -- Sincroniza Grupos e Cards de LFG com o peer conectado (inclui Líder e demais membros)
-    if isLeader then
-        pcall(function()
-            self:broadcastAllGroups()
-            self:broadcastAllLFGCards()
-        end)
-    else
-        pcall(function()
-            local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
-            if _G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll then
-                for _, g in ipairs(_G.GM.groupRepository:findAll()) do
-                    if g:isCreator(myName) then
-                        self:syncGroup(g, "UPDATE")
+        job.index = endIdx + 1
+        if job.index > total then
+            job.phase = "META"
+        end
+    elseif job.phase == "META" then
+        if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
+            pcall(function()
+                local orders = _G.GM.craftOrderRepository:findAll()
+                for _, ord in ipairs(orders) do
+                    if ord:getStatus() ~= "CANCELLED" then
+                        self:broadcastCraftOrder(ord, "UPDATE", false)
                     end
                 end
-            end
-            if _G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll then
-                for _, c in ipairs(_G.GM.lfgRepository:findAll()) do
-                    if c:isCreator(myName) then
-                        self:syncLFGCard(c, "UPDATE")
+            end)
+        end
+
+        local isLeader = (IsGuildLeader and IsGuildLeader() == true) or false
+        if isLeader then
+            pcall(function()
+                self:broadcastAllGroups(true)
+                self:broadcastAllLFGCards(true)
+            end)
+        else
+            pcall(function()
+                local myName = self._myPlayerName or (UnitName and UnitName("player")) or ""
+                if _G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll then
+                    for _, g in ipairs(_G.GM.groupRepository:findAll()) do
+                        if g:isCreator(myName) then
+                            self:syncGroup(g, "UPDATE", true)
+                        end
                     end
                 end
-            end
-        end)
-    end
+                if _G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll then
+                    for _, c in ipairs(_G.GM.lfgRepository:findAll()) do
+                        if c:isCreator(myName) then
+                            self:syncLFGCard(c, "UPDATE", true)
+                        end
+                    end
+                end
+            end)
+        end
 
-    return count
+        job.done = true
+        self._bulkSyncJob = nil
+    end
 end
 
 --- Gera uma assinatura dos dados customizados do membro para detectar alterações reais.
@@ -688,8 +812,9 @@ end
 --- Se os dados foram alterados, transmite na hora e mantém na fila até que todos confirmem (ACK).
 ---@param member Member
 ---@param force boolean|nil
+---@param queuedOnly boolean|nil @Se true, enfileira na fila compassada em vez de disparar imediatamente
 ---@return boolean @Retorna true se o envio foi enfileirado
-function SyncService:broadcastMemberCustomData(member, force)
+function SyncService:broadcastMemberCustomData(member, force, queuedOnly)
     if not member or type(member.getName) ~= "function" then
         return false
     end
@@ -749,15 +874,9 @@ function SyncService:broadcastMemberCustomData(member, force)
     local randomSuffix = math.random(1000, 9999)
     local updateId = string.format("%s_%d_%d", memberName, memberTimestamp, randomSuffix)
 
-    -- Cancela envios anteriores do mesmo membro que ainda estavam pendentes na fila
-    for id, u in pairs(self._pendingOutbox) do
-        if not u.type and u.memberName and u.memberName:lower() == memberLower then
-            self._pendingOutbox[id] = nil
-        end
-    end
-
     local updateData = {
         updateId = updateId,
+        type = "CUSTOM",
         memberName = memberName,
         dateJoin = dateJoin,
         birthday = birthday,
@@ -772,10 +891,11 @@ function SyncService:broadcastMemberCustomData(member, force)
         createdAt = GetTime and GetTime() or 0,
     }
 
-    self._pendingOutbox[updateId] = updateData
+    -- Substitui envio anterior do mesmo membro em O(1) respeitando MAX_OUTBOX_SIZE
+    self:_putOutboxEntry(updateData)
 
-    -- Envia NA HORA para todos os outros usuários do Addon
-    self:sendUpdatePacket(updateData, true)
+    -- Envia na hora apenas para edições individuais; syncs em lote usam a fila compassada
+    self:sendUpdatePacket(updateData, not queuedOnly)
 
     if not force then
         local myName = self._myPlayerName or (UnitName and UnitName("player")) or "Você"
@@ -1049,8 +1169,13 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if member and localTimestamp > 0 and timestamp > 0 and localTimestamp > timestamp and not senderIsLeader and not hasIncomingRoleChangeForLeader then
             -- Confirma o recebimento para o peer parar de retransmitir o pacote antigo
             self:sendAckPacket(updateId, mClean)
-            -- Transmite imediatamente a nossa versão mais recente para atualizar o peer desatualizado
-            self:broadcastMemberCustomData(member, true)
+            -- Transmite a versão mais recente com cooldown por membro e via fila (previne tempestade ping-pong)
+            local now = GetTime and GetTime() or 0
+            local cbKey = "DATA:" .. mClean:lower()
+            if not self._lastCounterBroadcast[cbKey] or (now - self._lastCounterBroadcast[cbKey]) >= COUNTER_BROADCAST_COOLDOWN then
+                self._lastCounterBroadcast[cbKey] = now
+                self:broadcastMemberCustomData(member, true, true)
+            end
             return
         end
 
@@ -1265,7 +1390,7 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
             -- Verifica se todos os que têm o Addon já receberam todas as atualizações
             if self:isUpdateFullyAcknowledged(pending) then
-                self._pendingOutbox[updateId] = nil
+                self:_removeOutboxEntry(updateId)
             end
         end
 
@@ -1273,7 +1398,10 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     -- SOLICITAÇÃO DE SINCRONIZAÇÃO GERAL (SYNC_REQ)
     -- =========================================================================
     elseif tag == "SYNC_REQ" then
-        -- Quando um novo membro conecta e pede sincronização, envia dados que temos para ele
+        -- Em combate ou dentro de masmorra/raide, deixa outros colegas fora de instância responderem
+        if (InCombatLockdown and InCombatLockdown()) or (IsInInstance and IsInInstance()) then
+            return
+        end
         self:syncWithPeer(senderClean)
 
     -- =========================================================================
@@ -1311,7 +1439,12 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         -- e transmite imediatamente a nossa versão mais recente para atualizar o colega!
         if member and localProfTimestamp > 0 and timestamp > 0 and localProfTimestamp > timestamp then
             self:sendAckPacket(updateId, mClean)
-            self:broadcastMemberProfessions(member, profKey, true)
+            local now = GetTime and GetTime() or 0
+            local cbKey = "PROF:" .. mClean:lower() .. ":" .. tostring(profKey)
+            if not self._lastCounterBroadcast[cbKey] or (now - self._lastCounterBroadcast[cbKey]) >= COUNTER_BROADCAST_COOLDOWN then
+                self._lastCounterBroadcast[cbKey] = now
+                self:broadcastMemberProfessions(member, profKey, true, true)
+            end
             return
         end
 
@@ -1360,9 +1493,6 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
 
         if self._memberService then
             self._memberService:saveMember(member, true)
-        end
-        if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
-            _G.GM.professionService:notifyChanged()
         end
         self:refreshActiveViews(mClean, false)
 
@@ -1418,9 +1548,6 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
         if chunkIdx >= totalChunks then
             if self._memberService then
                 self._memberService:saveMember(member, true)
-            end
-            if _G.GM and _G.GM.professionService and _G.GM.professionService.notifyChanged then
-                _G.GM.professionService:notifyChanged()
             end
             self:refreshActiveViews(mClean, false)
             self:sendAckPacket(updateId, mClean)
@@ -1551,10 +1678,17 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     elseif tag == "ORDER_ACK" then
         local orderId = arg1
         if orderId and orderId ~= "" then
+            local toDel = nil
             for uId, uData in pairs(self._pendingOutbox) do
                 if uData.type == "ORDER" and uData.orderId == orderId then
                     uData.confirmed = true
-                    self._pendingOutbox[uId] = nil
+                    toDel = toDel or {}
+                    table.insert(toDel, uId)
+                end
+            end
+            if toDel then
+                for _, id in ipairs(toDel) do
+                    self:_removeOutboxEntry(id)
                 end
             end
         end
@@ -1563,6 +1697,9 @@ function SyncService:onAddonMessage(prefix, message, channel, sender)
     -- SOLICITAÇÃO DE ESTADO DOS PEDIDOS (ORDER_REQ)
     -- =========================================================================
     elseif tag == "ORDER_REQ" then
+        if (InCombatLockdown and InCombatLockdown()) or (IsInInstance and IsInInstance()) then
+            return
+        end
         if _G.GM and _G.GM.craftOrderRepository and _G.GM.craftOrderRepository.findAll then
             local orders = _G.GM.craftOrderRepository:findAll()
             for _, ord in ipairs(orders) do
@@ -1917,8 +2054,9 @@ end
 ---@param member Member|nil
 ---@param specificProfKey string|nil
 ---@param force boolean|nil
+---@param queuedOnly boolean|nil @Se true, enfileira todos os pacotes sem bypass imediato
 ---@return boolean @Retorna true se algum pacote foi transmitido/enfileirado
-function SyncService:broadcastMemberProfessions(member, specificProfKey, force)
+function SyncService:broadcastMemberProfessions(member, specificProfKey, force, queuedOnly)
     local myName = self._myPlayerName or (UnitName and UnitName("player"))
     member = member or (self._memberService and self._memberService:getMember(myName))
     if not member or not member.getProfessions then return false end
@@ -2002,13 +2140,6 @@ function SyncService:broadcastMemberProfessions(member, specificProfKey, force)
                     local randomSuffix = math.random(1000, 9999)
                     local updateId = string.format("PROF_%s_%s_%d_%d", memberName, profKey, profTimestamp, randomSuffix)
 
-                    -- Cancela envios anteriores da mesma profissão deste membro que estavam na outbox
-                    for id, u in pairs(self._pendingOutbox) do
-                        if u.type == "PROFESSION" and u.memberName:lower() == memberLower and u.profKey == profKey then
-                            self._pendingOutbox[id] = nil
-                        end
-                    end
-
                     local packetsList = {}
 
                     -- 1. Pacote de Resumo da Profissão:
@@ -2048,8 +2179,8 @@ function SyncService:broadcastMemberProfessions(member, specificProfKey, force)
                         createdAt = GetTime and GetTime() or 0,
                     }
 
-                    self._pendingOutbox[updateId] = updateData
-                    self:sendUpdatePacket(updateData, force)
+                    self:_putOutboxEntry(updateData)
+                    self:sendUpdatePacket(updateData, force and not queuedOnly)
                     enqueuedAny = true
 
                     if not force then
@@ -2127,18 +2258,19 @@ function SyncService:broadcastCraftOrder(order, action, immediate)
 
     -- 3. Adiciona à outbox de retransmissão para confirmação ACK (especialmente em UPDATE / COMPLETED / DELETE)
     local updateId = string.format("ORDER_%s_%s", order:getId(), order:getStatus())
-    self._pendingOutbox[updateId] = {
+    self:_putOutboxEntry({
         type = "ORDER",
         updateId = updateId,
         orderId = order:getId(),
         payload = payload,
         target = "GUILD",
         lastSent = GetTime and GetTime() or 0,
+        createdAt = GetTime and GetTime() or 0,
         sendCount = 1,
         maxAttempts = 4,
         confirmed = false,
         acknowledgedPeers = {},
-    }
+    })
 end
 
 --- Solicita à guilda o estado atual de todos os pedidos ativos e recentes
@@ -2166,7 +2298,8 @@ end
 --- e então do líder da guilda para os outros membros da guilda.
 ---@param group Group
 ---@param action string|nil @"CREATE", "UPDATE"
-function SyncService:syncGroup(group, action)
+---@param queuedOnly boolean|nil
+function SyncService:syncGroup(group, action, queuedOnly)
     if not group or not group.getId then return end
     action = action or "UPDATE"
     local gId = group:getId()
@@ -2186,7 +2319,11 @@ function SyncService:syncGroup(group, action)
         tag, action, gId, gType, gTime, gLeader, gCreator, gUpdatedAt, gName, gDesc, membersCsv)
 
     if IsInGuild and IsInGuild() then
-        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        if queuedOnly then
+            self:enqueuePacket(payload, "GUILD")
+        else
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        end
     end
 end
 
@@ -2208,7 +2345,8 @@ end
 --- e então do líder da guilda para os outros membros da guilda.
 ---@param card LFGCard
 ---@param action string|nil @"CREATE", "UPDATE"
-function SyncService:syncLFGCard(card, action)
+---@param queuedOnly boolean|nil
+function SyncService:syncLFGCard(card, action, queuedOnly)
     if not card or not card.getId then return end
     action = action or "UPDATE"
     local cId = card:getId()
@@ -2227,7 +2365,11 @@ function SyncService:syncLFGCard(card, action)
         tag, action, cId, cType, cTime, cCreator, cClass, cLevel, cCreated, cDesc)
 
     if IsInGuild and IsInGuild() then
-        safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        if queuedOnly then
+            self:enqueuePacket(payload, "GUILD")
+        else
+            safeSendAddonMessage(SYNC_PREFIX, payload, "GUILD", nil, "NORMAL")
+        end
     end
 end
 
@@ -2245,7 +2387,8 @@ function SyncService:syncLFGCardDelete(cardId)
 end
 
 --- Transmite todos os grupos criados para a guilda (sincronização periódica a cada 1 hora).
-function SyncService:broadcastAllGroups()
+---@param queuedOnly boolean|nil
+function SyncService:broadcastAllGroups(queuedOnly)
     if not IsInGuild or not IsInGuild() then return end
     if not (_G.GM and _G.GM.groupRepository and _G.GM.groupRepository.findAll) then return end
 
@@ -2257,14 +2400,15 @@ function SyncService:broadcastAllGroups()
     for _, g in ipairs(groups or {}) do
         local canBroadcast = isLeader or (g.canEdit and (g:canEdit(myFullName) or g:canEdit(myName)))
         if canBroadcast then
-            self:syncGroup(g, "UPDATE")
+            self:syncGroup(g, "UPDATE", queuedOnly ~= false)
         end
     end
 end
 
 --- Transmite cards de LFG ativos para a guilda (sincronização periódica a cada 20 minutos se o membro tiver card ativo).
 --- REQUISITO: Toda vez que um membro tiver um card de LFG, ele precisa enviar a informação para os outros membros a cada 20 minutos.
-function SyncService:syncActiveLFGCards()
+---@param queuedOnly boolean|nil
+function SyncService:syncActiveLFGCards(queuedOnly)
     if not IsInGuild or not IsInGuild() then return end
     if not (_G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll) then return end
 
@@ -2277,19 +2421,20 @@ function SyncService:syncActiveLFGCards()
         if not (c.isExpired and c:isExpired()) then
             local isMyCard = (c.isCreator and (c:isCreator(myFullName) or c:isCreator(myName)))
             if isMyCard or isLeader then
-                self:syncLFGCard(c, "UPDATE")
+                self:syncLFGCard(c, "UPDATE", queuedOnly ~= false)
             end
         end
     end
 end
 
 --- O Líder da guilda transmite todos os cards de LFG para a guilda.
-function SyncService:broadcastAllLFGCards()
+---@param queuedOnly boolean|nil
+function SyncService:broadcastAllLFGCards(queuedOnly)
     if not (_G.GM and _G.GM.lfgRepository and _G.GM.lfgRepository.findAll) then return end
     local cards = _G.GM.lfgRepository:findAll()
     for _, c in ipairs(cards) do
         if not (c.isExpired and c:isExpired()) then
-            self:syncLFGCard(c, "UPDATE")
+            self:syncLFGCard(c, "UPDATE", queuedOnly ~= false)
         end
     end
 end
@@ -2450,13 +2595,13 @@ function SyncService:forceSyncAll()
             local mLower = cleanName(m:getName()):lower()
             self._lastMemberSignatures[mLower] = nil
 
-            if self:broadcastMemberCustomData(m, true) then
+            if self:broadcastMemberCustomData(m, true, true) then
                 count = count + 1
             end
         end
     end
 
-    -- 2. Sincroniza profissões e receitas de todos os membros cadastrados
+    -- 2. Sincroniza profissões e receitas de todos os membros cadastrados (via fila compassada)
     for _, m in ipairs(members) do
         local profs = m.getProfessions and m:getProfessions()
         if type(profs) == "table" then
@@ -2466,7 +2611,7 @@ function SyncService:forceSyncAll()
                     if self._lastProfSignatures then
                         self._lastProfSignatures[mLower .. "_" .. profKey] = nil
                     end
-                    if self:broadcastMemberProfessions(m, profKey, true) then
+                    if self:broadcastMemberProfessions(m, profKey, true, true) then
                         count = count + 1
                     end
                 end
@@ -2679,6 +2824,7 @@ function SyncService:initHooks()
     local retransmitTicker = 0
     local cleanupTicker = 0
     local deferredSyncTicker = 0
+    local bulkSyncTicker = 0
     local lfgSyncTicker = 0
     local groupsSyncTicker = 0
     local wasInCombat = false
@@ -2693,7 +2839,7 @@ function SyncService:initHooks()
 
         if wasInCombat then
             wasInCombat = false
-            postCombatGrace = 2.5
+            postCombatGrace = 3.0
             return
         end
 
@@ -2702,40 +2848,53 @@ function SyncService:initHooks()
             return
         end
 
+        local inInstance = (IsInInstance and IsInInstance()) or false
+
         sendQueueTicker = sendQueueTicker + elapsed
         if sendQueueTicker >= SEND_QUEUE_INTERVAL then
             sendQueueTicker = 0
             self:processSendQueue()
         end
 
-        retransmitTicker = retransmitTicker + elapsed
-        if retransmitTicker >= RETRANSMIT_INTERVAL then
-            retransmitTicker = 0
-            self:processRetransmission()
-        end
+        -- Dentro de masmorras/raides, pausa rotinas pesadas em lote (retransmissão, sync completo, grupos/LFG)
+        if not inInstance then
+            if self._bulkSyncJob and not self._bulkSyncJob.done then
+                bulkSyncTicker = bulkSyncTicker + elapsed
+                if bulkSyncTicker >= 0.4 then
+                    bulkSyncTicker = 0
+                    self:processBulkSyncStep()
+                end
+            end
 
-        -- Sincronização periódica de LFG (A cada 20 minutos se o membro tiver card ativo)
-        lfgSyncTicker = lfgSyncTicker + elapsed
-        if lfgSyncTicker >= LFG_SYNC_INTERVAL then
-            lfgSyncTicker = 0
-            pcall(function() self:syncActiveLFGCards() end)
-        end
+            retransmitTicker = retransmitTicker + elapsed
+            if retransmitTicker >= RETRANSMIT_INTERVAL then
+                retransmitTicker = 0
+                self:processRetransmission()
+            end
 
-        -- Sincronização periódica de Grupos Criados (A cada 1 hora)
-        groupsSyncTicker = groupsSyncTicker + elapsed
-        if groupsSyncTicker >= GROUPS_SYNC_INTERVAL then
-            groupsSyncTicker = 0
-            pcall(function() self:broadcastAllGroups() end)
-        end
+            -- Sincronização periódica de LFG (A cada 20 minutos se o membro tiver card ativo)
+            lfgSyncTicker = lfgSyncTicker + elapsed
+            if lfgSyncTicker >= LFG_SYNC_INTERVAL then
+                lfgSyncTicker = 0
+                pcall(function() self:syncActiveLFGCards(true) end)
+            end
 
-        if self._deferredPeerSyncs and next(self._deferredPeerSyncs) ~= nil then
-            deferredSyncTicker = deferredSyncTicker + elapsed
-            if deferredSyncTicker >= 1.5 then
-                deferredSyncTicker = 0
-                local k, peerName = next(self._deferredPeerSyncs)
-                if k then
-                    self._deferredPeerSyncs[k] = nil
-                    self:onPeerLoggedIn(peerName)
+            -- Sincronização periódica de Grupos Criados (A cada 1 hora)
+            groupsSyncTicker = groupsSyncTicker + elapsed
+            if groupsSyncTicker >= GROUPS_SYNC_INTERVAL then
+                groupsSyncTicker = 0
+                pcall(function() self:broadcastAllGroups(true) end)
+            end
+
+            if self._deferredPeerSyncs and next(self._deferredPeerSyncs) ~= nil then
+                deferredSyncTicker = deferredSyncTicker + elapsed
+                if deferredSyncTicker >= 2.0 then
+                    deferredSyncTicker = 0
+                    local k, peerName = next(self._deferredPeerSyncs)
+                    if k then
+                        self._deferredPeerSyncs[k] = nil
+                        self:onPeerLoggedIn(peerName)
+                    end
                 end
             end
         end
@@ -2743,11 +2902,30 @@ function SyncService:initHooks()
         cleanupTicker = cleanupTicker + elapsed
         if cleanupTicker >= 60.0 then
             cleanupTicker = 0
-            -- Limpeza leve de memória para economizar RAM em sessões longas
+            -- Limpeza periódica de memória para economizar RAM em sessões longas e masmorras
             local now = GetTime and GetTime() or 0
             for id, t in pairs(self._processedUpdateIds) do
                 if (now - t) > 120.0 then
                     self._processedUpdateIds[id] = nil
+                end
+            end
+            if self._lastCounterBroadcast then
+                for k, t in pairs(self._lastCounterBroadcast) do
+                    if (now - t) > 120.0 then
+                        self._lastCounterBroadcast[k] = nil
+                    end
+                end
+            end
+            local staleOutbox = nil
+            for id, u in pairs(self._pendingOutbox) do
+                if u.createdAt and u.createdAt > 0 and (now - u.createdAt) > 180.0 then
+                    staleOutbox = staleOutbox or {}
+                    table.insert(staleOutbox, id)
+                end
+            end
+            if staleOutbox then
+                for _, id in ipairs(staleOutbox) do
+                    self:_removeOutboxEntry(id)
                 end
             end
         end
@@ -2787,7 +2965,7 @@ function SyncService:processRetransmission()
             if (now - (update.lastSent or 0)) >= RETRANSMIT_INTERVAL then
                 if (update.sendCount or 0) < MAX_RETRANSMIT_ATTEMPTS then
                     if sentThisPass < MAX_RETRANSMITS_PER_PASS then
-                        self:sendUpdatePacket(update)
+                        self:sendUpdatePacket(update, false)
                         sentThisPass = sentThisPass + 1
                     end
                 else
@@ -2801,7 +2979,7 @@ function SyncService:processRetransmission()
 
     if toRemove then
         for _, id in ipairs(toRemove) do
-            self._pendingOutbox[id] = nil
+            self:_removeOutboxEntry(id)
         end
     end
 end

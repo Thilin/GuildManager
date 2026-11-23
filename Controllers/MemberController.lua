@@ -318,24 +318,37 @@ function MemberController:initHooks()
                     local runEventLog = self._pendingEventLogAfterCombat
                     self._pendingRosterScanAfterCombat = false
                     self._pendingEventLogAfterCombat = false
-                    local execDeferred = function()
-                        if InCombatLockdown and InCombatLockdown() then
-                            if runRoster then self._pendingRosterScanAfterCombat = true end
-                            if runEventLog then self._pendingEventLogAfterCombat = true end
-                            return
+                    -- Escalona as rotinas pós-combate em frames separados para evitar picos de CPU ao fim de lutas contra chefes
+                    if runRoster then
+                        local execRoster = function()
+                            if InCombatLockdown and InCombatLockdown() then
+                                self._pendingRosterScanAfterCombat = true
+                                return
+                            end
+                            if IsInGuild and IsInGuild() then
+                                self._guildRosterService:scanRoster()
+                                self:requestGuildEventLog()
+                            end
                         end
-                        if runRoster and IsInGuild and IsInGuild() then
-                            self._guildRosterService:scanRoster()
-                            self:requestGuildEventLog()
-                        end
-                        if runEventLog then
-                            self:checkGuildEventLog()
+                        if C_Timer and C_Timer.After then
+                            C_Timer.After(3.0, execRoster)
+                        else
+                            execRoster()
                         end
                     end
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(2.0, execDeferred)
-                    else
-                        execDeferred()
+                    if runEventLog then
+                        local execEventLog = function()
+                            if InCombatLockdown and InCombatLockdown() then
+                                self._pendingEventLogAfterCombat = true
+                                return
+                            end
+                            self:checkGuildEventLog()
+                        end
+                        if C_Timer and C_Timer.After then
+                            C_Timer.After(5.0, execEventLog)
+                        else
+                            execEventLog()
+                        end
                     end
                 end
             end

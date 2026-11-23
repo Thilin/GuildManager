@@ -910,8 +910,10 @@ function WorldMapView:initUpdateFrame()
     local ticker = 0
     updateFrame:SetScript("OnUpdate", function(_, elapsed)
         if not WorldMapFrame:IsShown() then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        if IsInInstance and IsInInstance() then return end
         ticker = ticker + elapsed
-        if ticker >= 0.10 then
+        if ticker >= 0.15 then
             ticker = 0
             self:updateRealtimePins()
         end
