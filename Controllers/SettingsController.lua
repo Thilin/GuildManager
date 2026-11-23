@@ -100,13 +100,10 @@ function SettingsController:setupCallbacks()
             self._minimapButton:updatePinSettings(formData.showMinimapPins, formData.clampMinimapPins)
         end
 
-        -- Aplica visibilidade do botão no mapa mundial imediatamente
-        if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView._mapButton then
-            if formData.showWorldMapButton then
-                _G.GM.worldMapView._mapButton:Show()
-            else
-                _G.GM.worldMapView._mapButton:Hide()
-                if _G.GM.worldMapView.hidePanel then _G.GM.worldMapView:hidePanel() end
+        -- Aplica visibilidade do painel lateral no mapa mundial imediatamente
+        if _G.GM and _G.GM.worldMapView then
+            if not formData.showWorldMapButton and _G.GM.worldMapView.hidePanel then
+                _G.GM.worldMapView:hidePanel()
             end
         end
 
@@ -172,9 +169,6 @@ function SettingsController:setupCallbacks()
         end
 
         if _G.GM and _G.GM.worldMapView then
-            if _G.GM.worldMapView._mapButton then
-                _G.GM.worldMapView._mapButton:Show()
-            end
             if _G.GM.worldMapView.setPinsHiddenUntilReload then
                 _G.GM.worldMapView:setPinsHiddenUntilReload(false)
             end

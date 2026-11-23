@@ -420,10 +420,8 @@ function WorldMapController:initHooks()
         end
 
         if showBtn then
-            if self._worldMapView._mapButton then self._worldMapView._mapButton:Show() end
             self._worldMapView:showPanel()
         else
-            if self._worldMapView._mapButton then self._worldMapView._mapButton:Hide() end
             self._worldMapView:hidePanel()
         end
 

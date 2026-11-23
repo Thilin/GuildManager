@@ -1,7 +1,5 @@
 ---@class WorldMapView
 ---@field private _frame table|nil
----@field private _mapButton table|nil
----@field private _realtimeBadge table|nil
 ---@field private _updateFrame table|nil
 ---@field private _panel table|nil
 ---@field private _pins table
@@ -488,7 +486,6 @@ function WorldMapView:new(pinsEnabled)
     instance._isPanelOpen = true
     instance._isContinentView = false
     instance._isWorldView = false
-    instance._realtimeBadge = nil
     instance._updateFrame = nil
 
     return instance
@@ -509,7 +506,6 @@ function WorldMapView:setPinsHiddenUntilReload(hidden)
     if not self._pinsEnabled then return end
     if hidden then
         self:clearPins()
-        if self._realtimeBadge then self._realtimeBadge:Hide() end
         if self._updateFrame then self._updateFrame:Hide() end
     else
         if self._updateFrame then self._updateFrame:Show() end
@@ -558,67 +554,6 @@ function WorldMapView:getMapCanvas()
     end
 
     return canvas, cw, ch
-end
-
---- Ajusta a ancoragem dos botões do GuildManager no cabeçalho do WorldMapFrame (Peer Badge e Map Button).
-function WorldMapView:reanchorHeaderButtons()
-    if not WorldMapFrame then return end
-
-    if IsInGuild and not IsInGuild() then
-        if self._realtimeBadge then self._realtimeBadge:Hide() end
-        if self._mapButton then self._mapButton:Hide() end
-        return
-    end
-
-    local maxMinBtn = (WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.MaximizeMinimizeFrame)
-        or WorldMapFrame.MaximizeMinimizeFrame
-        or WorldMapFrameSizeDownButton
-        or WorldMapFrameSizeUpButton
-
-    local closeBtn = WorldMapFrameCloseButton
-        or (WorldMapFrame.BorderFrame and WorldMapFrame.BorderFrame.CloseButton)
-        or WorldMapFrame.CloseButton
-
-    -- 1. Ancoragem do Badge de Membros com Addon (realtimeBadge)
-    if self._pinsEnabled and self._realtimeBadge then
-        self._realtimeBadge:ClearAllPoints()
-        self._realtimeBadge:SetFrameStrata("HIGH")
-        self._realtimeBadge:SetFrameLevel(3000)
-
-        if maxMinBtn and maxMinBtn:IsShown() then
-            self._realtimeBadge:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
-        elseif closeBtn and closeBtn:IsShown() then
-            self._realtimeBadge:SetPoint("RIGHT", closeBtn, "LEFT", -34, 0)
-        elseif maxMinBtn then
-            self._realtimeBadge:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
-        elseif closeBtn then
-            self._realtimeBadge:SetPoint("RIGHT", closeBtn, "LEFT", -34, 0)
-        else
-            self._realtimeBadge:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -175, -5)
-        end
-        self._realtimeBadge:Show()
-    end
-
-    -- 2. Ancoragem do Botão de Membros na Região (mapButton)
-    if self._mapButton then
-        self._mapButton:ClearAllPoints()
-        self._mapButton:SetFrameStrata("HIGH")
-        self._mapButton:SetFrameLevel(3000)
-
-        if self._pinsEnabled and self._realtimeBadge and self._realtimeBadge:IsShown() then
-            self._mapButton:SetPoint("RIGHT", self._realtimeBadge, "LEFT", -6, 0)
-        elseif maxMinBtn and maxMinBtn:IsShown() then
-            self._mapButton:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
-        elseif closeBtn and closeBtn:IsShown() then
-            self._mapButton:SetPoint("RIGHT", closeBtn, "LEFT", -34, 0)
-        else
-            self._mapButton:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -75, -5)
-        end
-    end
-end
-
-function WorldMapView:reanchorMapButton()
-    self:reanchorHeaderButtons()
 end
 
 --- Retorna a escala fixa (40%) para os marcadores de membros da guilda no mapa.
@@ -789,134 +724,6 @@ function WorldMapView:getOrCreateNamedPin(name, canvas)
     return pin
 end
 
---- Garante e atualiza o badge de membros online no topo do WorldMapFrame oficial
-function WorldMapView:ensureRealtimeBadge()
-    if not self._pinsEnabled or not WorldMapFrame then return end
-    if IsInGuild and not IsInGuild() then
-        if self._realtimeBadge then self._realtimeBadge:Hide() end
-        return
-    end
-    if self._realtimeBadge then return end
-
-    local badgeBtn = CreateFrame("Button", "GM_WorldMapPeerBadge", WorldMapFrame, "UIPanelButtonTemplate")
-    badgeBtn:SetSize(126, 21)
-    badgeBtn:SetFrameStrata("HIGH")
-    badgeBtn:SetFrameLevel(3000)
-    badgeBtn:Show()
-    local curL = (_G.GM and _G.GM.L) or _G.L or L
-    badgeBtn:SetText(curL["MAP_BADGE_MEMBERS_ZERO"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Members (0)|r")
-
-    badgeBtn:SetScript("OnClick", function()
-        local locService = _G.GM and _G.GM.locationService
-        local peers = locService and locService:getPeers() or {}
-        local peerList = {}
-        for _, p in pairs(peers) do
-            table.insert(peerList, p)
-        end
-
-        if #peerList == 1 and peerList[1].mapID and WorldMapFrame and WorldMapFrame.SetMapID then
-            local targetMapID = peerList[1].mapID
-            local currentMapID = GetCurrentWorldMapID()
-            if targetMapID ~= currentMapID then
-                WorldMapFrame:SetMapID(targetMapID)
-                return
-            end
-        end
-
-        self:togglePanel()
-    end)
-
-    badgeBtn:SetScript("OnEnter", function(btn)
-        local cL = (_G.GM and _G.GM.L) or _G.L or L
-        local locService = _G.GM and _G.GM.locationService
-        local peers = locService and locService:getPeers() or {}
-        local viewMapID = GetCurrentWorldMapID()
-
-        GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMLEFT")
-        GameTooltip:ClearLines()
-        GameTooltip:AddLine(cL["MAP_BADGE_TOOLTIP_TITLE"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:16:16:0:0|t |cffffd200Members with GuildManager|r", 1, 1, 1)
-        GameTooltip:AddLine(cL["MAP_BADGE_TOOLTIP_DESC"] or "|cff888888Positions synced in real time:|r", 0.7, 0.7, 0.7)
-
-        local hasAny = false
-        for name, p in pairs(peers) do
-            local pFull = p.fullName or p.displayName or p.name or name
-            if not pFull:find("%s") and _G.GM and _G.GM.memberService and _G.GM.memberService.resolveFullName then
-                local resolved = _G.GM.memberService:resolveFullName(pFull)
-                if resolved and resolved ~= "" and resolved:find("%s") then
-                    pFull = resolved
-                end
-            end
-            if not (locService and locService.isSelf and locService:isSelf(p.name, pFull)) then
-                hasAny = true
-                local cls = (p.classFile or p.class or "WARRIOR"):upper()
-                local c = CLASS_COLORS[cls] or { hex = "|cffffffff" }
-                local isHere = (p.mapID == viewMapID)
-                local statusStr = isHere and (cL["MAP_BADGE_IN_THIS_ZONE"] or "|cff20ff20In This Zone|r") or string.format("|cffffd200%s|r", p.zoneName or "Azeroth")
-
-                local lvlFmt = string.format(cL["LEVEL_ABBR_FMT"] or "(Lvl %d)", p.level or 1)
-                local raceStr = (p.race and p.race ~= "") and (" " .. p.race) or ""
-                GameTooltip:AddDoubleLine(
-                    string.format("%s%s|r %s%s", c.hex, pFull, lvlFmt, raceStr),
-                    string.format("%s (%.1f, %.1f)", statusStr, (p.x or 0) * 100, (p.y or 0) * 100),
-                    1, 1, 1, 1, 1, 1
-                )
-            end
-        end
-
-        if not hasAny then
-            GameTooltip:AddLine(cL["MAP_BADGE_NO_MEMBERS"] or "|cffaaaaaaNo other member online right now.|r", 0.7, 0.7, 0.7)
-            GameTooltip:AddLine(cL["MAP_BADGE_TIP_SIMULATE"] or "|cff55ff55Tip: Use /gmloc test to simulate a member on map!|r", 0.3, 0.9, 0.3)
-        else
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(cL["MAP_BADGE_CLICK_HINT"] or "|cff00ff00Click to open member zone or side panel|r", 0.2, 0.8, 0.2)
-        end
-
-        GameTooltip:Show()
-    end)
-
-    badgeBtn:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-
-    self._realtimeBadge = badgeBtn
-    self:reanchorHeaderButtons()
-
-    if not self._headerHooksInstalled then
-        self._headerHooksInstalled = true
-        if WorldMapFrame.HookScript then
-            WorldMapFrame:HookScript("OnShow", function()
-                self:reanchorHeaderButtons()
-                if self._panel then
-                    self:adjustPanelPosition()
-                end
-            end)
-            WorldMapFrame:HookScript("OnSizeChanged", function() self:reanchorHeaderButtons() end)
-        end
-    end
-end
-
---- Atualiza o texto do badge superior com a contagem ao vivo
-function WorldMapView:updateRealtimeBadge()
-    if not self._pinsEnabled then return end
-    if IsInGuild and not IsInGuild() then
-        if self._realtimeBadge then self._realtimeBadge:Hide() end
-        return
-    end
-
-    self:ensureRealtimeBadge()
-    if not self._realtimeBadge then return end
-
-    local cL = (_G.GM and _G.GM.L) or _G.L or L
-    local locService = _G.GM and _G.GM.locationService
-    local count = (locService and locService.getPeerCount and tonumber(locService:getPeerCount())) or 0
-    if count and count > 0 then
-        self._realtimeBadge:SetText(string.format(cL["MAP_BADGE_MEMBERS"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cff20ff20Members (%d)|r", count))
-    else
-        self._realtimeBadge:SetText(cL["MAP_BADGE_MEMBERS_ZERO"] or "|TInterface\\Icons\\INV_Misc_GroupNeedMore:14:14:0:0|t |cffffd200Members (0)|r")
-    end
-    self:reanchorHeaderButtons()
-end
-
 --- Atualiza a renderização contínua de todos os pinos de jogadores remotos no mapa oficial da Blizzard
 function WorldMapView:updateRealtimePins()
     if not self._pinsEnabled then return end
@@ -924,8 +731,6 @@ function WorldMapView:updateRealtimePins()
 
     if IsInGuild and not IsInGuild() then
         self:clearPins()
-        if self._realtimeBadge then self._realtimeBadge:Hide() end
-        if self._mapButton then self._mapButton:Hide() end
         return
     end
 
@@ -952,11 +757,6 @@ function WorldMapView:updateRealtimePins()
 
     if not showPins or disablePins then
         self:clearPins()
-        if disablePins then
-            if self._realtimeBadge then self._realtimeBadge:Hide() end
-        else
-            self:updateRealtimeBadge()
-        end
         return
     end
 
@@ -1093,8 +893,6 @@ function WorldMapView:updateRealtimePins()
             end
         end
     end
-
-    self:updateRealtimeBadge()
 end
 
 --- Cria frame filho de atualização contínua a 10 FPS (0.10s) para renderização suave com baixo uso de CPU
@@ -1128,114 +926,23 @@ function WorldMapView:initWorldMapUI()
 
     if self._pinsEnabled then
         self:initUpdateFrame()
-        self:ensureRealtimeBadge()
     end
 
-    if self._mapButton then
+    if self._panel then
         return
     end
 
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-
-    -- =========================================================================
-    -- BOTÃO DE INFORMAÇÃO DA GUILDA NA BARRA SUPERIOR DIREITA DO MAPA
-    -- =========================================================================
-    local mapButton = CreateFrame("Button", "GM_WorldMapButton", WorldMapFrame, template)
-    mapButton:SetSize(145, 22)
-    mapButton:SetFrameStrata("HIGH")
-    mapButton:SetFrameLevel((WorldMapFrame:GetFrameLevel() or 10) + 20)
-    self._mapButton = mapButton
-    self:reanchorMapButton()
-
-    if mapButton.SetBackdrop then
-        mapButton:SetBackdrop(MAP_BUTTON_BACKDROP)
-        mapButton:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
-        mapButton:SetBackdropBorderColor(1.0, 0.82, 0.0, 1.0)
-    end
-
-    -- Brilho / Aura Dourada ao redor do botão
-    local btnGlow = mapButton:CreateTexture(nil, "BACKGROUND", nil, -1)
-    btnGlow:SetPoint("TOPLEFT", mapButton, "TOPLEFT", -3, 3)
-    btnGlow:SetPoint("BOTTOMRIGHT", mapButton, "BOTTOMRIGHT", 3, -3)
-    btnGlow:SetTexture("Interface\\ChatFrame\\ChatFrameTab-NewMessage")
-    btnGlow:SetVertexColor(1.0, 0.82, 0.0, 0.55)
-    btnGlow:SetBlendMode("ADD")
-    mapButton.glow = btnGlow
-
-    -- Ícone oficial do Tabardo da Guilda
-    local icon = mapButton:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(16, 16)
-    icon:SetPoint("LEFT", mapButton, "LEFT", 5, 0)
-    icon:SetTexture("Interface\\Icons\\INV_Shirt_GuildTabard_01")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    mapButton.icon = icon
-
-    local btnText = mapButton:CreateFontString(nil, "OVERLAY")
-    btnText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
-    btnText:SetPoint("LEFT", icon, "RIGHT", 5, 0)
-    btnText:SetPoint("RIGHT", mapButton, "RIGHT", -4, 0)
-    btnText:SetJustifyH("LEFT")
     local curL = (_G.GM and _G.GM.L) or _G.L or L
-    btnText:SetText(string.format(curL["MAP_BTN_IN_REGION"] or "|cffffd200Guild:|r %s%d %s|r", "|cff00ff00", 0, curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
-    mapButton.text = btnText
-
-    local btnHighlight = mapButton:CreateTexture(nil, "HIGHLIGHT")
-    btnHighlight:SetAllPoints(mapButton)
-    btnHighlight:SetColorTexture(1.0, 0.85, 0.30, 0.30)
-    mapButton:SetHighlightTexture(btnHighlight)
-
-    mapButton:SetScript("OnEnter", function(btn)
-        local cL = (_G.GM and _G.GM.L) or _G.L or L
-        if btn.SetBackdropBorderColor then
-            btn:SetBackdropBorderColor(1.0, 0.95, 0.40, 1.0)
-            btn:SetBackdropColor(0.24, 0.16, 0.05, 1.0)
-        end
-        if btn.glow then
-            btn.glow:SetVertexColor(1.0, 0.95, 0.40, 0.90)
-        end
-        GameTooltip:SetOwner(btn, "ANCHOR_BOTTOMRIGHT")
-        GameTooltip:AddLine(cL["MAP_PANEL_TOOLTIP_HEADER"] or "|cffffd200GuildManager - Members in Region|r")
-        GameTooltip:AddLine(cL["MAP_PANEL_TOOLTIP_DESC"] or "Shows guild members currently present in this map region.", 1, 1, 1, true)
-
-        local locService = _G.GM and _G.GM.locationService
-        local addonUsers = locService and locService:getGuildAddonUsers() or {}
-        if #addonUsers > 0 then
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine(string.format(cL["MAP_PANEL_TOOLTIP_ACTIVE"] or "|cff00ff00Members with Active AddOn (%d):|r", #addonUsers), 1, 1, 1)
-            for _, u in ipairs(addonUsers) do
-                local clsHex = (CLASS_COLORS and CLASS_COLORS[u.class] and CLASS_COLORS[u.class].hex) or "|cffffffff"
-                local selfTag = u.isSelf and (cL["MAP_PANEL_TOOLTIP_YOU"] or " |cff00ff00(You)|r") or ""
-                local zoneStr = (u.zone and u.zone ~= "") and (" - |cff00e5ff" .. u.zone .. "|r") or ""
-                GameTooltip:AddLine(string.format("  • %s%s|r%s (Lvl %d)%s", clsHex, u.name, selfTag, u.level or 1, zoneStr), 1, 1, 1)
-            end
-        end
-
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(cL["MAP_PANEL_TOOLTIP_CLICK"] or "|cff00ff00Click to toggle side panel and view full list.|r", 0.8, 0.8, 0.8)
-        GameTooltip:Show()
-    end)
-
-    mapButton:SetScript("OnLeave", function(btn)
-        self:updateButtonState()
-        GameTooltip:Hide()
-    end)
-
-    mapButton:SetScript("OnClick", function()
-        self:togglePanel()
-    end)
-
-    self._mapButton = mapButton
 
     if not self._headerHooksInstalled then
         self._headerHooksInstalled = true
         if WorldMapFrame.HookScript then
             WorldMapFrame:HookScript("OnShow", function()
-                self:reanchorHeaderButtons()
                 if self._panel then
                     self:adjustPanelPosition()
                 end
             end)
-            WorldMapFrame:HookScript("OnSizeChanged", function() self:reanchorHeaderButtons() end)
         end
     end
 
@@ -1305,39 +1012,9 @@ function WorldMapView:initWorldMapUI()
     sep:SetColorTexture(PALETTE.SEPARATOR[1], PALETTE.SEPARATOR[2], PALETTE.SEPARATOR[3], PALETTE.SEPARATOR[4])
     panel.sep = sep
 
-    -- Botão de Escanear / Atualizar Região
-    local scanBtn = CreateFrame("Button", nil, panel, template)
-    scanBtn:SetSize(110, 20)
-    scanBtn:SetPoint("TOPLEFT", sep, "BOTTOMLEFT", 0, -6)
-    if scanBtn.SetBackdrop then
-        scanBtn:SetBackdrop(SUB_CONTAINER_BACKDROP)
-        scanBtn:SetBackdropColor(PALETTE.SUB_BOX_BG[1], PALETTE.SUB_BOX_BG[2], PALETTE.SUB_BOX_BG[3], 0.90)
-        scanBtn:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.85)
-    end
-    local scanBtnTxt = scanBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    scanBtnTxt:SetPoint("CENTER", scanBtn, "CENTER", 0, 0)
-    scanBtnTxt:SetText(curL["MAP_SCAN_BTN"] or "Scan Map")
-    panel.scanBtnTxt = scanBtnTxt
-    scanBtn:SetScript("OnEnter", function(b)
-        if b.SetBackdropBorderColor then
-            b:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], 1.0)
-        end
-    end)
-    scanBtn:SetScript("OnLeave", function(b)
-        if b.SetBackdropBorderColor then
-            b:SetBackdropBorderColor(PALETTE.SUB_BOX_BORDER[1], PALETTE.SUB_BOX_BORDER[2], PALETTE.SUB_BOX_BORDER[3], 0.85)
-        end
-    end)
-    scanBtn:SetScript("OnClick", function()
-        if self._onScanCallback then
-            self._onScanCallback()
-        end
-    end)
-    panel.scanBtn = scanBtn
-
     -- Container da Lista de Membros
     local listContainer = CreateFrame("Frame", nil, panel, template)
-    listContainer:SetPoint("TOPLEFT", scanBtn, "BOTTOMLEFT", 0, -6)
+    listContainer:SetPoint("TOPLEFT", sep, "BOTTOMLEFT", 0, -6)
     listContainer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -10, 36)
     if listContainer.SetBackdrop then
         listContainer:SetBackdrop(SUB_CONTAINER_BACKDROP)
@@ -1557,34 +1234,6 @@ function WorldMapView:togglePanel()
     end
 end
 
---- Atualiza o estado visual do botão inferior (ativo / inativo).
-function WorldMapView:updateButtonState()
-    if IsInGuild and not IsInGuild() then
-        if self._mapButton then self._mapButton:Hide() end
-        return
-    end
-
-    if self._mapButton then
-        if self._isPanelOpen then
-            if self._mapButton.SetBackdropColor then
-                self._mapButton:SetBackdropColor(0.25, 0.17, 0.05, 1.0)
-                self._mapButton:SetBackdropBorderColor(1.0, 0.95, 0.35, 1.0)
-            end
-            if self._mapButton.glow then
-                self._mapButton.glow:SetVertexColor(1.0, 0.95, 0.35, 0.85)
-            end
-        else
-            if self._mapButton.SetBackdropColor then
-                self._mapButton:SetBackdropColor(0.18, 0.12, 0.04, 0.95)
-                self._mapButton:SetBackdropBorderColor(1.0, 0.82, 0.0, 1.0)
-            end
-            if self._mapButton.glow then
-                self._mapButton.glow:SetVertexColor(1.0, 0.82, 0.0, 0.55)
-            end
-        end
-    end
-end
-
 --- Exibe o painel de membros da guilda na região.
 function WorldMapView:showPanel()
     self:initWorldMapUI()
@@ -1593,7 +1242,6 @@ function WorldMapView:showPanel()
     self:adjustPanelPosition()
     self._panel:Show()
     self._isPanelOpen = true
-    self:updateButtonState()
 
     if IsInGuild and not IsInGuild() then
         self:renderNoGuild()
@@ -1613,7 +1261,6 @@ function WorldMapView:hidePanel()
         self._panel:Hide()
     end
     self._isPanelOpen = false
-    self:updateButtonState()
 end
 
 --- Retorna se o painel está aberto.
@@ -1622,58 +1269,14 @@ function WorldMapView:isPanelShown()
     return self._isPanelOpen == true and self._panel and self._panel:IsShown()
 end
 
---- Atualiza o texto do botão na barra do mapa com a quantidade de membros na região/continente.
----@param count number
----@param isContinent boolean|nil
----@param isWorld boolean|nil
-function WorldMapView:updateButton(count, isContinent, isWorld)
-    if IsInGuild and not IsInGuild() then
-        if self._mapButton then self._mapButton:Hide() end
-        return
-    end
-
-    if not self._mapButton then
-        self:initWorldMapUI()
-    end
-    if not self._mapButton then return end
-
-    local curL = (_G.GM and _G.GM.L) or _G.L or L
-    local num = tonumber(count) or 0
-    local color = num > 0 and "|cff00ff00" or "|cffaaaaaa"
-    local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
-    if self._mapButton.text then
-        self._mapButton.text:SetText(string.format(curL["MAP_BTN_IN_REGION"] or "|cffffd200Guild:|r %s%d %s|r", color, num, scopeText))
-    end
-    self:reanchorMapButton()
-    self:updateButtonState()
-
-    local showBtn = true
-    if _G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showWorldMapButton") == false then
-        showBtn = false
-    end
-    if showBtn then
-        self._mapButton:Show()
-    else
-        self._mapButton:Hide()
-    end
-end
-
---- Renderiza o estado exclusivo de jogador sem guilda: oculta botões, pinos e membros,
+--- Renderiza o estado exclusivo de jogador sem guilda: oculta pinos e membros,
 --- e exibe no painel exclusivamente a mensagem "VOCÊ NÃO ESTÁ EM UMA GUILDA".
 function WorldMapView:renderNoGuild()
     if not self._panel then
         self:initWorldMapUI()
     end
 
-    -- 1. Oculta os botões superiores da guilda no mapa nativo
-    if self._mapButton then
-        self._mapButton:Hide()
-    end
-    if self._realtimeBadge then
-        self._realtimeBadge:Hide()
-    end
-
-    -- 2. Limpa e remove quaisquer pinos no mapa
+    -- 1. Limpa e remove quaisquer pinos no mapa
     self:clearPins()
     self._membersData = {}
 
@@ -1685,7 +1288,6 @@ function WorldMapView:renderNoGuild()
     if panel.zoneTitle then panel.zoneTitle:Hide() end
     if panel.countText then panel.countText:Hide() end
     if panel.sep then panel.sep:Hide() end
-    if panel.scanBtn then panel.scanBtn:Hide() end
     if panel.listContainer then panel.listContainer:Hide() end
     if panel.footer then panel.footer:Hide() end
     if panel.emptyMsg then panel.emptyMsg:Hide() end
@@ -1742,13 +1344,10 @@ function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
             self._panel.countText:Show()
         end
         if self._panel.sep then self._panel.sep:Show() end
-        if self._panel.scanBtn then self._panel.scanBtn:Show() end
         if self._panel.listContainer then self._panel.listContainer:Show() end
         if self._panel.footer then self._panel.footer:Show() end
         if self._panel.noGuildFrame then self._panel.noGuildFrame:Hide() end
     end
-
-    self:updateButton(#self._membersData, isContinent, isWorld)
 
     -- Atualiza os pinos em tempo real no mapa
     if self._pinsEnabled then
@@ -1872,9 +1471,6 @@ function WorldMapView:updateLocale()
         if self._panel.headerTitle then
             self._panel.headerTitle:SetText(curL["MAP_PANEL_HEADER"] or "|cffffd200Members in Region|r")
         end
-        if self._panel.scanBtnTxt then
-            self._panel.scanBtnTxt:SetText(curL["MAP_SCAN_BTN"] or "Scan Map")
-        end
         if self._panel.emptyMsg then
             self._panel.emptyMsg:SetText(curL["MAP_EMPTY_MSG"] or "No guild members\nfound in this region.")
         end
@@ -1890,16 +1486,6 @@ function WorldMapView:updateLocale()
             local scopeText = isWorld and (curL["MAP_BTN_WORLD_SCOPE"] or "in World") or (isContinent and (curL["MAP_BTN_CONT_SCOPE"] or "in Continent") or (curL["MAP_BTN_ZONE_SCOPE"] or "in Region"))
             self._panel.countText:SetText(string.format(curL["MAP_FOUND_COUNT_FORMAT"] or "|cffa8f0a8%d member(s) %s|r", #self._membersData, scopeText))
         end
-    end
-
-    if self._membersData then
-        self:updateButton(#self._membersData, self._isContinentView, self._isWorldView)
-    elseif self._mapButton then
-        self:updateButton(0, false, false)
-    end
-
-    if self._pinsEnabled then
-        self:updateRealtimeBadge()
     end
 
     if self._isPanelOpen then
