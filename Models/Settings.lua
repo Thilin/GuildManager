@@ -40,7 +40,6 @@ local DEFAULTS = {
     showWorldMapButton = true,        -- Exibir botão do GuildManager no Mapa Mundial
     autoScanWorldMap = true,          -- Escanear membros da guilda automaticamente ao abrir o mapa
     showMapPins = true,               -- Exibir marcadores dos colegas no mapa
-    mapPinScale = 1.0,                -- Escala dos marcadores no mapa (0.50 a 1.00)
     highlightSelfOnMap = true,        -- Destacar localização do próprio jogador no mapa
     disableWorldMapMemberPins = false, -- Desativar completamente os pins de membros no Mapa do Jogo (requer /reload)
 
@@ -117,10 +116,6 @@ function GMSettings:isClampMinimapPins() return self._clampMinimapPins == true e
 function GMSettings:isShowWorldMapButton() return self._showWorldMapButton ~= false end
 function GMSettings:isAutoScanWorldMap() return self._autoScanWorldMap ~= false end
 function GMSettings:isShowMapPins() return self._showMapPins ~= false end
-function GMSettings:getMapPinScale()
-    local val = tonumber(self._mapPinScale) or 1.0
-    return math.max(0.50, math.min(1.00, val))
-end
 function GMSettings:isHighlightSelfOnMap() return self._highlightSelfOnMap ~= false end
 function GMSettings:isDisableWorldMapMemberPins() return self._disableWorldMapMemberPins == true end
 
@@ -180,7 +175,6 @@ end
 function GMSettings:setShowWorldMapButton(val) self._showWorldMapButton = (val == true) end
 function GMSettings:setAutoScanWorldMap(val) self._autoScanWorldMap = (val == true) end
 function GMSettings:setShowMapPins(val) self._showMapPins = (val == true) end
-function GMSettings:setMapPinScale(val) self._mapPinScale = math.max(0.50, math.min(1.00, tonumber(val) or 1.0)) end
 function GMSettings:setHighlightSelfOnMap(val) self._highlightSelfOnMap = (val == true) end
 function GMSettings:setDisableWorldMapMemberPins(val) self._disableWorldMapMemberPins = (val == true) end
 
