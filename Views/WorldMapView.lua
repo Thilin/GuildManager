@@ -884,7 +884,12 @@ function WorldMapView:ensureRealtimeBadge()
     if not self._headerHooksInstalled then
         self._headerHooksInstalled = true
         if WorldMapFrame.HookScript then
-            WorldMapFrame:HookScript("OnShow", function() self:reanchorHeaderButtons() end)
+            WorldMapFrame:HookScript("OnShow", function()
+                self:reanchorHeaderButtons()
+                if self._panel then
+                    self:adjustPanelPosition()
+                end
+            end)
             WorldMapFrame:HookScript("OnSizeChanged", function() self:reanchorHeaderButtons() end)
         end
     end
@@ -1224,18 +1229,36 @@ function WorldMapView:initWorldMapUI()
     if not self._headerHooksInstalled then
         self._headerHooksInstalled = true
         if WorldMapFrame.HookScript then
-            WorldMapFrame:HookScript("OnShow", function() self:reanchorHeaderButtons() end)
+            WorldMapFrame:HookScript("OnShow", function()
+                self:reanchorHeaderButtons()
+                if self._panel then
+                    self:adjustPanelPosition()
+                end
+            end)
             WorldMapFrame:HookScript("OnSizeChanged", function() self:reanchorHeaderButtons() end)
         end
     end
 
     -- =========================================================================
-    -- PAINEL LATERAL ACOPLADO AO WORLD MAP NATIVO
+    -- PAINEL LATERAL MÓVEL DO WORLD MAP NATIVO
     -- =========================================================================
     local panel = CreateFrame("Frame", "GM_WorldMapPanel", WorldMapFrame, template)
-    panel:SetWidth(270)
+    panel:SetSize(270, 556)
     panel:SetFrameStrata("HIGH")
     panel:SetFrameLevel((WorldMapFrame:GetFrameLevel() or 10) + 10)
+    panel:SetClampedToScreen(true)
+    panel:EnableMouse(true)
+    panel:SetMovable(true)
+    panel:RegisterForDrag("LeftButton")
+    panel:SetScript("OnDragStart", function(f)
+        if not f:GetHeight() or f:GetHeight() < 200 then
+            f:SetHeight(556)
+        end
+        f:StartMoving()
+    end)
+    panel:SetScript("OnDragStop", function(f)
+        f:StopMovingOrSizing()
+    end)
     panel:Hide()
 
     if panel.SetBackdrop then
@@ -1500,21 +1523,28 @@ function WorldMapView:initWorldMapUI()
     end
 end
 
---- Atualiza o posicionamento do painel garantindo que fique dentro dos limites da tela.
+--- Posiciona o painel na posição padrão inicial ao lado do Mapa Mundial.
 function WorldMapView:adjustPanelPosition()
     local panel = self._panel
     if not panel or not WorldMapFrame then return end
 
+    local defaultHeight = 556
+    if WorldMapFrame.GetHeight then
+        local mapH = WorldMapFrame:GetHeight() or 0
+        if mapH >= 420 and mapH <= 760 then
+            defaultHeight = mapH
+        end
+    end
+
     panel:ClearAllPoints()
+    panel:SetSize(270, defaultHeight)
     local mapRight = WorldMapFrame:GetRight() or 0
     local screenWidth = GetScreenWidth() or 1920
 
     if (mapRight + 275) <= screenWidth then
         panel:SetPoint("TOPLEFT", WorldMapFrame, "TOPRIGHT", 2, 0)
-        panel:SetPoint("BOTTOMLEFT", WorldMapFrame, "BOTTOMRIGHT", 2, 0)
     else
         panel:SetPoint("TOPRIGHT", WorldMapFrame, "TOPRIGHT", -4, -30)
-        panel:SetPoint("BOTTOMRIGHT", WorldMapFrame, "BOTTOMRIGHT", -4, 30)
     end
 end
 
