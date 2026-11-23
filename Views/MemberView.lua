@@ -434,19 +434,23 @@ function MemberView:createUI()
     self._mainTagText = mainTagText
     self._isMain = true
 
-    mainTagBtn:SetScript("OnClick", function()
-        self:toggleMainTag()
+    mainTagBtn:SetScript("OnClick", function(btn)
+        self:toggleMainTag(btn)
     end)
     mainTagBtn:SetScript("OnEnter", function(btn)
         if GameTooltip then
             local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            if self._isMain then
-                GameTooltip:SetText(curL["MEMBER_MAIN_TAG_TT"])
+            if not self:canOfficerManageAlts() then
+                self:showAltOfficerOnlyTooltip(btn)
             else
-                GameTooltip:SetText(curL["MEMBER_ALT_TAG_TT"])
+                if self._isMain then
+                    GameTooltip:SetText(curL["MEMBER_MAIN_TAG_TT"])
+                else
+                    GameTooltip:SetText(curL["MEMBER_ALT_TAG_TT"])
+                end
+                GameTooltip:Show()
             end
-            GameTooltip:Show()
         end
     end)
     mainTagBtn:SetScript("OnLeave", function()
@@ -880,11 +884,13 @@ function MemberView:createUI()
     altsManageHint:SetText("|cffffd200" .. L["MEMBER_MANAGE_ALTS"] .. "|r")
     self._altsManageHint = altsManageHint
 
-    altsLabelBtn:SetScript("OnClick", function()
-        self:toggleAltManager()
+    altsLabelBtn:SetScript("OnClick", function(btn)
+        self:toggleAltManager(btn)
     end)
     altsLabelBtn:SetScript("OnEnter", function(btn)
-        if GameTooltip then
+        if not self:canOfficerManageAlts() then
+            self:showAltOfficerOnlyTooltip(btn)
+        elseif GameTooltip then
             local curL = (_G.GM and _G.GM.L) or _G.L or L
             GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
             GameTooltip:SetText(curL["MEMBER_ALTS_LABEL_TT"])
@@ -919,19 +925,23 @@ function MemberView:createUI()
     altsHl:SetColorTexture(PALETTE.HIGHLIGHT_TINT[1], PALETTE.HIGHLIGHT_TINT[2], PALETTE.HIGHLIGHT_TINT[3], PALETTE.HIGHLIGHT_TINT[4])
     altsBtn:SetHighlightTexture(altsHl)
 
-    altsBtn:SetScript("OnClick", function()
-        self:toggleAltManager()
+    altsBtn:SetScript("OnClick", function(btn)
+        self:toggleAltManager(btn)
     end)
     altsBtn:SetScript("OnEnter", function(btn)
-        if altsBtn.SetBackdropBorderColor then
-            altsBtn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
-            altsBtn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
-        end
-        if GameTooltip then
-            local curL = (_G.GM and _G.GM.L) or _G.L or L
-            GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
-            GameTooltip:SetText(curL["MEMBER_ALTS_BTN_TT"])
-            GameTooltip:Show()
+        if self:canOfficerManageAlts() then
+            if altsBtn.SetBackdropBorderColor then
+                altsBtn:SetBackdropBorderColor(PALETTE.FOCUS_BORDER[1], PALETTE.FOCUS_BORDER[2], PALETTE.FOCUS_BORDER[3], PALETTE.FOCUS_BORDER[4])
+                altsBtn:SetBackdropColor(PALETTE.FOCUS_BG[1], PALETTE.FOCUS_BG[2], PALETTE.FOCUS_BG[3], PALETTE.FOCUS_BG[4])
+            end
+            if GameTooltip then
+                local curL = (_G.GM and _G.GM.L) or _G.L or L
+                GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
+                GameTooltip:SetText(curL["MEMBER_ALTS_BTN_TT"])
+                GameTooltip:Show()
+            end
+        else
+            self:showAltOfficerOnlyTooltip(btn)
         end
     end)
     altsBtn:SetScript("OnLeave", function(btn)
@@ -1131,8 +1141,52 @@ function MemberView:updateMainTagVisual(isMain)
 end
 
 --- Alterna o status entre Main e Alt ao clicar na tag e persiste a alteração imediatamente.
-function MemberView:toggleMainTag()
+--- Verifica se o jogador atual é Oficial ou Líder da Guilda (permissão para vincular/gerenciar alts).
+---@return boolean
+function MemberView:canOfficerManageAlts()
+    if IsInGuild and not IsInGuild() then
+        return false
+    end
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        return _G.GM.guildRosterService:isPlayerOfficerOrLeader() == true
+    elseif IsGuildLeader and IsGuildLeader() then
+        return true
+    elseif CanEditOfficerNote and CanEditOfficerNote() then
+        return true
+    elseif C_GuildInfo and C_GuildInfo.CanEditOfficerNote and C_GuildInfo.CanEditOfficerNote() then
+        return true
+    end
+    return false
+end
+
+--- Exibe o tooltip informando que apenas Oficiais ou o Líder podem vincular alts
+--- e orientando o jogador a informar um oficial.
+---@param owner table|nil
+function MemberView:showAltOfficerOnlyTooltip(owner)
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local title = curL["MEMBER_ALTS_OFFICER_ONLY_TITLE"] or "Vínculo de Alts (Restrito)"
+    local desc = curL["MEMBER_ALTS_OFFICER_ONLY_DESC"] or "Apenas Oficiais ou o Líder da Guilda podem vincular ou gerenciar alts."
+    local hint = curL["MEMBER_ALTS_OFFICER_ONLY_HINT"] or "Informe um Oficial da guilda para adicionar o seu alt."
+
+    if GameTooltip and owner then
+        GameTooltip:SetOwner(owner, "ANCHOR_TOP")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine("|cffffd200" .. title .. "|r", 1, 1, 1)
+        GameTooltip:AddLine(desc, 1, 0.3, 0.3, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(hint, 1, 1, 1, true)
+        GameTooltip:Show()
+    end
+end
+
+--- Alterna o status Main/Alt do membro atual (permitido apenas para Oficiais ou Líder).
+---@param triggerBtn table|nil
+function MemberView:toggleMainTag(triggerBtn)
     if not self._currentMember then
+        return
+    end
+    if not self:canOfficerManageAlts() then
+        self:showAltOfficerOnlyTooltip(triggerBtn or self._mainTagBtn)
         return
     end
 
@@ -2572,8 +2626,17 @@ function MemberView:createAltManagerUI()
     end
 end
 
---- Abre ou fecha a janela de gerenciamento de alts vinculados.
-function MemberView:toggleAltManager()
+--- Abre ou fecha a janela de gerenciamento de alts vinculados (restrito a Oficiais ou Líder).
+---@param triggerBtn table|nil
+function MemberView:toggleAltManager(triggerBtn)
+    if not self:canOfficerManageAlts() then
+        if self._altManagerFrame and self._altManagerFrame:IsShown() then
+            self._altManagerFrame:Hide()
+        end
+        self:showAltOfficerOnlyTooltip(triggerBtn or self._altsBtn)
+        return
+    end
+
     self:createAltManagerUI()
     if not self._altManagerFrame then
         return
@@ -2886,6 +2949,10 @@ end
 --- Garante a regra de negócio: mantém o Main atual e adiciona o novo como Alt.
 ---@param targetName string
 function MemberView:linkAltToCurrentFamily(targetName)
+    if not self:canOfficerManageAlts() then
+        self:showAltOfficerOnlyTooltip(self._altsBtn)
+        return
+    end
     if not self._currentMember or not targetName or targetName == "" then
         return
     end
@@ -2935,6 +3002,10 @@ end
 --- Define um personagem da família como o Main ÚNICO, transformando automaticamente todos os outros em Alts.
 ---@param targetName string
 function MemberView:setFamilyMain(targetName)
+    if not self:canOfficerManageAlts() then
+        self:showAltOfficerOnlyTooltip(self._altsBtn)
+        return
+    end
     if not self._currentMember or not targetName or targetName == "" then
         return
     end
@@ -2971,6 +3042,10 @@ end
 --- Desvincula um personagem da família de alts atual.
 ---@param targetName string
 function MemberView:unlinkAltFromCurrentFamily(targetName)
+    if not self:canOfficerManageAlts() then
+        self:showAltOfficerOnlyTooltip(self._altsBtn)
+        return
+    end
     if not self._currentMember or not targetName or targetName == "" then
         return
     end
