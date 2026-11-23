@@ -2360,7 +2360,7 @@ function MemberView:createAltManagerUI()
             if row.memberName then
                 if row.isMain then
                     local cL = (_G.GM and _G.GM.L) or _G.L or L
-                    print(string.format(cL["MEMBER_ALT_MGR_ALREADY_MAIN_FMT"],
+                    print(string.format(cL["MEMBER_ALT_MGR_ALREADY_MAIN_FMT"] or "|cffffd200[GuildManager]|r %s is already the Main character of this family.",
                         row.memberName
                     ))
                 else
@@ -2374,9 +2374,9 @@ function MemberView:createAltManagerUI()
                 local cL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOPLEFT")
                 if row.isMain then
-                    GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_MAIN_ROW_TT_FMT"], row.memberName))
+                    GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_MAIN_ROW_TT_FMT"] or "%s is currently the Main character of this family.", row.memberName))
                 else
-                    GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_ALT_ROW_TT_FMT"], row.memberName))
+                    GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_ALT_ROW_TT_FMT"] or "Click to promote %s as the Main character of this family.", row.memberName))
                 end
                 GameTooltip:Show()
             end
@@ -2418,7 +2418,7 @@ function MemberView:createAltManagerUI()
             if GameTooltip and row.memberName then
                 local cL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
-                GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_UNLINK_TT_FMT"], row.memberName))
+                GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_UNLINK_TT_FMT"] or "Unlink %s from this alt family.", row.memberName))
                 GameTooltip:Show()
             end
         end)
@@ -2596,7 +2596,7 @@ function MemberView:createAltManagerUI()
             if GameTooltip and btn.memberName then
                 local cL = (_G.GM and _G.GM.L) or _G.L or L
                 GameTooltip:SetOwner(btn, "ANCHOR_TOPRIGHT")
-                GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_LINK_TT_FMT"], btn.memberName))
+                GameTooltip:SetText(string.format(cL["MEMBER_ALT_MGR_LINK_TT_FMT"] or "Link %s as an Alt of this family.", btn.memberName))
                 GameTooltip:Show()
             end
         end)
