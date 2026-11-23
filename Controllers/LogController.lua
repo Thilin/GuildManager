@@ -52,8 +52,41 @@ function LogController:refreshLogs()
     self._logView:setLogs(allLogs)
 end
 
+--- Verifica se o jogador atual tem permissão de Oficial ou Líder para acessar os Logs.
+---@return boolean
+function LogController:canAccessLogs()
+    if _G.GM and _G.GM.canAccessLogs then
+        return _G.GM.canAccessLogs()
+    end
+    if IsInGuild and not IsInGuild() then
+        return false
+    end
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        return _G.GM.guildRosterService:isPlayerOfficerOrLeader() == true
+    end
+    if IsGuildLeader and IsGuildLeader() then return true end
+    if CanEditOfficerNote and CanEditOfficerNote() then return true end
+    return false
+end
+
+--- Notifica o usuário quando o acesso à tela de logs é negado.
+function LogController:notifyAccessDenied()
+    local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
+    local msg = curL["LOGS_OFFICER_ONLY"] or "Only guild officers or the guild leader have access to the Logs screen."
+    if print then
+        print("|cffff4444[GuildManager]|r " .. msg)
+    end
+end
+
 --- Abre a tela de logs e carrega os registros.
 function LogController:show()
+    if not self:canAccessLogs() then
+        if self._logView and self._logView.hide then
+            self._logView:hide()
+        end
+        self:notifyAccessDenied()
+        return
+    end
     if _G.GM and _G.GM.memberController and _G.GM.memberController.requestGuildEventLog then
         _G.GM.memberController:requestGuildEventLog(true)
     elseif QueryGuildEventLog then
@@ -81,6 +114,10 @@ function LogController:toggle()
     if self._logView:isShown() then
         self._logView:hide()
     else
+        if not self:canAccessLogs() then
+            self:notifyAccessDenied()
+            return
+        end
         self:show()
     end
 end

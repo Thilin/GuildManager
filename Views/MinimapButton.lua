@@ -231,7 +231,8 @@ function MinimapButton:createUI()
                 return
             end
 
-            if defTab == "logs" and _G.GM and _G.GM.logController then
+            local canLogs = _G.GM and _G.GM.canAccessLogs and _G.GM.canAccessLogs() or false
+            if defTab == "logs" and canLogs and _G.GM and _G.GM.logController then
                 _G.GM.logController:toggle()
             elseif defTab == "groups" and _G.GM and _G.GM.groupController then
                 _G.GM.groupController:toggle()
@@ -241,7 +242,7 @@ function MinimapButton:createUI()
                 _G.GM.settingsController:toggle()
             elseif _G.GM and _G.GM.auditController then
                 _G.GM.auditController:toggle()
-            elseif _G.GM and _G.GM.logController then
+            elseif canLogs and _G.GM and _G.GM.logController then
                 _G.GM.logController:toggle()
             end
         elseif btn == "RightButton" then

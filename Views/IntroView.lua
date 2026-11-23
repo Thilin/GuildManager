@@ -616,6 +616,14 @@ function IntroView:createStep2UI(parent)
         end
     end)
     p.openBtn = openBtn
+    p:HookScript("OnShow", function()
+        local canLogs = _G.GM and _G.GM.canAccessLogs and _G.GM.canAccessLogs() or false
+        if canLogs then
+            openBtn:Show()
+        else
+            openBtn:Hide()
+        end
+    end)
 end
 
 -- =========================================================================

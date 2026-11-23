@@ -160,7 +160,29 @@ local NAV_TABS = {
     },
 }
 
---- Cria e padroniza as 5 abas laterais de navegação para qualquer tela principal do GuildManager.
+--- Verifica se o jogador atual tem permissão para acessar a tela de Logs (apenas Oficiais ou Líder da Guilda).
+---@return boolean
+function _G.GM.canAccessLogs()
+    if IsInGuild and not IsInGuild() then
+        return false
+    end
+    if _G.GM and _G.GM.guildRosterService and _G.GM.guildRosterService.isPlayerOfficerOrLeader then
+        return _G.GM.guildRosterService:isPlayerOfficerOrLeader() == true
+    end
+    if IsGuildLeader and IsGuildLeader() then
+        return true
+    end
+    if CanEditOfficerNote and CanEditOfficerNote() then
+        return true
+    end
+    if C_GuildInfo and C_GuildInfo.CanEditOfficerNote and C_GuildInfo.CanEditOfficerNote() then
+        return true
+    end
+    return false
+end
+
+--- Cria e padroniza as abas laterais de navegação para qualquer tela principal do GuildManager.
+--- A aba de Logs é exibida exclusivamente para Oficiais ou Líder da Guilda e atualizada dinamicamente no OnShow.
 ---@param parentFrame table
 ---@param activeTabId string @"audit"|"logs"|"groups"|"agenda"|"settings"
 ---@param viewInstance table|nil
@@ -169,7 +191,6 @@ function _G.GM.createNavigationSideTabs(parentFrame, activeTabId, viewInstance)
     if not parentFrame then return {} end
     local template = BackdropTemplateMixin and "BackdropTemplate" or nil
     local createdTabs = {}
-    local previousTab = nil
 
     local curL = (_G.GM and _G.GM.L) or _G.L or setmetatable({}, { __index = function(_, k) return k end })
 
@@ -177,13 +198,8 @@ function _G.GM.createNavigationSideTabs(parentFrame, activeTabId, viewInstance)
         local isActive = (tabDef.id == activeTabId)
         local btn = CreateFrame("Button", nil, parentFrame, template)
         btn:SetSize(36, 36)
-
-        if not previousTab then
-            btn:SetPoint("TOPLEFT", parentFrame, "TOPRIGHT", -2, -44)
-        else
-            btn:SetPoint("TOPLEFT", previousTab, "BOTTOMLEFT", 0, -8)
-        end
-        previousTab = btn
+        btn.tabId = tabDef.id
+        btn.requiresOfficer = (tabDef.id == "logs")
 
         if btn.SetBackdrop then
             btn:SetBackdrop(SIDE_TAB_BACKDROP)
@@ -278,6 +294,32 @@ function _G.GM.createNavigationSideTabs(parentFrame, activeTabId, viewInstance)
         end
 
         table.insert(createdTabs, btn)
+    end
+
+    local function refreshSideTabsLayout()
+        local canLogs = _G.GM and _G.GM.canAccessLogs and _G.GM.canAccessLogs() or false
+        local prevVisible = nil
+        for _, tabBtn in ipairs(createdTabs) do
+            if tabBtn.requiresOfficer and not canLogs then
+                tabBtn:Hide()
+            else
+                tabBtn:ClearAllPoints()
+                if not prevVisible then
+                    tabBtn:SetPoint("TOPLEFT", parentFrame, "TOPRIGHT", -2, -44)
+                else
+                    tabBtn:SetPoint("TOPLEFT", prevVisible, "BOTTOMLEFT", 0, -8)
+                end
+                tabBtn:Show()
+                prevVisible = tabBtn
+            end
+        end
+    end
+
+    createdTabs.refresh = refreshSideTabsLayout
+    refreshSideTabsLayout()
+
+    if parentFrame.HookScript then
+        parentFrame:HookScript("OnShow", refreshSideTabsLayout)
     end
 
     return createdTabs

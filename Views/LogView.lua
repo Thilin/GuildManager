@@ -1416,6 +1416,9 @@ end
 
 --- Exibe a janela de logs.
 function LogView:show()
+    if _G.GM and _G.GM.canAccessLogs and not _G.GM.canAccessLogs() then
+        return
+    end
     self:createUI()
     self:updateLocale()
     if self._frame then
@@ -1435,6 +1438,12 @@ end
 
 --- Alterna a visibilidade da janela de logs.
 function LogView:toggle()
+    if _G.GM and _G.GM.canAccessLogs and not _G.GM.canAccessLogs() then
+        if self._frame and self._frame:IsShown() then
+            self:hide()
+        end
+        return
+    end
     self:createUI()
     if self._frame:IsShown() then
         self:hide()

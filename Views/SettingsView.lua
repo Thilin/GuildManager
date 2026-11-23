@@ -473,6 +473,7 @@ function SettingsView:createSettingsColumns()
         tabButtons[tDef.id] = btn
     end
     self._widgets.tabButtons = tabButtons
+    self._widgets.tabDefsOrder = tabDefs
 
     local cbTime24 = createCheckbox(lChild, L["SETTINGS_TIME_24H"], L["SETTINGS_TIME_24H_TIP_TITLE"], L["SETTINGS_TIME_24H_TIP_DESC"])
     cbTime24:SetPoint("TOPLEFT", tabDefLabel, "BOTTOMLEFT", 0, -56)
@@ -1325,8 +1326,31 @@ function SettingsView:renderSettings(settings, stats)
     -- Lema da guilda
     self._widgets.guildTagline:SetText(settings:getGuildTagline() or "")
 
-    -- Aba padrão
-    self._widgets.selectedDefaultTab = settings:getDefaultTab() or "audit"
+    -- Aba padrão (oculta opção de Logs para membros sem cargo de Oficial/Líder)
+    local canLogs = _G.GM and _G.GM.canAccessLogs and _G.GM.canAccessLogs() or false
+    if self._widgets.tabButtons and self._widgets.tabDefsOrder and self._widgets.tabDefLabel then
+        local visibleIdx = 0
+        for _, tDef in ipairs(self._widgets.tabDefsOrder) do
+            local btn = self._widgets.tabButtons[tDef.id]
+            if btn then
+                if tDef.id == "logs" and not canLogs then
+                    btn:Hide()
+                else
+                    visibleIdx = visibleIdx + 1
+                    local row = (visibleIdx > 3) and 2 or 1
+                    local col = (visibleIdx - 1) % 3
+                    btn:ClearAllPoints()
+                    btn:SetPoint("TOPLEFT", self._widgets.tabDefLabel, "BOTTOMLEFT", col * 86, -4 - (row - 1) * 24)
+                    btn:Show()
+                end
+            end
+        end
+    end
+    local defTab = settings:getDefaultTab() or "audit"
+    if defTab == "logs" and not canLogs then
+        defTab = "audit"
+    end
+    self._widgets.selectedDefaultTab = defTab
     self:updateTabSelectionButtons(self._widgets.tabButtons, self._widgets.selectedDefaultTab)
 
     -- Formato 24h
