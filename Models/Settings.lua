@@ -42,6 +42,7 @@ local DEFAULTS = {
     showMapPins = true,               -- Exibir marcadores dos colegas no mapa
     mapPinScale = 1.0,                -- Escala dos marcadores no mapa (0.50 a 1.00)
     highlightSelfOnMap = true,        -- Destacar localização do próprio jogador no mapa
+    disableWorldMapMemberPins = false, -- Desativar completamente os pins de membros no Mapa do Jogo (requer /reload)
 
     -- Grupos
     autoAssignGroupRole = true,       -- Sugerir função automaticamente baseado na classe do jogador
@@ -121,6 +122,7 @@ function GMSettings:getMapPinScale()
     return math.max(0.50, math.min(1.00, val))
 end
 function GMSettings:isHighlightSelfOnMap() return self._highlightSelfOnMap ~= false end
+function GMSettings:isDisableWorldMapMemberPins() return self._disableWorldMapMemberPins == true end
 
 function GMSettings:isAutoAssignGroupRole() return self._autoAssignGroupRole ~= false end
 function GMSettings:isNotifyMemberLevelUp() return self._notifyMemberLevelUp == true end
@@ -180,6 +182,7 @@ function GMSettings:setAutoScanWorldMap(val) self._autoScanWorldMap = (val == tr
 function GMSettings:setShowMapPins(val) self._showMapPins = (val == true) end
 function GMSettings:setMapPinScale(val) self._mapPinScale = math.max(0.50, math.min(1.00, tonumber(val) or 1.0)) end
 function GMSettings:setHighlightSelfOnMap(val) self._highlightSelfOnMap = (val == true) end
+function GMSettings:setDisableWorldMapMemberPins(val) self._disableWorldMapMemberPins = (val == true) end
 
 function GMSettings:setAutoAssignGroupRole(val) self._autoAssignGroupRole = (val == true) end
 function GMSettings:setNotifyMemberLevelUp(val) self._notifyMemberLevelUp = (val == true) end

@@ -195,6 +195,12 @@ Locales.strings["enUS"] = {
     ["SETTINGS_MAP_HIGHLIGHT"] = "Highlight yourself in regional member list",
     ["SETTINGS_MAP_HIGHLIGHT_TIP_TITLE"] = "Highlight Self",
     ["SETTINGS_MAP_HIGHLIGHT_TIP_DESC"] = "Shows your character pinned at the top of the list with gold highlight.",
+    ["SETTINGS_DISABLE_MAP_MEMBER_PINS"] = "Disable guild member pins on World Map (Requires /reload)",
+    ["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_TITLE"] = "Disable World Map Member Pins",
+    ["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_DESC"] = "Completely disables member pins, the pin scale bar, update loops, and tracking hooks on the World Map (without affecting Minimap pins). Requires reloading the UI (/reload) or relogging.",
+    ["SETTINGS_RELOAD_MAP_PINS_PROMPT"] = "Enabling or disabling World Map member pins requires reloading the UI (/reload) or relogging to completely activate or deactivate the map pin engine and hooks.\n\nDo you want to reload the UI now?",
+    ["SETTINGS_RELOAD_LATER"] = "Later",
+    ["SETTINGS_MAP_PINS_RELOAD_PENDING"] = "Settings saved! Use /reload or relog to completely apply the World Map member pins change.",
 
     -- Seção 5: Agenda & Eventos
     ["SETTINGS_S5_HEADER"] = "|cffffd2005. GUILD CALENDAR & EVENTS|r",
@@ -1486,6 +1492,12 @@ Locales.strings["ptBR"] = {
     ["SETTINGS_MAP_HIGHLIGHT"] = "Destacar o próprio jogador na listagem da região",
     ["SETTINGS_MAP_HIGHLIGHT_TIP_TITLE"] = "Destacar a Si Mesmo",
     ["SETTINGS_MAP_HIGHLIGHT_TIP_DESC"] = "Exibe seu personagem no topo da lista com identificação e destaque dourado.",
+    ["SETTINGS_DISABLE_MAP_MEMBER_PINS"] = "Desativar pins dos membros no Mapa do Jogo (Requer /reload)",
+    ["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_TITLE"] = "Desativar Pins no Mapa do Jogo",
+    ["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_DESC"] = "Desliga completamente os pins dos membros, a barra de tamanho, loops de atualização e hooks de rastreamento no Mapa Mundial (sem afetar o Minimapa). Requer recarregar a interface (/reload) ou relogar.",
+    ["SETTINGS_RELOAD_MAP_PINS_PROMPT"] = "Ativar ou desativar os pins dos membros no Mapa do Jogo requer recarregar a interface (/reload) ou relogar para ligar/desligar completamente o sistema de pins e ganchos do mapa.\n\nDeseja recarregar a interface agora?",
+    ["SETTINGS_RELOAD_LATER"] = "Depois",
+    ["SETTINGS_MAP_PINS_RELOAD_PENDING"] = "Configuração salva! Use /reload ou relogue para aplicar completamente a alteração dos pins no Mapa do Jogo.",
 
     -- Seção 5: Agenda & Eventos
     ["SETTINGS_S5_HEADER"] = "|cffffd2005. AGENDA & EVENTOS DA GUILDA|r",

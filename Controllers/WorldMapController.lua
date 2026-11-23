@@ -14,18 +14,26 @@ WorldMapController.__index = WorldMapController
 ---@param guildRosterService GuildRosterService @Serviço de comunicação com o roster da Blizzard
 ---@param worldMapView WorldMapView @Camada de visualização no mapa nativo
 ---@param locationService LocationService|nil @Serviço de geolocalização em tempo real
+---@param mapPinsEnabled boolean|nil @Define se o sistema de pins no mapa do jogo foi ativado nesta sessão
 ---@return WorldMapController
-function WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
+function WorldMapController:new(memberService, guildRosterService, worldMapView, locationService, mapPinsEnabled)
     local instance = setmetatable({}, self)
     instance._memberService = memberService
     instance._guildRosterService = guildRosterService
     instance._worldMapView = worldMapView
     instance._locationService = locationService
+    instance._mapPinsEnabled = (mapPinsEnabled ~= false)
     instance._lastMapID = nil
     instance._updateTicker = nil
     instance._eventFrame = nil
 
     return instance
+end
+
+--- Informa se o sistema de pins no Mapa do Jogo está ativo nesta sessão.
+---@return boolean
+function WorldMapController:isMapPinsEnabled()
+    return self._mapPinsEnabled == true
 end
 
 --- Normaliza strings para comparação (remove acentos, espaços extras e caixa alta).
@@ -355,7 +363,7 @@ function WorldMapController:initHooks()
     end)
 
     -- Registra listener do LocationService para atualizar pinos imediatamente ao receber dados
-    if self._locationService and self._locationService.registerListener then
+    if self._mapPinsEnabled and self._locationService and self._locationService.registerListener then
         self._locationService:registerListener(function()
             if WorldMapFrame and WorldMapFrame:IsShown() and self._worldMapView then
                 if IsInGuild and not IsInGuild() then
@@ -369,16 +377,25 @@ function WorldMapController:initHooks()
 
     -- Hook do WorldMapFrame OnShow: inicializa UI, exibe o painel e varre os membros da região
     WorldMapFrame:HookScript("OnShow", function()
+        local showBtn = true
+        local autoScan = true
+        if _G.GM and _G.GM.settingsService then
+            if _G.GM.settingsService:get("showWorldMapButton") == false then
+                showBtn = false
+            end
+            if _G.GM.settingsService:get("autoScanWorldMap") == false then
+                autoScan = false
+            end
+        end
+
+        if not self._mapPinsEnabled and not showBtn then
+            return
+        end
+
         self._worldMapView:initWorldMapUI()
 
         if IsInGuild and not IsInGuild() then
             self._worldMapView:renderNoGuild()
-            local showBtn = true
-            if _G.GM and _G.GM.settingsService then
-                if _G.GM.settingsService:get("showWorldMapButton") == false then
-                    showBtn = false
-                end
-            end
             if showBtn then
                 self._worldMapView:showPanel()
             else
@@ -395,20 +412,11 @@ function WorldMapController:initHooks()
             self._guildRosterService:requestRosterUpdate()
         end
 
-        if self._locationService and self._locationService.requestPositions then
-            self._locationService:requestPositions()
-        end
-        self._worldMapView:updateRealtimePins()
-
-        local showBtn = true
-        local autoScan = true
-        if _G.GM and _G.GM.settingsService then
-            if _G.GM.settingsService:get("showWorldMapButton") == false then
-                showBtn = false
+        if self._mapPinsEnabled then
+            if self._locationService and self._locationService.requestPositions then
+                self._locationService:requestPositions()
             end
-            if _G.GM.settingsService:get("autoScanWorldMap") == false then
-                autoScan = false
-            end
+            self._worldMapView:updateRealtimePins()
         end
 
         if showBtn then
@@ -419,7 +427,7 @@ function WorldMapController:initHooks()
             self._worldMapView:hidePanel()
         end
 
-        if autoScan then
+        if autoScan and showBtn then
             self:scanCurrentZone()
             self:startPeriodicUpdate()
 
@@ -427,13 +435,24 @@ function WorldMapController:initHooks()
                 C_Timer.After(0.1, function()
                     if WorldMapFrame and WorldMapFrame:IsShown() then
                         self:scanCurrentZone()
-                        if self._locationService and self._locationService.requestPositions then
-            self._locationService:requestPositions()
-        end
-        self._worldMapView:updateRealtimePins()
+                        if self._mapPinsEnabled then
+                            if self._locationService and self._locationService.requestPositions then
+                                self._locationService:requestPositions()
+                            end
+                            self._worldMapView:updateRealtimePins()
+                        end
                     end
                 end)
             end
+        elseif self._mapPinsEnabled and C_Timer and C_Timer.After then
+            C_Timer.After(0.1, function()
+                if WorldMapFrame and WorldMapFrame:IsShown() then
+                    if self._locationService and self._locationService.requestPositions then
+                        self._locationService:requestPositions()
+                    end
+                    self._worldMapView:updateRealtimePins()
+                end
+            end)
         end
     end)
 
@@ -443,8 +462,10 @@ function WorldMapController:initHooks()
             if IsInGuild and not IsInGuild() then
                 if self._worldMapView then self._worldMapView:renderNoGuild() end
             else
-                if self._worldMapView then self._worldMapView:updateRealtimePins() end
-                self:scanCurrentZone()
+                if self._mapPinsEnabled and self._worldMapView then self._worldMapView:updateRealtimePins() end
+                if self._worldMapView and self._worldMapView:isPanelShown() then
+                    self:scanCurrentZone()
+                end
             end
         end)
     end
@@ -453,8 +474,10 @@ function WorldMapController:initHooks()
             if IsInGuild and not IsInGuild() then
                 if self._worldMapView then self._worldMapView:renderNoGuild() end
             else
-                if self._worldMapView then self._worldMapView:updateRealtimePins() end
-                self:scanCurrentZone()
+                if self._mapPinsEnabled and self._worldMapView then self._worldMapView:updateRealtimePins() end
+                if self._worldMapView and self._worldMapView:isPanelShown() then
+                    self:scanCurrentZone()
+                end
             end
         end)
     end
@@ -462,7 +485,9 @@ function WorldMapController:initHooks()
     -- Hook do WorldMapFrame OnHide: interrompe atualizações periódicas e garante limpeza de pinos
     WorldMapFrame:HookScript("OnHide", function()
         self:stopPeriodicUpdate()
-        self._worldMapView:clearPins()
+        if self._mapPinsEnabled then
+            self._worldMapView:clearPins()
+        end
     end)
 
     -- Frame de eventos para monitorar atualizações de mapa e roster da guilda
@@ -486,11 +511,16 @@ function WorldMapController:initHooks()
             if IsInGuild and not IsInGuild() then
                 self._worldMapView:renderNoGuild()
             else
-                self:scanCurrentZone()
-                if self._locationService and self._locationService.requestPositions then
-            self._locationService:requestPositions()
-        end
-        self._worldMapView:updateRealtimePins()
+                local showBtn = not (_G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showWorldMapButton") == false)
+                if showBtn then
+                    self:scanCurrentZone()
+                end
+                if self._mapPinsEnabled then
+                    if self._locationService and self._locationService.requestPositions then
+                        self._locationService:requestPositions()
+                    end
+                    self._worldMapView:updateRealtimePins()
+                end
             end
         end
     end)
@@ -499,16 +529,25 @@ function WorldMapController:initHooks()
 
     -- Inicializa a UI caso o mapa já esteja visível
     if WorldMapFrame:IsShown() then
-        self._worldMapView:initWorldMapUI()
-        self._worldMapView:showPanel()
-        if IsInGuild and not IsInGuild() then
-            self._worldMapView:renderNoGuild()
-        else
-            if self._locationService and self._locationService.requestPositions then
-            self._locationService:requestPositions()
-        end
-        self._worldMapView:updateRealtimePins()
-            self:scanCurrentZone()
+        local showBtn = not (_G.GM and _G.GM.settingsService and _G.GM.settingsService:get("showWorldMapButton") == false)
+        if self._mapPinsEnabled or showBtn then
+            self._worldMapView:initWorldMapUI()
+            if showBtn then
+                self._worldMapView:showPanel()
+            end
+            if IsInGuild and not IsInGuild() then
+                self._worldMapView:renderNoGuild()
+            else
+                if self._mapPinsEnabled then
+                    if self._locationService and self._locationService.requestPositions then
+                        self._locationService:requestPositions()
+                    end
+                    self._worldMapView:updateRealtimePins()
+                end
+                if showBtn then
+                    self:scanCurrentZone()
+                end
+            end
         end
     end
 end

@@ -473,9 +473,11 @@ local function ApplyClassIcon(texture, classFile)
 end
 
 --- Construtor da View do Mapa Mundi.
+---@param pinsEnabled boolean|nil
 ---@return WorldMapView
-function WorldMapView:new()
+function WorldMapView:new(pinsEnabled)
     local instance = setmetatable({}, self)
+    instance._pinsEnabled = (pinsEnabled ~= false)
     instance._pins = {}
     instance._memberRows = {}
     instance._membersData = {}
@@ -494,6 +496,29 @@ function WorldMapView:new()
     instance._pinScaleText = nil
 
     return instance
+end
+
+--- Informa se o sistema de pins de membros no Mapa do Jogo está ativo nesta sessão.
+---@return boolean
+function WorldMapView:isPinsEnabled()
+    return self._pinsEnabled == true
+end
+
+--- Oculta/pausa ou restaura temporariamente os pins do Mapa do Jogo enquanto aguarda /reload.
+---@param hidden boolean
+function WorldMapView:setPinsHiddenUntilReload(hidden)
+    if not self._pinsEnabled then return end
+    if hidden then
+        self:clearPins()
+        if self._pinScaleControl then self._pinScaleControl:Hide() end
+        if self._realtimeBadge then self._realtimeBadge:Hide() end
+        if self._updateFrame then self._updateFrame:Hide() end
+    else
+        if self._updateFrame then self._updateFrame:Show() end
+        if WorldMapFrame and WorldMapFrame:IsShown() then
+            self:updateRealtimePins()
+        end
+    end
 end
 
 --- Retorna o canvas oficial do WorldMapFrame da Blizzard e suas dimensões garantidas
@@ -558,7 +583,7 @@ function WorldMapView:reanchorHeaderButtons()
         or WorldMapFrame.CloseButton
 
     -- 1. Ancoragem do Badge de Membros com Addon (realtimeBadge)
-    if self._realtimeBadge then
+    if self._pinsEnabled and self._realtimeBadge then
         self._realtimeBadge:ClearAllPoints()
         self._realtimeBadge:SetFrameStrata("HIGH")
         self._realtimeBadge:SetFrameLevel(3000)
@@ -583,7 +608,7 @@ function WorldMapView:reanchorHeaderButtons()
         self._mapButton:SetFrameStrata("HIGH")
         self._mapButton:SetFrameLevel(3000)
 
-        if self._realtimeBadge then
+        if self._pinsEnabled and self._realtimeBadge and self._realtimeBadge:IsShown() then
             self._mapButton:SetPoint("RIGHT", self._realtimeBadge, "LEFT", -6, 0)
         elseif maxMinBtn and maxMinBtn:IsShown() then
             self._mapButton:SetPoint("RIGHT", maxMinBtn, "LEFT", -6, 0)
@@ -595,7 +620,7 @@ function WorldMapView:reanchorHeaderButtons()
     end
 
     -- 3. Ancoragem do Controle de Tamanho dos Marcadores (no canto superior direito da tela do mapa)
-    if self._pinScaleControl then
+    if self._pinsEnabled and self._pinScaleControl then
         self._pinScaleControl:ClearAllPoints()
         self._pinScaleControl:SetFrameStrata("HIGH")
         self._pinScaleControl:SetFrameLevel(2900)
@@ -711,7 +736,7 @@ end
 
 --- Cria e garante a exibição da barra de ajuste de tamanho dos marcadores (50% a 100%) na tela do mapa
 function WorldMapView:ensurePinScaleControl()
-    if not WorldMapFrame then return end
+    if not self._pinsEnabled or not WorldMapFrame then return end
     if IsInGuild and not IsInGuild() then
         if self._pinScaleControl then self._pinScaleControl:Hide() end
         return
@@ -862,8 +887,9 @@ end
 --- Cria ou obtém um pino persistente diretamente no canvas para o jogador remoto
 ---@param name string
 ---@param canvas table
----@return table
+---@return table|nil
 function WorldMapView:getOrCreateNamedPin(name, canvas)
+    if not self._pinsEnabled then return nil end
     if not self._pins then self._pins = {} end
     local pin = self._pins[name]
     if pin then
@@ -977,7 +1003,7 @@ end
 
 --- Garante e atualiza o badge de membros online no topo do WorldMapFrame oficial
 function WorldMapView:ensureRealtimeBadge()
-    if not WorldMapFrame then return end
+    if not self._pinsEnabled or not WorldMapFrame then return end
     if IsInGuild and not IsInGuild() then
         if self._realtimeBadge then self._realtimeBadge:Hide() end
         return
@@ -1078,6 +1104,7 @@ end
 
 --- Atualiza o texto do badge superior com a contagem ao vivo
 function WorldMapView:updateRealtimeBadge()
+    if not self._pinsEnabled then return end
     if IsInGuild and not IsInGuild() then
         if self._realtimeBadge then self._realtimeBadge:Hide() end
         return
@@ -1099,6 +1126,7 @@ end
 
 --- Atualiza a renderização contínua de todos os pinos de jogadores remotos no mapa oficial da Blizzard
 function WorldMapView:updateRealtimePins()
+    if not self._pinsEnabled then return end
     if not WorldMapFrame or not WorldMapFrame:IsShown() then return end
 
     if IsInGuild and not IsInGuild() then
@@ -1120,16 +1148,24 @@ function WorldMapView:updateRealtimePins()
 
     -- Respeita a opção de marcadores nas configurações
     local showPins = true
+    local disablePins = false
     if _G.GM and _G.GM.settingsService then
         if _G.GM.settingsService:get("showMapPins") == false then
             showPins = false
         end
+        if _G.GM.settingsService:get("disableWorldMapMemberPins") == true then
+            disablePins = true
+        end
     end
 
-    if not showPins then
+    if not showPins or disablePins then
         self:clearPins()
         if self._pinScaleControl then self._pinScaleControl:Hide() end
-        self:updateRealtimeBadge()
+        if disablePins then
+            if self._realtimeBadge then self._realtimeBadge:Hide() end
+        else
+            self:updateRealtimeBadge()
+        end
         return
     end
 
@@ -1273,7 +1309,7 @@ end
 
 --- Cria frame filho de atualização contínua a 10 FPS (0.10s) para renderização suave com baixo uso de CPU
 function WorldMapView:initUpdateFrame()
-    if self._updateFrame or not WorldMapFrame then return end
+    if not self._pinsEnabled or self._updateFrame or not WorldMapFrame then return end
 
     local updateFrame = CreateFrame("Frame", "GM_WorldMapUpdateFrame", WorldMapFrame)
     updateFrame:SetAllPoints(WorldMapFrame)
@@ -1310,9 +1346,11 @@ end
 function WorldMapView:initWorldMapUI()
     if not WorldMapFrame then return end
 
-    self:initUpdateFrame()
-    self:ensureRealtimeBadge()
-    self:ensurePinScaleControl()
+    if self._pinsEnabled then
+        self:initUpdateFrame()
+        self:ensureRealtimeBadge()
+        self:ensurePinScaleControl()
+    end
 
     if self._mapButton then
         return
@@ -1408,6 +1446,14 @@ function WorldMapView:initWorldMapUI()
     end)
 
     self._mapButton = mapButton
+
+    if not self._headerHooksInstalled then
+        self._headerHooksInstalled = true
+        if WorldMapFrame.HookScript then
+            WorldMapFrame:HookScript("OnShow", function() self:reanchorHeaderButtons() end)
+            WorldMapFrame:HookScript("OnSizeChanged", function() self:reanchorHeaderButtons() end)
+        end
+    end
 
     -- =========================================================================
     -- PAINEL LATERAL ACOPLADO AO WORLD MAP NATIVO
@@ -1904,7 +1950,9 @@ function WorldMapView:renderMembers(membersData, zoneName, isContinent, isWorld)
     self:updateButton(#self._membersData, isContinent, isWorld)
 
     -- Atualiza os pinos em tempo real no mapa
-    self:updateRealtimePins()
+    if self._pinsEnabled then
+        self:updateRealtimePins()
+    end
 
     -- Atualiza as linhas da lista lateral se o painel estiver aberto
     if self._isPanelOpen then
@@ -1994,6 +2042,7 @@ end
 
 --- Mantém os pinos atualizados ou limpos conforme o estado.
 function WorldMapView:plotMemberPins()
+    if not self._pinsEnabled then return end
     self:updateRealtimePins()
 end
 
@@ -2048,7 +2097,9 @@ function WorldMapView:updateLocale()
         self:updateButton(0, false, false)
     end
 
-    self:updateRealtimeBadge()
+    if self._pinsEnabled then
+        self:updateRealtimeBadge()
+    end
 
     if self._pinScaleControl and self._pinScaleControl.title then
         self._pinScaleControl.title:SetText(curL["MAP_SLIDER_LABEL"] or "|cffffd200Pins:|r")

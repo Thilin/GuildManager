@@ -98,8 +98,9 @@ initFrame:SetScript("OnEvent", function(self, event, loadedAddon)
         memberService:setSyncService(syncService)
         groupService:setSyncService(syncService)
 
-        local worldMapView = WorldMapView:new()
-        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView, locationService)
+        local worldMapPinsEnabled = not (settingsService:get("disableWorldMapMemberPins") == true)
+        local worldMapView = WorldMapView:new(worldMapPinsEnabled)
+        local worldMapController = WorldMapController:new(memberService, guildRosterService, worldMapView, locationService, worldMapPinsEnabled)
 
         local chatMentionView = ChatMentionView:new()
         local chatMentionController = ChatMentionController:new(memberService, guildRosterService, chatMentionView)

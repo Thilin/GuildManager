@@ -25,10 +25,45 @@ function SettingsController:new(settingsService, settingsView, memberService, gu
     instance._guildRosterService = guildRosterService
     instance._logService = logService
     instance._minimapButton = minimapButton
+    instance._bootDisableWorldMapPins = (settingsService:get("disableWorldMapMemberPins") == true)
 
     instance:setupCallbacks()
 
     return instance
+end
+
+--- Exibe o diálogo de confirmação para recarregar a UI ao alterar a desativação dos pins no Mapa do Jogo.
+---@param curL table
+function SettingsController:promptReloadForMapPins(curL)
+    local view = self._settingsView
+    local pendingMsg = curL["SETTINGS_MAP_PINS_RELOAD_PENDING"] or "Configuração salva! Use /reload ou relogue para aplicar completamente a alteração dos pins no Mapa do Jogo."
+
+    if StaticPopupDialogs and StaticPopup_Show then
+        StaticPopupDialogs["GM_CONFIRM_RELOAD_MAP_PINS"] = {
+            text = curL["SETTINGS_RELOAD_MAP_PINS_PROMPT"] or "Ativar ou desativar os pins dos membros no Mapa do Jogo requer recarregar a interface (/reload) ou relogar para ligar/desligar completamente o sistema de pins e ganchos do mapa.\n\nDeseja recarregar a interface agora?",
+            button1 = curL["RELOAD_UI"] or _G.RELOADUI or "Recarregar UI",
+            button2 = curL["SETTINGS_RELOAD_LATER"] or "Depois",
+            OnAccept = function()
+                if ReloadUI then ReloadUI() end
+            end,
+            OnCancel = function()
+                print("|cffffaa00[GuildManager]|r " .. pendingMsg)
+                if view and view.showStatus then
+                    view:showStatus(pendingMsg, false)
+                end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+        StaticPopup_Show("GM_CONFIRM_RELOAD_MAP_PINS")
+    else
+        print("|cffffaa00[GuildManager]|r " .. pendingMsg)
+        if view and view.showStatus then
+            view:showStatus(pendingMsg, false)
+        end
+    end
 end
 
 --- Configura os callbacks entre a View e os Serviços.
@@ -39,6 +74,12 @@ function SettingsController:setupCallbacks()
     view:setOnSaveCallback(function(formData, skipReloadPrompt)
         local oldSyncChatLog = service:get("enableSyncChatLog") == true
         local newSyncChatLog = formData and (formData.enableSyncChatLog == true)
+
+        local bootDisableMapPins = (_G.GM and _G.GM.worldMapView and _G.GM.worldMapView.isPinsEnabled)
+            and (not _G.GM.worldMapView:isPinsEnabled())
+            or (self._bootDisableWorldMapPins == true)
+        local newDisableMapPins = formData and (formData.disableWorldMapMemberPins == true)
+        local mapPinsReloadNeeded = (newDisableMapPins ~= bootDisableMapPins)
 
         for key, val in pairs(formData) do
             service:set(key, val)
@@ -69,6 +110,11 @@ function SettingsController:setupCallbacks()
             end
         end
 
+        -- Pausa/oculta ou restaura os pins no Mapa do Jogo enquanto aguarda /reload
+        if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView.setPinsHiddenUntilReload then
+            _G.GM.worldMapView:setPinsHiddenUntilReload(newDisableMapPins)
+        end
+
         -- Aplica fixação permanente do chat se configurado
         if _G.GM and _G.GM.chatMentionController and _G.GM.chatMentionController.disableChatFading then
             _G.GM.chatMentionController:disableChatFading(formData.disableChatFading ~= false)
@@ -91,6 +137,9 @@ function SettingsController:setupCallbacks()
                 OnCancel = function()
                     service:set("enableSyncChatLog", oldSyncChatLog)
                     view:renderSettings(service:getSettings(), service:getGuildStats())
+                    if mapPinsReloadNeeded then
+                        self:promptReloadForMapPins(curL)
+                    end
                 end,
                 timeout = 0,
                 whileDead = true,
@@ -98,11 +147,17 @@ function SettingsController:setupCallbacks()
                 preferredIndex = 3,
             }
             StaticPopup_Show("GM_CONFIRM_RELOAD_SYNC_CHAT")
+        elseif not skipReloadPrompt and mapPinsReloadNeeded then
+            self:promptReloadForMapPins(curL)
         end
     end)
 
     view:setOnResetCallback(function()
         local wasSyncChatLog = service:get("enableSyncChatLog") == true
+        local bootDisableMapPins = (_G.GM and _G.GM.worldMapView and _G.GM.worldMapView.isPinsEnabled)
+            and (not _G.GM.worldMapView:isPinsEnabled())
+            or (self._bootDisableWorldMapPins == true)
+
         service:resetToDefaults()
         local settings = service:getSettings()
         local stats = service:getGuildStats()
@@ -112,9 +167,17 @@ function SettingsController:setupCallbacks()
             self._minimapButton._button:Show()
             self._minimapButton:updatePosition(215)
         end
+        if self._minimapButton and self._minimapButton.updatePinSettings then
+            self._minimapButton:updatePinSettings(true, false)
+        end
 
-        if _G.GM and _G.GM.worldMapView and _G.GM.worldMapView._mapButton then
-            _G.GM.worldMapView._mapButton:Show()
+        if _G.GM and _G.GM.worldMapView then
+            if _G.GM.worldMapView._mapButton then
+                _G.GM.worldMapView._mapButton:Show()
+            end
+            if _G.GM.worldMapView.setPinsHiddenUntilReload then
+                _G.GM.worldMapView:setPinsHiddenUntilReload(false)
+            end
         end
 
         if _G.GM and _G.GM.chatMentionController and _G.GM.chatMentionController.disableChatFading then
@@ -137,6 +200,9 @@ function SettingsController:setupCallbacks()
                 OnCancel = function()
                     service:set("enableSyncChatLog", true)
                     view:renderSettings(service:getSettings(), stats)
+                    if bootDisableMapPins then
+                        self:promptReloadForMapPins(curL)
+                    end
                 end,
                 timeout = 0,
                 whileDead = true,
@@ -144,6 +210,8 @@ function SettingsController:setupCallbacks()
                 preferredIndex = 3,
             }
             StaticPopup_Show("GM_CONFIRM_RELOAD_SYNC_CHAT")
+        elseif bootDisableMapPins then
+            self:promptReloadForMapPins(curL)
         end
     end)
 

@@ -391,7 +391,7 @@ function SettingsView:createSettingsColumns()
 
     local lChild = CreateFrame("Frame", nil, lScroll)
     lChild:SetWidth(colWidth - 30)
-    lChild:SetHeight(550)
+    lChild:SetHeight(650)
     lScroll:SetScrollChild(lChild)
 
     -- --- SEÇÃO 1: APRESENTAÇÃO, IDIOMA & INTERFACE ---
@@ -632,6 +632,10 @@ function SettingsView:createSettingsColumns()
     local cbHighlightSelf = createCheckbox(lChild, L["SETTINGS_MAP_HIGHLIGHT"], L["SETTINGS_MAP_HIGHLIGHT_TIP_TITLE"], L["SETTINGS_MAP_HIGHLIGHT_TIP_DESC"])
     cbHighlightSelf:SetPoint("TOPLEFT", cbShowMapPins, "BOTTOMLEFT", 0, -2)
     self._widgets.highlightSelfOnMap = cbHighlightSelf
+
+    local cbDisableMapMemberPins = createCheckbox(lChild, L["SETTINGS_DISABLE_MAP_MEMBER_PINS"], L["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_TITLE"], L["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_DESC"])
+    cbDisableMapMemberPins:SetPoint("TOPLEFT", cbHighlightSelf, "BOTTOMLEFT", 0, -2)
+    self._widgets.disableWorldMapMemberPins = cbDisableMapMemberPins
 
     -- =========================================================================
     -- COLUNA DIREITA: Agenda, Grupos, Roster, Logs & Manutenção
@@ -1175,6 +1179,9 @@ function SettingsView:updateLocale()
     if self._widgets.highlightSelfOnMap then
         self._widgets.highlightSelfOnMap:updateTexts(curL["SETTINGS_MAP_HIGHLIGHT"], curL["SETTINGS_MAP_HIGHLIGHT_TIP_TITLE"], curL["SETTINGS_MAP_HIGHLIGHT_TIP_DESC"])
     end
+    if self._widgets.disableWorldMapMemberPins then
+        self._widgets.disableWorldMapMemberPins:updateTexts(curL["SETTINGS_DISABLE_MAP_MEMBER_PINS"], curL["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_TITLE"], curL["SETTINGS_DISABLE_MAP_MEMBER_PINS_TIP_DESC"])
+    end
 
     -- Seção 5
     if self._widgets.s5Header then self._widgets.s5Header:SetText(curL["SETTINGS_S5_HEADER"]) end
@@ -1353,6 +1360,9 @@ function SettingsView:renderSettings(settings, stats)
     self._widgets.autoScanWorldMap:SetChecked(settings:isAutoScanWorldMap())
     self._widgets.showMapPins:SetChecked(settings:isShowMapPins())
     self._widgets.highlightSelfOnMap:SetChecked(settings:isHighlightSelfOnMap())
+    if self._widgets.disableWorldMapMemberPins then
+        self._widgets.disableWorldMapMemberPins:SetChecked(settings:isDisableWorldMapMemberPins())
+    end
 
     -- Agenda & Eventos
     self._widgets.notifyBirthdaysOnLogin:SetChecked(settings:isNotifyBirthdaysOnLogin())
@@ -1546,6 +1556,7 @@ function SettingsView:gatherFormData()
         autoScanWorldMap = w.autoScanWorldMap:GetChecked() == true,
         showMapPins = w.showMapPins:GetChecked() == true,
         highlightSelfOnMap = w.highlightSelfOnMap:GetChecked() == true,
+        disableWorldMapMemberPins = (w.disableWorldMapMemberPins and w.disableWorldMapMemberPins:GetChecked() == true) or false,
         notifyBirthdaysOnLogin = w.notifyBirthdaysOnLogin:GetChecked() == true,
         notifyUpcomingEvents = w.notifyUpcomingEvents:GetChecked() == true,
         confirmEventDelete = w.confirmEventDelete:GetChecked() == true,
