@@ -70,16 +70,16 @@ local PALETTE = {
 
 --- Definição otimizada das colunas com espaçamentos proporcionais e a coluna ONLINE entre Cargo e Nota Pública
 local COLUMNS = {
-    { id = "name",        title = "PERSONAGEM",       x = 0,    width = 195, align = "LEFT",   editable = false },
-    { id = "level",       title = "NV",               x = 195,  width = 32,  align = "CENTER", editable = false },
-    { id = "role",        title = "FUNÇÃO",           x = 227,  width = 68,  align = "CENTER", editable = true,  label = "Função / Role" },
-    { id = "rank",        title = "CARGO",            x = 295,  width = 90,  align = "LEFT",   editable = false },
-    { id = "online",      title = "ONLINE",           x = 385,  width = 90,  align = "LEFT",   editable = false },
+    { id = "name",        title = "PERSONAGEM",       x = 0,    width = 195, align = "LEFT",   editable = false, sortable = true, defaultAsc = true  },
+    { id = "level",       title = "NV",               x = 195,  width = 32,  align = "CENTER", editable = false, sortable = true, defaultAsc = false },
+    { id = "role",        title = "FUNÇÃO",           x = 227,  width = 68,  align = "CENTER", editable = true,  sortable = true, defaultAsc = true,  label = "Função / Role" },
+    { id = "rank",        title = "CARGO",            x = 295,  width = 90,  align = "LEFT",   editable = false, sortable = true, defaultAsc = true  },
+    { id = "online",      title = "ONLINE",           x = 385,  width = 90,  align = "LEFT",   editable = false, sortable = true, defaultAsc = true  },
     { id = "publicNote",  title = "NOTA PÚBLICA",      x = 475,  width = 120, align = "LEFT",   editable = false },
     { id = "officerNote", title = "NOTA DE OFICIAL",   x = 595,  width = 120, align = "LEFT",   editable = false },
-    { id = "dateJoin",    title = "ENTRADA",          x = 715,  width = 85,  align = "LEFT",   editable = true,  label = "Data de Entrada" },
-    { id = "recruiter",   title = "RECRUTADOR",       x = 800,  width = 100, align = "LEFT",   editable = true,  label = "Recrutador" },
-    { id = "birthday",    title = "ANIVERSÁRIO",      x = 900,  width = 80,  align = "LEFT",   editable = true,  label = "Aniversário" },
+    { id = "dateJoin",    title = "ENTRADA",          x = 715,  width = 85,  align = "LEFT",   editable = true,  sortable = true, defaultAsc = false, label = "Data de Entrada" },
+    { id = "recruiter",   title = "RECRUTADOR",       x = 800,  width = 100, align = "LEFT",   editable = true,  sortable = true, defaultAsc = true,  label = "Recrutador" },
+    { id = "birthday",    title = "ANIVERSÁRIO",      x = 900,  width = 80,  align = "LEFT",   editable = true,  sortable = true, defaultAsc = true,  label = "Aniversário" },
     { id = "customNote",  title = "NOTA INTERNA",     x = 980,  width = 190, align = "LEFT",   editable = true,  label = "Nota Interna" },
 }
 
@@ -196,6 +196,181 @@ local function normalizeForSort(txt)
     return s
 end
 
+local ROLE_SORT_ORDER = {
+    TANK = 1,
+    HEALER = 2,
+    DPS = 3,
+}
+
+--- Converte data de entrada (YYYY-MM-DD ou DD/MM/YYYY) em inteiro comparável YYYYMMDD.
+---@param dateStr string|nil
+---@return number|nil
+local function parseJoinDateForSort(dateStr)
+    if type(dateStr) ~= "string" or dateStr == "" then return nil end
+    local clean = dateStr:match("^%s*(.-)%s*$")
+    if not clean or clean == "" then return nil end
+
+    local jy, jm, jd = clean:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+    if not (jy and jm and jd) then
+        jd, jm, jy = clean:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+    end
+    if jy and jm and jd then
+        local ny, nm, nd = tonumber(jy), tonumber(jm), tonumber(jd)
+        if ny and nm and nd and nm >= 1 and nm <= 12 and nd >= 1 and nd <= 31 then
+            return ny * 10000 + nm * 100 + nd
+        end
+    end
+    return nil
+end
+
+--- Converte aniversário (MM/DD, DD/MM, YYYY-MM-DD ou DD/MM/YYYY) em inteiro comparável MMDD.
+--- Segue a mesma convenção do EventService.lua para manter consistência com a Agenda.
+---@param bdayStr string|nil
+---@return number|nil
+local function parseBirthdayForSort(bdayStr)
+    if type(bdayStr) ~= "string" or bdayStr == "" then return nil end
+    local clean = bdayStr:match("^%s*(.-)%s*$")
+    if not clean or clean == "" then return nil end
+
+    local pMonth, pDay = nil, nil
+    local _, mo, d = clean:match("^(%d%d%d%d)[/%-%.](%d%d?)[/%-%.](%d%d?)$")
+    if mo and d then
+        pMonth, pDay = mo, d
+    else
+        local d2, mo2 = clean:match("^(%d%d?)[/%-%.](%d%d?)[/%-%.](%d%d%d%d)$")
+        if mo2 and d2 then
+            pMonth, pDay = mo2, d2
+        else
+            pMonth, pDay = clean:match("^(%d%d?)[/%-%.](%d%d?)$")
+        end
+    end
+
+    if pMonth and pDay then
+        local bm, bd = tonumber(pMonth), tonumber(pDay)
+        if bm and bd then
+            if bm > 12 and bd <= 12 then
+                bm, bd = bd, bm
+            end
+            if bm >= 1 and bm <= 12 and bd >= 1 and bd <= 31 then
+                return bm * 100 + bd
+            end
+        end
+    end
+    return nil
+end
+
+--- Converte status online/última conexão em peso numérico (menor = mais ativo/online agora).
+---@param member Member
+---@return number
+local function parseOnlineSortScore(member)
+    if member:isOnline() then
+        local status = tonumber(member:getStatus()) or 0
+        if status == 0 then return 0 end
+        if status == 1 then return 0.1 end
+        if status == 2 then return 0.2 end
+        return 0.3
+    end
+
+    local raw = (member.getLastOnline and member:getLastOnline()) or ""
+    if type(raw) ~= "string" or raw == "" then
+        return 99999999
+    end
+
+    local lower = raw:lower()
+    if lower:find("<%s*1") then
+        return 0.5
+    end
+    local h = lower:match("(%d+)%s*h")
+    if h then
+        return tonumber(h) or 1
+    end
+    local d = lower:match("(%d+)%s*d")
+    if d then
+        return (tonumber(d) or 1) * 24
+    end
+    local mo = lower:match("(%d+)%s*m[êe]s") or lower:match("(%d+)%s*mo")
+    if mo then
+        return (tonumber(mo) or 1) * 24 * 30
+    end
+    local yr = lower:match("(%d+)%s*ano") or lower:match("(%d+)%s*yr")
+    if yr then
+        return (tonumber(yr) or 1) * 24 * 365
+    end
+    return 99999999
+end
+
+--- Retorna chave de ordenação normalizada para o recrutador, ou nil se não informado.
+---@param member Member
+---@return string|nil
+local function getRecruiterForSort(member)
+    local rec = (member.getRecruiter and member:getRecruiter()) or ""
+    if type(rec) ~= "string" then return nil end
+    local clean = rec:match("^%s*(.-)%s*$")
+    if not clean or clean == "" then return nil end
+    local lower = clean:lower()
+    if lower == "desconhecido" or lower == "unknown" then return nil end
+    return normalizeForSort(clean)
+end
+
+--- Compara duas linhas da auditoria de acordo com a coluna e direção ativas.
+--- Campos vazios/não informados ficam sempre ao final, independente da direção.
+---@param rowA table
+---@param rowB table
+---@param sortCol string
+---@param sortAsc boolean
+---@return boolean
+local function compareAuditRows(rowA, rowB, sortCol, sortAsc)
+    local mA = rowA.member
+    local mB = rowB.member
+    local vA, vB = nil, nil
+
+    if sortCol == "name" then
+        vA = normalizeForSort(mA:getName())
+        vB = normalizeForSort(mB:getName())
+    elseif sortCol == "level" then
+        vA = tonumber(mA:getLevel()) or 0
+        vB = tonumber(mB:getLevel()) or 0
+    elseif sortCol == "role" then
+        local rA = (mA.getRole and mA:getRole() or ""):upper()
+        local rB = (mB.getRole and mB:getRole() or ""):upper()
+        vA = ROLE_SORT_ORDER[rA]
+        vB = ROLE_SORT_ORDER[rB]
+    elseif sortCol == "rank" then
+        vA = tonumber(mA:getRankIndex()) or 99
+        vB = tonumber(mB:getRankIndex()) or 99
+    elseif sortCol == "online" then
+        vA = parseOnlineSortScore(mA)
+        vB = parseOnlineSortScore(mB)
+    elseif sortCol == "dateJoin" then
+        vA = parseJoinDateForSort(mA:getDateJoin())
+        vB = parseJoinDateForSort(mB:getDateJoin())
+    elseif sortCol == "recruiter" then
+        vA = getRecruiterForSort(mA)
+        vB = getRecruiterForSort(mB)
+    elseif sortCol == "birthday" then
+        vA = parseBirthdayForSort(mA:getBirthday())
+        vB = parseBirthdayForSort(mB:getBirthday())
+    end
+
+    if vA == nil and vB ~= nil then return false end
+    if vA ~= nil and vB == nil then return true end
+    if vA ~= nil and vB ~= nil and vA ~= vB then
+        if sortAsc then
+            return vA < vB
+        else
+            return vA > vB
+        end
+    end
+
+    -- Desempate determinístico por nome normalizado
+    local nameA = normalizeForSort(mA:getName())
+    local nameB = normalizeForSort(mB:getName())
+    if nameA ~= nameB then
+        return nameA < nameB
+    end
+    return tostring(mA:getGuid() or "") < tostring(mB:getGuid() or "")
+end
+
 --- Construtor da View de Auditoria da Guilda.
 ---@return AuditView
 function AuditView:new()
@@ -214,6 +389,10 @@ function AuditView:new()
     instance._filterText = ""
     instance._activeFilter = "ALL"
     instance._activeStatsFilter = nil
+    instance._sortColumn = nil
+    instance._sortAsc = true
+    instance._colHeaderButtons = {}
+    instance._colHeaderArrows = {}
     instance._suppressFilterUpdate = false
     instance._collapsedMains = {}
     instance._numVisibleRows = 18
@@ -742,31 +921,73 @@ function AuditView:createUI()
     self._headerScrollFrame = headerScrollFrame
     self._headerContent = headerContent
 
-    -- Construção das colunas do cabeçalho
+    -- Construção das colunas do cabeçalho (colunas ordenáveis são clicáveis)
     self._colHeaderStrings = {}
+    self._colHeaderButtons = {}
+    self._colHeaderArrows = {}
     for _, col in ipairs(COLUMNS) do
-        local colHeader = headerContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        colHeader:SetPoint("LEFT", headerContent, "LEFT", col.x + 4, 0)
-        colHeader:SetWidth(col.width - 6)
-        colHeader:SetJustifyH(col.align or "LEFT")
+        local colTitle = self:getColumnTitle(col)
+        if col.sortable then
+            local colBtn = CreateFrame("Button", nil, headerContent)
+            colBtn:SetPoint("TOPLEFT", headerContent, "TOPLEFT", col.x, 0)
+            colBtn:SetSize(col.width, 24)
+            colBtn.colDef = col
 
-        local colKey = "COL_" .. col.id:upper()
-        local colTitle = L[colKey]
-        if not colTitle or colTitle == colKey then
-            local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
-            if col.id == "role" then
-                colTitle = isEn and "ROLE" or "FUNÇÃO"
-            else
-                colTitle = col.title
+            local bgTex = colBtn:CreateTexture(nil, "BACKGROUND")
+            bgTex:SetAllPoints(colBtn)
+            bgTex:SetColorTexture(0.22, 0.14, 0.04, 0.0)
+            colBtn.bgTex = bgTex
+
+            local hoverTex = colBtn:CreateTexture(nil, "HIGHLIGHT")
+            hoverTex:SetAllPoints(colBtn)
+            hoverTex:SetColorTexture(PALETTE.CELL_HOVER_BG[1], PALETTE.CELL_HOVER_BG[2], PALETTE.CELL_HOVER_BG[3], 0.22)
+
+            local arrow = colBtn:CreateTexture(nil, "OVERLAY")
+            arrow:SetTexture("Interface\\Buttons\\UI-SortArrow")
+            arrow:SetSize(8, 7)
+            arrow:SetPoint("RIGHT", colBtn, "RIGHT", -2, 0)
+            arrow:Hide()
+            colBtn.arrow = arrow
+            self._colHeaderArrows[col.id] = arrow
+
+            local colHeader = colBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            colHeader:SetPoint("LEFT", colBtn, "LEFT", 3, 0)
+            colHeader:SetPoint("RIGHT", colBtn, "RIGHT", -3, 0)
+            colHeader:SetJustifyH(col.align or "LEFT")
+            if colHeader.SetWordWrap then
+                colHeader:SetWordWrap(false)
             end
-        end
-        if col.editable then
-            colHeader:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", colTitle))
+            colBtn.text = colHeader
+            self._colHeaderStrings[col.id] = colHeader
+            self._colHeaderButtons[col.id] = colBtn
+
+            colBtn:SetScript("OnClick", function(btn)
+                self:toggleSort(col.id)
+                self:showHeaderSortTooltip(btn, col)
+            end)
+            colBtn:SetScript("OnEnter", function(btn)
+                self:showHeaderSortTooltip(btn, col)
+            end)
+            colBtn:SetScript("OnLeave", function()
+                if GameTooltip then GameTooltip:Hide() end
+            end)
         else
-            colHeader:SetText(string.format("|cffffd200%s|r", colTitle))
+            local colHeader = headerContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            colHeader:SetPoint("LEFT", headerContent, "LEFT", col.x + 4, 0)
+            colHeader:SetWidth(col.width - 6)
+            colHeader:SetJustifyH(col.align or "LEFT")
+            if colHeader.SetWordWrap then
+                colHeader:SetWordWrap(false)
+            end
+            if col.editable then
+                colHeader:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", colTitle))
+            else
+                colHeader:SetText(string.format("|cffffd200%s|r", colTitle))
+            end
+            self._colHeaderStrings[col.id] = colHeader
         end
-        self._colHeaderStrings[col.id] = colHeader
     end
+    self:updateHeaderSortVisuals()
 
     -- ScrollFrame das Linhas (rolagem horizontal vinculada)
     local rowsScrollFrame = CreateFrame("ScrollFrame", "GM_AuditRowsScrollFrame", tableInset)
@@ -2036,10 +2257,148 @@ function AuditView:onTableMouseWheel(delta)
 end
 
 --- Reseta todos os filtros (busca, abas rápidas e estatísticas) para exibir todos os membros da guilda.
+--- Retorna o título localizado de uma coluna da tabela de auditoria.
+---@param col table
+---@param curL table|nil
+---@return string
+function AuditView:getColumnTitle(col, curL)
+    local activeL = curL or (_G.GM and _G.GM.L) or _G.L or L
+    local colKey = "COL_" .. col.id:upper()
+    local title = activeL[colKey]
+    if not title or title == colKey then
+        local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
+        if col.id == "role" then
+            title = isEn and "ROLE" or "FUNÇÃO"
+        else
+            title = col.title
+        end
+    end
+    return title
+end
+
+--- Exibe tooltip explicativo de ordenação ao passar o mouse sobre um cabeçalho ordenável.
+---@param btn table
+---@param col table
+function AuditView:showHeaderSortTooltip(btn, col)
+    if not GameTooltip or not btn or not col then return end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+    local colTitle = self:getColumnTitle(col, curL)
+    local defaultAsc = (col.defaultAsc ~= false)
+
+    GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+    GameTooltip:AddLine(colTitle, 1, 0.82, 0)
+
+    if self._sortColumn == col.id then
+        local dirLabel = self._sortAsc
+            and (curL["AUDIT_SORT_ASC"] or "Crescente")
+            or (curL["AUDIT_SORT_DESC"] or "Decrescente")
+        GameTooltip:AddLine(string.format(curL["AUDIT_SORT_TIP_CURRENT"] or "Ordenado por %s (%s).", colTitle, dirLabel), 0.2, 1, 0.4, true)
+        if self._sortAsc == defaultAsc then
+            GameTooltip:AddLine(curL["AUDIT_SORT_TIP_INVERT"] or "Clique para inverter a ordem.", 0.85, 0.85, 0.85, true)
+        else
+            GameTooltip:AddLine(curL["AUDIT_SORT_TIP_RESET"] or "Clique para restaurar a ordem padrão (Mains e Alts).", 0.85, 0.85, 0.85, true)
+        end
+    else
+        GameTooltip:AddLine(string.format(curL["AUDIT_SORT_TIP_CLICK"] or "Clique para ordenar por %s.", colTitle), 0.85, 0.85, 0.85, true)
+    end
+    GameTooltip:Show()
+end
+
+--- Atualiza texto, destaque visual e seta direcional dos cabeçalhos das colunas.
+function AuditView:updateHeaderSortVisuals()
+    if not self._colHeaderStrings then return end
+    local curL = (_G.GM and _G.GM.L) or _G.L or L
+
+    for _, col in ipairs(COLUMNS) do
+        local fs = self._colHeaderStrings[col.id]
+        local btn = self._colHeaderButtons and self._colHeaderButtons[col.id]
+        local arrow = self._colHeaderArrows and self._colHeaderArrows[col.id]
+        local isActive = (self._sortColumn == col.id)
+        local title = self:getColumnTitle(col, curL)
+
+        if fs then
+            local colorCode = isActive and "|cffffffff" or "|cffffd200"
+            if col.editable then
+                fs:SetText(string.format("%s%s|r |cff00ff99*|r", colorCode, title))
+            else
+                fs:SetText(string.format("%s%s|r", colorCode, title))
+            end
+
+            if btn then
+                fs:ClearAllPoints()
+                if isActive then
+                    fs:SetPoint("LEFT", btn, "LEFT", 2, 0)
+                    fs:SetPoint("RIGHT", btn, "RIGHT", -11, 0)
+                else
+                    fs:SetPoint("LEFT", btn, "LEFT", 3, 0)
+                    fs:SetPoint("RIGHT", btn, "RIGHT", -3, 0)
+                end
+            end
+        end
+
+        if btn and btn.bgTex then
+            if isActive then
+                btn.bgTex:SetColorTexture(0.28, 0.18, 0.05, 0.90)
+            else
+                btn.bgTex:SetColorTexture(0.22, 0.14, 0.04, 0.0)
+            end
+        end
+
+        if arrow then
+            if isActive then
+                if self._sortAsc then
+                    arrow:SetTexCoord(0, 0.5625, 1.0, 0)
+                else
+                    arrow:SetTexCoord(0, 0.5625, 0, 1.0)
+                end
+                arrow:Show()
+            else
+                arrow:Hide()
+            end
+        end
+    end
+end
+
+--- Alterna a ordenação por uma coluna: direção padrão -> inversa -> padrão hierárquico (Mains/Alts).
+---@param colId string
+function AuditView:toggleSort(colId)
+    local targetCol = nil
+    for _, col in ipairs(COLUMNS) do
+        if col.id == colId then
+            targetCol = col
+            break
+        end
+    end
+    if not targetCol or not targetCol.sortable then return end
+
+    local defaultAsc = (targetCol.defaultAsc ~= false)
+    if self._sortColumn ~= colId then
+        self._sortColumn = colId
+        self._sortAsc = defaultAsc
+    elseif self._sortAsc == defaultAsc then
+        self._sortAsc = not self._sortAsc
+    else
+        self._sortColumn = nil
+        self._sortAsc = true
+    end
+
+    self._currentPage = 1
+    self._offset = 0
+    if self._scrollBar then
+        self._scrollBar:SetValue(0)
+    end
+
+    self:rebuildFlatRows()
+    self:updateHeaderSortVisuals()
+    self:applyFilters()
+end
+
 function AuditView:resetFiltersToAll()
     self._activeFilter = "ALL"
     self._activeStatsFilter = nil
     self._filterText = ""
+    self._sortColumn = nil
+    self._sortAsc = true
     self._collapsedMains = {}
     self._currentPage = 1
     self._offset = 0
@@ -2055,6 +2414,7 @@ function AuditView:resetFiltersToAll()
     if self._scrollBar then
         self._scrollBar:SetValue(0)
     end
+    self:updateHeaderSortVisuals()
 end
 
 --- Atualiza a aparência visual dos botões de filtro.
@@ -2335,7 +2695,7 @@ function AuditView:rebuildFlatRows()
         totalMains = totalMains + 1
         local mainName = group.main:getName()
         local hasAlts = (#group.alts > 0)
-        local isCollapsed = hasAlts and (self._collapsedMains[mainName] == true) and (self._activeStatsFilter == nil)
+        local isCollapsed = hasAlts and (self._collapsedMains[mainName] == true) and (self._activeStatsFilter == nil) and (self._sortColumn == nil)
         local altNames = EMPTY_TABLE
         if hasAlts then
             altNames = {}
@@ -2492,6 +2852,15 @@ function AuditView:applyFilters()
         end
     end
 
+    -- Aplica ordenação customizada quando uma coluna estiver selecionada
+    if self._sortColumn then
+        local sortCol = self._sortColumn
+        local sortAsc = self._sortAsc
+        table.sort(self._filteredRows, function(a, b)
+            return compareAuditRows(a, b, sortCol, sortAsc)
+        end)
+    end
+
     local currentPage, totalPages, startIndex, endIndex, pageCount, total = self:getPageInfo()
     local maxOffset = math.max(0, pageCount - self._numVisibleRows)
 
@@ -2564,8 +2933,9 @@ function AuditView:renderRows()
 
             -- Coluna 1: Personagem (Diferenciação clara entre Mains e Alts)
             local coloredName = self:formatColoredName(m:getName(), m:getGuid(), m:getClass())
+            local isFlatSorted = (self._sortColumn ~= nil)
             if rowData.isMain then
-                if rowData.hasAlts then
+                if rowData.hasAlts and not isFlatSorted then
                     row.toggleBtn:Show()
                     row.toggleBtn.text:SetText(rowData.isCollapsed and "|cffffd200+|r" or "|cffffd200-|r")
                     row.nameTxt:SetPoint("LEFT", row, "LEFT", 22, 0)
@@ -2579,13 +2949,23 @@ function AuditView:renderRows()
                 else
                     row.toggleBtn:Hide()
                     row.nameTxt:SetPoint("LEFT", row, "LEFT", 12, 0)
-                    row.nameTxt:SetText(string.format("|cffffd200[MAIN]|r %s", coloredName))
+                    if rowData.hasAlts then
+                        local altWord = (rowData.altCount == 1) and "alt" or "alts"
+                        row.nameTxt:SetText(string.format("|cffffd200[MAIN]|r %s |cffaaaaaa(%d %s)|r", coloredName, rowData.altCount, altWord))
+                    else
+                        row.nameTxt:SetText(string.format("|cffffd200[MAIN]|r %s", coloredName))
+                    end
                 end
             else
                 row.toggleBtn:Hide()
-                local branch = "|cff888888»|r"
-                row.nameTxt:SetPoint("LEFT", row, "LEFT", 26, 0)
-                row.nameTxt:SetText(string.format("%s |cff00e5ff[ALT]|r %s", branch, coloredName))
+                if isFlatSorted then
+                    row.nameTxt:SetPoint("LEFT", row, "LEFT", 12, 0)
+                    row.nameTxt:SetText(string.format("|cff00e5ff[ALT]|r %s", coloredName))
+                else
+                    local branch = "|cff888888»|r"
+                    row.nameTxt:SetPoint("LEFT", row, "LEFT", 26, 0)
+                    row.nameTxt:SetText(string.format("%s |cff00e5ff[ALT]|r %s", branch, coloredName))
+                end
             end
 
             -- Coluna 2: Nível (Centralizado e nítido)
@@ -2890,29 +3270,8 @@ function AuditView:updateLocale(skipRender)
         self._emptyNotice:SetText(curL["AUDIT_EMPTY_NOTICE"] or "No members found matching the selected criteria.")
     end
 
-    -- Atualiza colunas do cabeçalho
-    if self._colHeaderStrings then
-        for _, col in ipairs(COLUMNS) do
-            local fs = self._colHeaderStrings[col.id]
-            if fs then
-                local colKey = "COL_" .. col.id:upper()
-                local title = curL[colKey]
-                if not title or title == colKey then
-                    local isEn = (_G.GM and _G.GM.GetLocale and _G.GM.GetLocale() == "enUS") or (GetLocale and GetLocale() ~= "ptBR")
-                    if col.id == "role" then
-                        title = isEn and "ROLE" or "FUNÇÃO"
-                    else
-                        title = col.title
-                    end
-                end
-                if col.editable then
-                    fs:SetText(string.format("|cffffd200%s|r |cff00ff99*|r", title))
-                else
-                    fs:SetText(string.format("|cffffd200%s|r", title))
-                end
-            end
-        end
-    end
+    -- Atualiza colunas do cabeçalho e indicadores de ordenação
+    self:updateHeaderSortVisuals()
 
     -- Atualiza botões de filtro rápido
     local filterKeys = {
